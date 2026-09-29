@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de Producción</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --teal:#0093AE; --teal-d:#00768C; --teal-l:#E6F4F7;
+  --ambar:#F0A80C; --ambar-l:#FFF4DC;
+  --navy:#18303C; --navy-l:#2B4A5A;
+  --rojo:#C0392B; --rojo-l:#FDECEA;
+  --verde:#1E8E5A; --verde-l:#E8F6EF;
+  --tinta:#18303C; --tinta-2:#5C6F7A; --tinta-3:#91A1AA;
+  --linea:#DDE5E9; --fondo:#F4F7F9; --blanco:#fff;
+  --r:10px; --sombra:0 1px 3px rgba(24,48,60,.08),0 1px 2px rgba(24,48,60,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Montserrat',-apple-system,'Segoe UI',Arial,sans-serif;
+  background:var(--fondo); color:var(--tinta); font-size:14px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em}
+
+/* ---------- cascaron ---------- */
+.top{
+  background:var(--navy); color:#fff; padding:14px 20px;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  box-shadow:0 2px 8px rgba(24,48,60,.18); position:sticky; top:0; z-index:40;
+}
+.top .marca{display:flex; align-items:baseline; gap:10px; flex:1 1 auto; min-width:0}
+.top h1{font-size:17px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sello{
+  font-size:10px; color:#A9C4CE; border:1px solid #3B5967; border-radius:999px;
+  padding:2px 8px; white-space:nowrap; font-weight:500;
+}
+.quien{font-size:11.5px; color:#A9C4CE; text-align:right; line-height:1.3; white-space:nowrap}
+.quien b{color:#fff; display:block; font-weight:600}
+.wrap{max-width:1360px; margin:0 auto; padding:20px 20px 64px}
+
+/* ---------- botones ---------- */
+button{font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:8px; border:1px solid transparent; padding:8px 14px; transition:background .12s,border-color .12s,transform .06s}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.5; cursor:not-allowed}
+.b-pri{background:var(--teal); color:#fff}
+.b-pri:hover:not(:disabled){background:var(--teal-d)}
+.b-sec{background:#fff; color:var(--navy); border-color:var(--linea)}
+.b-sec:hover:not(:disabled){border-color:var(--teal); color:var(--teal-d)}
+.b-fan{background:transparent; color:#A9C4CE; border-color:#3B5967}
+.b-fan:hover:not(:disabled){color:#fff; border-color:#A9C4CE}
+
+/* ---------- tarjetas ---------- */
+.card{background:var(--blanco); border:1px solid var(--linea); border-radius:var(--r); box-shadow:var(--sombra); margin-bottom:18px; overflow:hidden}
+.card>header{padding:13px 16px; border-bottom:1px solid var(--linea); display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.card>header h2{font-size:14px; flex:1 1 auto}
+.card>header .sub{font-size:11.5px; color:var(--tinta-3); font-weight:500; flex-basis:100%; margin-top:-2px}
+.card .cuerpo{padding:16px}
+
+/* ---------- kpis ---------- */
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:18px}
+.kpi{background:#fff; border:1px solid var(--linea); border-left:3px solid var(--teal); border-radius:var(--r); padding:13px 15px; box-shadow:var(--sombra)}
+.kpi.mq{border-left-color:var(--ambar)}
+.kpi.al{border-left-color:var(--rojo)}
+.kpi .et{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--tinta-3); font-weight:600}
+.kpi .vl{font-size:25px; font-weight:700; letter-spacing:-.02em; margin-top:3px; font-variant-numeric:tabular-nums}
+.kpi .un{font-size:11.5px; color:var(--tinta-2); font-weight:500}
+.kpi.al .vl{color:var(--rojo)}
+
+/* ---------- tablas ---------- */
+.tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+table{border-collapse:collapse; width:100%; font-size:13px}
+th,td{padding:8px 11px; text-align:right; border-bottom:1px solid var(--linea); white-space:nowrap}
+th{background:var(--navy); color:#fff; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; position:sticky; top:0}
+th:first-child,td:first-child{text-align:left; position:sticky; left:0; background:#fff; z-index:2}
+th:first-child{background:var(--navy); z-index:3}
+tbody tr:hover td{background:var(--teal-l)}
+tbody tr:hover td:first-child{background:var(--teal-l)}
+td.num{font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700; background:var(--teal-l) !important; border-top:2px solid var(--teal)}
+td.cero{color:var(--tinta-3)}
+.chip{display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px}
+.chip.up{background:var(--verde-l); color:var(--verde)}
+.chip.dn{background:var(--rojo-l); color:var(--rojo)}
+.chip.na{background:#EEF2F4; color:var(--tinta-3)}
+.link{background:none; border:none; color:var(--teal-d); font-weight:600; padding:0; font-size:12.5px; text-decoration:underline; cursor:pointer}
+
+/* ---------- barras ---------- */
+.barras{--hmax:150px; display:flex; align-items:flex-end; gap:14px; padding:6px 2px 0}
+.bcol{flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:6px; min-width:0}
+.bpila{width:100%; max-width:72px; display:flex; flex-direction:column; justify-content:flex-end; border-radius:5px 5px 0 0; overflow:hidden}
+.bseg{width:100%}
+.bseg.p{background:var(--teal)}
+.bseg.m{background:var(--ambar)}
+.bcol .bv{font-size:11px; font-weight:700; font-variant-numeric:tabular-nums}
+.bcol .be{font-size:10.5px; color:var(--tinta-2); text-align:center; font-weight:500; line-height:1.2}
+.leyenda{display:flex; gap:16px; font-size:11.5px; color:var(--tinta-2); margin-top:12px; font-weight:500; flex-wrap:wrap}
+.leyenda i{width:11px; height:11px; border-radius:3px; display:inline-block; margin-right:5px; vertical-align:-1px}
+.mini{height:7px; background:#EEF2F4; border-radius:4px; overflow:hidden; min-width:56px}
+.mini>span{display:block; height:100%; background:var(--teal); border-radius:4px}
+
+/* ---------- alertas ---------- */
+.aviso{border-radius:var(--r); padding:12px 14px; font-size:12.5px; display:flex; gap:10px; align-items:flex-start; margin-bottom:14px}
+.aviso.ok{background:var(--verde-l); color:#14603c}
+.aviso.warn{background:var(--ambar-l); color:#7A5200}
+.aviso.err{background:var(--rojo-l); color:#8C241A}
+.aviso b{font-weight:700}
+.agrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px}
+.acel{border:1px solid var(--linea); border-radius:8px; padding:10px 12px; background:#fff}
+.acel .n{font-size:20px; font-weight:700; font-variant-numeric:tabular-nums}
+.acel .d{font-size:11px; color:var(--tinta-2); font-weight:500; line-height:1.25}
+.acel.mal{border-color:#F1C4BE; background:var(--rojo-l)}
+.acel.mal .n{color:var(--rojo)}
+.acel.bien{border-color:#BCE3CE; background:var(--verde-l)}
+.acel.bien .n{color:var(--verde)}
+
+/* ---------- carga ---------- */
+#overlay{position:fixed; inset:0; background:rgba(244,247,249,.97); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:90}
+#overlay.oculto{display:none}
+.spin{width:38px; height:38px; border:3px solid var(--teal-l); border-top-color:var(--teal); border-radius:50%; animation:gira .8s linear infinite}
+@keyframes gira{to{transform:rotate(360deg)}}
+#overlay p{margin:0; font-size:13px; color:var(--tinta-2); font-weight:500}
+#pill{position:fixed; right:18px; bottom:18px; background:var(--navy); color:#fff; font-size:12px; font-weight:600; padding:9px 15px; border-radius:999px; box-shadow:0 4px 14px rgba(24,48,60,.3); display:none; align-items:center; gap:9px; z-index:60}
+#pill.on{display:flex}
+.spin-s{width:13px; height:13px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:gira .8s linear infinite}
+#toast{position:fixed; left:50%; transform:translateX(-50%); bottom:24px; background:var(--navy); color:#fff; padding:11px 20px; border-radius:8px; font-size:13px; font-weight:600; box-shadow:0 6px 20px rgba(24,48,60,.34); z-index:95; display:none; max-width:min(92vw,520px); text-align:center}
+#toast.on{display:block}
+#toast.err{background:var(--rojo)}
+#toast.ok{background:var(--verde)}
+.vacio{padding:34px 16px; text-align:center; color:var(--tinta-3); font-size:13px}
+
+/* ---------- modales ---------- */
+.mfondo{position:fixed; inset:0; background:rgba(24,48,60,.5); z-index:100; display:none; align-items:flex-start; justify-content:center; padding:24px 14px; overflow-y:auto}
+.mfondo.on{display:flex}
+.modal{background:#fff; border-radius:12px; width:100%; max-width:660px; box-shadow:0 18px 50px rgba(24,48,60,.34); overflow:hidden; margin:auto}
+.modal.ancho{max-width:1040px}
+.modal>header{padding:15px 18px; border-bottom:1px solid var(--linea); display:flex; align-items:center; gap:12px}
+.modal>header h3{font-size:15px; flex:1}
+.cerrar{background:none; border:none; font-size:22px; line-height:1; color:var(--tinta-3); padding:0 4px; cursor:pointer}
+.cerrar:hover{color:var(--rojo)}
+.modal .mcuerpo{padding:18px; max-height:calc(100vh - 210px); overflow-y:auto}
+.modal>footer{padding:13px 18px; border-top:1px solid var(--linea); display:flex; gap:10px; justify-content:flex-end; background:var(--fondo)}
+.campos{display:grid; grid-template-columns:1fr 1fr; gap:13px}
+.campo{display:flex; flex-direction:column; gap:5px}
+.campo.full{grid-column:1/-1}
+.campo label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--tinta-2); font-weight:600}
+.campo label .req{color:var(--rojo)}
+.campo input,.campo select,.campo textarea{font-family:inherit; font-size:13.5px; padding:9px 11px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%}
+.campo input:focus,.campo select:focus,.campo textarea:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 3px var(--teal-l)}
+.campo textarea{resize:vertical; min-height:62px}
+.campo .pista{font-size:11px; color:var(--tinta-3); font-weight:500}
+.campo.malo input,.campo.malo select,.campo.malo textarea{border-color:var(--rojo); background:var(--rojo-l)}
+.pie{text-align:center; font-size:11px; color:var(--tinta-3); padding:22px 10px 0; font-weight:500}
+
+/* ============ BLOQUES DE TOQUE Y PANTALLA CHICA — AL FINAL ============ */
+/* Van al final a proposito: cualquier regla posterior los pisaria. */
+@media (hover:none){
+  button{min-height:42px}
+  .campo input,.campo select,.campo textarea{font-size:16px; min-height:44px}
+  tbody tr:hover td{background:transparent}
+}
+@media (max-width:860px){
+  .modal .mcuerpo{max-height:none}
+  .barras{--hmax:120px; gap:8px}
+}
+@media (max-width:640px){
+  .wrap{padding:14px 12px 56px}
+  .top{padding:11px 14px}
+  .top h1{font-size:15px}
+  .quien{text-align:left; flex-basis:100%}
+  .kpi .vl{font-size:21px}
+  .campos{grid-template-columns:1fr}
+  .barras{--hmax:96px}
+  .bcol .be{font-size:9.5px}
+  th,td{padding:7px 9px; font-size:12px}
+  #pill{right:10px; bottom:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="marca">
+    <h1>Tablero de Producción · Gran Formato</h1>
+    <span class="sello">v<?= sello.version ?> · esquema <?= sello.esquema ?></span>
+  </div>
+  <div class="quien" id="quien"><b>Identificando…</b>cargando sesión</div>
+  <button class="b-fan" id="btnRef" onclick="refrescar()">Actualizar</button>
+  <button class="b-pri" id="btnAlta" onclick="abrirAlta()" style="display:none">+ Capturar trabajo</button>
+</div>
+
+<div class="wrap">
+  <div id="banner"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <header>
+      <h2>Tendencia semanal</h2>
+      <span class="sub">Metros cuadrados que pasaron por la planta: impresión propia más maquila. La maquila se grafica aparte porque nunca entraba en el total del reporte anterior.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="barras" id="barras"></div>
+      <div class="leyenda">
+        <span><i style="background:var(--teal)"></i>MT2 propios</span>
+        <span><i style="background:var(--ambar)"></i>MT2 maquilados</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header><h2>Detalle por semana</h2>
+      <span class="sub">Cada unidad en su propia columna. Los MT2 no se suman con láminas, piezas ni eventos.</span>
+    </header>
+    <div class="tscroll"><table id="tSem"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>MT2 por máquina</h2>
+      <span class="sub">Solo unidad MT2. El router (láminas), los marcos (piezas) y los servicios de campo (eventos) no aparecen aquí.</span>
+    </header>
+    <div class="tscroll"><table id="tMaq"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>MT2 por material</h2></header>
+    <div class="tscroll"><table id="tMat"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>MT2 por operador</h2>
+      <span class="sub">Solo unidad MT2. Los renglones sin operador (todo lo anterior a la captura de este campo) aparecen como (SIN DATO).</span>
+    </header>
+    <div class="tscroll"><table id="tOpe"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>Calidad del dato</h2>
+      <span class="sub">Lo que el reporte anterior no podía ver: renglones incompletos, unidades dudosas y supuestos que quedaron de la migración.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="agrid" id="aGrid"></div>
+      <div class="tscroll"><table id="tAle"></table></div>
+    </div>
+  </section>
+
+  <p class="pie"><?= sello.nombre ?> · v<?= sello.version ?> · liberada <?= sello.liberada ?></p>
+</div>
+
+<div id="overlay"><div class="spin"></div><p id="ovTxt">Cargando el tablero…</p></div>
+<div id="pill"><span class="spin-s"></span><span id="pillTxt">Actualizando…</span></div>
+<div id="toast"></div>
+
+<div class="mfondo" id="mAlta">
+  <div class="modal">
+    <header><h3>Capturar un trabajo</h3><button class="cerrar" onclick="cerrar('mAlta')" aria-label="Cerrar">&times;</button></header>
+    <div class="mcuerpo">
+      <div class="aviso warn"><span>Un renglón por trabajo. Nunca se suman varios trabajos en un mismo renglón: eso es lo que hacía imposible auditar el archivo anterior.</span></div>
+      <div class="campos">
+        <div class="campo" id="c_fecha"><label>Fecha <span class="req">*</span></label><input type="date" id="f_fecha"><span class="pista">La semana se calcula sola a partir de la fecha.</span></div>
+        <div class="campo" id="c_maquina"><label>Máquina <span class="req">*</span></label><select id="f_maquina"></select></div>
+        <div class="campo" id="c_proceso"><label>Proceso <span class="req">*</span></label><select id="f_proceso"></select></div>
+        <div class="campo" id="c_material"><label>Material <span class="req">*</span></label><select id="f_material"></select></div>
+        <div class="campo" id="c_unidad"><label>Unidad <span class="req">*</span></label><select id="f_unidad"></select><span class="pista">MT2 para impresión, LÁMINA para router, PIEZA para marcos, EVENTO para campo.</span></div>
+        <div class="campo" id="c_cant"><label>Cantidad <span class="req">*</span></label><input type="number" id="f_cant" step="0.01" min="0.01" placeholder="96.94"></div>
+        <div class="campo" id="c_origen"><label>Origen <span class="req">*</span></label><select id="f_origen"></select></div>
+        <div class="campo"><label>Cliente / OT</label><input type="text" id="f_cliente" maxlength="120" placeholder="CARLS JR / OT-1042"></div>
+        <div class="campo"><label>Turno</label><select id="f_turno"></select></div>
+        <div class="campo"><label>Operador</label><select id="f_operador"></select></div>
+        <div class="campo"><label>Horas máquina</label><input type="number" id="f_horas" step="0.25" min="0" placeholder="2.5"></div>
+        <div class="campo"><label>Merma MT2</label><input type="number" id="f_merma" step="0.01" min="0" placeholder="1.8"></div>
+        <div class="campo"><label>¿Es reimpresión?</label><select id="f_reimp"></select><span class="pista">Si marcas SI, la nota es obligatoria.</span></div>
+        <div class="campo"><label>Motivo de paro</label><select id="f_paro"></select></div>
+        <div class="campo full" id="c_nota"><label>Nota</label><textarea id="f_nota" maxlength="500" placeholder="Reimpresión por raya en el material, sucursal Puerto Vallarta…"></textarea></div>
+      </div>
+    </div>
+    <footer>
+      <button class="b-sec" onclick="cerrar('mAlta')">Cancelar</button>
+      <button class="b-pri" id="btnGuardar" onclick="guardar()">Guardar trabajo</button>
+    </footer>
+  </div>
+</div>
+
+<div class="mfondo" id="mDet">
+  <div class="modal ancho">
+    <header><h3 id="detTit">Detalle</h3><button class="cerrar" onclick="cerrar('mDet')" aria-label="Cerrar">&times;</button></header>
+    <div class="mcuerpo"><div class="tscroll"><table id="tDet"></table></div></div>
+    <footer><button class="b-sec" onclick="cerrar('mDet')">Cerrar</button></footer>
+  </div>
+</div>
+
+<script>
+var D = null;        /* ultimo tablero recibido */
+var CATS = null;     /* catalogos, se piden una sola vez */
+var guardando = false;
+
+/* ---------- utilidades ---------- */
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function n2(v){
+  var n = Number(v);
+  if (!isFinite(n)) { return '0.00'; }
+  return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function n0(v){
+  var n = Number(v);
+  if (!isFinite(n)) { return '0'; }
+  return n.toLocaleString('es-MX',{maximumFractionDigits:0});
+}
+function celda(v, dec){
+  var n = Number(v);
+  if (!isFinite(n) || n === 0) { return '<td class="num cero">0</td>'; }
+  return '<td class="num">' + (dec === 0 ? n0(n) : n2(n)) + '</td>';
+}
+function overlay(on, txt){
+  var o = document.getElementById('overlay');
+  if (txt) { document.getElementById('ovTxt').textContent = txt; }
+  if (on) { o.classList.remove('oculto'); } else { o.classList.add('oculto'); }
+}
+function pill(on, txt){
+  var p = document.getElementById('pill');
+  if (txt) { document.getElementById('pillTxt').textContent = txt; }
+  if (on) { p.classList.add('on'); } else { p.classList.remove('on'); }
+}
+var tToast = null;
+function toast(msg, tipo){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'on' + (tipo ? ' ' + tipo : '');
+  if (tToast) { clearTimeout(tToast); }
+  tToast = setTimeout(function(){ t.className = ''; }, tipo === 'err' ? 8000 : 4000);
+}
+function abrir(id){ document.getElementById(id).classList.add('on'); }
+/* Ningun modal cierra con clic afuera: solo Cancelar, la X o Escape. */
+function cerrar(id){ document.getElementById(id).classList.remove('on'); }
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Escape') { return; }
+  var ab = document.querySelectorAll('.mfondo.on');
+  if (ab.length) { ab[ab.length - 1].classList.remove('on'); }
+});
+
+/* ---------- carga ---------- */
+function init(){
+  overlay(true, 'Cargando el tablero...');
+  pedir(true);
+}
+function refrescar(){
+  if (!D) { return init(); }
+  pill(true, 'Actualizando...');
+  document.getElementById('btnRef').disabled = true;
+  pedir(false);
+}
+function pedir(primera){
+  google.script.run
+    .withSuccessHandler(function(res){
+      D = res;
+      pintar();
+      overlay(false); pill(false);
+      document.getElementById('btnRef').disabled = false;
+      if (!primera) { toast('Tablero actualizado en ' + res.ms + ' ms', 'ok'); }
+    })
+    .withFailureHandler(function(err){
+      overlay(false); pill(false);
+      document.getElementById('btnRef').disabled = false;
+      var m = (err && err.message) ? err.message : 'Error desconocido';
+      document.getElementById('banner').innerHTML =
+        '<div class="aviso err"><span><b>No se pudo cargar el tablero.</b><br>' + esc(m) + '</span></div>';
+      toast(m, 'err');
+    })
+    .cargarTablero();
+}
+
+/* ---------- pintado ---------- */
+function pintar(){
+  var t = D.total, s = D.serie, a = D.alertas;
+
+  document.getElementById('quien').innerHTML =
+    '<b>' + esc(D.ses.correo) + '</b>Rol: ' + esc(D.ses.rol);
+  if (D.ses.rol === 'CAPTURA' || D.ses.rol === 'MASTER') {
+    document.getElementById('btnAlta').style.display = '';
+  }
+
+  if (!s.length) {
+    document.getElementById('banner').innerHTML =
+      '<div class="aviso warn"><span>La hoja BASE no tiene renglones todavia.</span></div>';
+  } else {
+    document.getElementById('banner').innerHTML = '';
+  }
+
+  /* KPIs */
+  var k = [
+    ['MT2 propios', n2(t.propios), 'impresion en planta', ''],
+    ['MT2 maquilados', n2(t.maquila), t.pctMaquila + '% del total', 'mq'],
+    ['MT2 total planta', n2(t.planta), 'propios + maquila', ''],
+    ['Eventos de campo', n0(t.eventos), 'instalaciones, entregas, rotulaciones', ''],
+    ['Horas maquina', t.horas > 0 ? n2(t.horas) : 'sin capturar',
+      t.mt2Hora !== null ? n2(t.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
+      t.horas > 0 ? '' : 'al'],
+    ['Merma MT2', t.merma > 0 ? n2(t.merma) : 'sin capturar',
+      t.merma > 0 ? t.mermaPct + '% de lo impreso' : 'sin este dato no se sabe que se reimprimio',
+      t.merma > 0 ? '' : 'al'],
+    ['Reimpresiones', n0(t.reimp), 'renglones marcados como reimpresion', t.reimp > 0 ? 'mq' : '']
+  ];
+  var h = '';
+  for (var i = 0; i < k.length; i++) {
+    h += '<div class="kpi ' + k[i][3] + '"><div class="et">' + k[i][0] + '</div>' +
+         '<div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></div>';
+  }
+  document.getElementById('kpis').innerHTML = h;
+
+  /* barras */
+  var max = 0;
+  for (var b = 0; b < s.length; b++) { if (s[b].planta > max) { max = s[b].planta; } }
+  if (max <= 0) { max = 1; }
+  /* La altura util la manda el CSS (--hmax), no una constante en JS: si se
+     fija aqui, en pantalla chica la barra mas alta se sale del contenedor
+     y se encima con el texto de arriba. */
+  var cont = document.getElementById('barras');
+  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
+  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
+  h = '';
+  for (var c = 0; c < s.length; c++) {
+    var d = s[c];
+    var hp = Math.round(d.propios / max * hMax);
+    var hm = Math.round(d.maquila / max * hMax);
+    if (d.propios > 0 && hp < 2) { hp = 2; }
+    if (d.maquila > 0 && hm < 2) { hm = 2; }
+    h += '<div class="bcol" title="' + esc(d.semana) + ': ' + n2(d.planta) + ' MT2">' +
+         '<div class="bv">' + n0(d.planta) + '</div>' +
+         '<div class="bpila" style="height:' + (hp + hm) + 'px">' +
+         '<div class="bseg m" style="height:' + hm + 'px"></div>' +
+         '<div class="bseg p" style="height:' + hp + 'px"></div></div>' +
+         '<div class="be">' + esc(d.semana) + '</div></div>';
+  }
+  cont.innerHTML = h || '<div class="vacio">Sin datos</div>';
+
+  /* tabla por semana */
+  h = '<thead><tr><th>Semana</th><th>MT2 propios</th><th>MT2 maquila</th><th>MT2 planta</th>' +
+      '<th>Vs anterior</th><th>MT2 corte</th><th>MT2 laminado</th><th>Laminas</th><th>Piezas</th>' +
+      '<th>Inst.</th><th>Entregas</th><th>Rotul.</th><th>Horas</th><th>Merma</th><th>Reimp.</th><th></th></tr></thead><tbody>';
+  for (var j = 0; j < s.length; j++) {
+    var r = s[j];
+    var ch = (r.delta === null)
+      ? '<span class="chip na">primera</span>'
+      : '<span class="chip ' + (r.delta >= 0 ? 'up' : 'dn') + '">' +
+        (r.delta >= 0 ? '+' : '') + n0(r.delta) + '%</span>';
+    h += '<tr><td>' + esc(r.semana) + '</td>' +
+         celda(r.propios) + celda(r.maquila) + celda(r.planta) +
+         '<td>' + ch + '</td>' +
+         celda(r.corte) + celda(r.laminado) + celda(r.laminas,0) + celda(r.piezas,0) +
+         celda(r.inst,0) + celda(r.entregas,0) + celda(r.rotul,0) +
+         celda(r.horas) + celda(r.merma) + celda(r.reimp,0) +
+         '<td><button class="link" onclick="verSemana(\'' + esc(r.semana).replace(/'/g,'') + '\')">ver</button></td></tr>';
+  }
+  var tCorte = 0, tLam = 0;
+  for (var q = 0; q < s.length; q++) { tCorte += s[q].corte; tLam += s[q].laminado; }
+  var gl = (s.length > 1 && s[0].planta > 0)
+    ? '<span class="chip ' + (s[s.length - 1].planta >= s[0].planta ? 'up' : 'dn') + '" ' +
+      'title="Variacion de la ultima semana contra la primera">' +
+      n0((s[s.length - 1].planta / s[0].planta - 1) * 100) + '% vs ' + esc(s[0].semana) + '</span>'
+    : '';
+  h += '<tr class="tot"><td>TOTAL</td>' + celda(t.propios) + celda(t.maquila) + celda(t.planta) +
+       '<td>' + gl + '</td>' + celda(tCorte) + celda(tLam) +
+       celda(t.laminas,0) + celda(t.piezas,0) +
+       celda(t.inst,0) + celda(t.entregas,0) + celda(t.rotul,0) + celda(t.horas) + celda(t.merma) +
+       celda(t.reimp,0) +
+       '<td></td></tr></tbody>';
+  document.getElementById('tSem').innerHTML = h;
+
+  matriz('tMaq', D.porMaquina);
+  matriz('tMat', D.porMaterial);
+  matriz('tOpe', D.porOperador);
+
+  /* calidad del dato */
+  var cel = [
+    [a.total, 'renglones en BASE', 'bien'],
+    [a.sinFecha, 'sin fecha exacta', a.sinFecha ? 'mal' : 'bien'],
+    [a.sinMaquina, 'sin maquina asignada', a.sinMaquina ? 'mal' : 'bien'],
+    [a.sinMaterial, 'sin material', a.sinMaterial ? 'mal' : 'bien'],
+    [a.sinHoras, 'MT2 sin horas maquina', a.sinHoras ? 'mal' : 'bien'],
+    [a.obs, 'con supuesto de migracion', a.obs ? 'mal' : 'bien']
+  ];
+  h = '';
+  for (var m = 0; m < cel.length; m++) {
+    h += '<div class="acel ' + cel[m][2] + '"><div class="n">' + n0(cel[m][0]) + '</div>' +
+         '<div class="d">' + cel[m][1] + '</div></div>';
+  }
+  document.getElementById('aGrid').innerHTML = h;
+
+  if (!a.ejemplos.length) {
+    document.getElementById('tAle').innerHTML =
+      '<tbody><tr><td class="vacio" colspan="8">Ningun renglon tiene pendientes. El dato esta completo.</td></tr></tbody>';
+  } else {
+    h = '<thead><tr><th>Fila</th><th>Semana</th><th>Maquina</th><th>Proceso</th>' +
+        '<th>Material</th><th>Cant.</th><th>Que falta</th><th>Observacion</th></tr></thead><tbody>';
+    for (var e = 0; e < a.ejemplos.length; e++) {
+      var x = a.ejemplos[e];
+      h += '<tr><td>' + x.fila + '</td><td>' + esc(x.semana) + '</td><td>' + esc(x.maquina) +
+           '</td><td>' + esc(x.proceso) + '</td><td>' + esc(x.material) + '</td>' +
+           celda(x.cant) + '<td style="text-align:left">' + esc(x.motivo) + '</td>' +
+           '<td style="text-align:left;white-space:normal;max-width:380px;font-size:11.5px;color:var(--tinta-2)">' +
+           esc(x.obs) + '</td></tr>';
+    }
+    h += '</tbody>';
+    document.getElementById('tAle').innerHTML = h;
+  }
+}
+
+function matriz(id, filas){
+  if (!filas.length) {
+    document.getElementById(id).innerHTML =
+      '<tbody><tr><td class="vacio">Sin datos en MT2.</td></tr></tbody>';
+    return;
+  }
+  var max = filas[0].total || 1;
+  var h = '<thead><tr><th>Nombre</th>';
+  for (var i = 0; i < D.semanas.length; i++) { h += '<th>' + esc(D.semanas[i]) + '</th>'; }
+  h += '<th>Total MT2</th><th>Peso</th></tr></thead><tbody>';
+  var gt = 0;
+  for (var f = 0; f < filas.length; f++) {
+    var r = filas[f];
+    gt += r.total;
+    h += '<tr><td>' + esc(r.nombre) + '</td>';
+    for (var v = 0; v < r.val.length; v++) { h += celda(r.val[v]); }
+    h += celda(r.total) + '<td><div class="mini"><span style="width:' +
+         Math.max(2, Math.round(r.total / max * 100)) + '%"></span></div></td></tr>';
+  }
+  h += '<tr class="tot"><td>TOTAL</td>';
+  for (var s2 = 0; s2 < D.semanas.length; s2++) {
+    var cs = 0;
+    for (var g = 0; g < filas.length; g++) { cs += filas[g].val[s2]; }
+    h += celda(cs);
+  }
+  h += celda(gt) + '<td></td></tr></tbody>';
+  document.getElementById(id).innerHTML = h;
+}
+
+/* ---------- detalle de semana ---------- */
+function verSemana(sem){
+  document.getElementById('detTit').textContent = 'Trabajos de ' + sem;
+  document.getElementById('tDet').innerHTML =
+    '<tbody><tr><td class="vacio">Cargando los trabajos de la semana...</td></tr></tbody>';
+  abrir('mDet');
+  google.script.run
+    .withSuccessHandler(function(res){
+      if (!res.filas.length) {
+        document.getElementById('tDet').innerHTML =
+          '<tbody><tr><td class="vacio">Esta semana no tiene renglones.</td></tr></tbody>';
+        return;
+      }
+      var h = '<thead><tr><th>Fila</th><th>Fecha</th><th>Maquina</th><th>Proceso</th><th>Material</th>' +
+              '<th>Cant.</th><th>Un.</th><th>Origen</th><th>Cliente / OT</th><th>Turno</th>' +
+              '<th>Operador</th><th>Horas</th><th>Merma</th><th>Reimp.</th><th>Nota</th></tr></thead><tbody>';
+      for (var i = 0; i < res.filas.length; i++) {
+        var r = res.filas[i];
+        h += '<tr><td>' + r.fila + '</td><td>' + esc(r.fecha || 'sin fecha') + '</td>' +
+             '<td>' + esc(r.maquina) + '</td><td>' + esc(r.proceso) + '</td>' +
+             '<td>' + esc(r.material) + '</td>' + celda(r.cant) +
+             '<td>' + esc(r.unidad) + '</td><td>' + esc(r.origen) + '</td>' +
+             '<td>' + esc(r.cliente) + '</td><td>' + esc(r.turno) + '</td>' +
+             '<td>' + esc(r.operador) + '</td>' + celda(r.horas) + celda(r.merma) +
+             '<td>' + (r.reimp === 'SI' ? '<span class="chip dn">SI</span>' : '') + '</td>' +
+             '<td style="text-align:left;white-space:normal;max-width:300px;font-size:11.5px">' +
+             esc(r.nota || r.obs) + '</td></tr>';
+      }
+      document.getElementById('tDet').innerHTML = h + '</tbody>';
+    })
+    .withFailureHandler(function(err){
+      var m = (err && err.message) ? err.message : 'Error desconocido';
+      document.getElementById('tDet').innerHTML =
+        '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
+      toast(m, 'err');
+    })
+    .detalleSemana(sem);
+}
+
+/* ---------- captura ---------- */
+function opciones(sel, lista, blanco){
+  var s = document.getElementById(sel);
+  var h = blanco ? '<option value=""></option>' : '';
+  for (var i = 0; i < lista.length; i++) {
+    /* value explicito: un <option> sin value colapsa los espacios dobles
+       y el valor deja de empatar contra el catalogo del servidor. */
+    h += '<option value="' + esc(lista[i]) + '">' + esc(lista[i]) + '</option>';
+  }
+  s.innerHTML = h;
+}
+function abrirAlta(){
+  if (CATS) { return mostrarAlta(); }
+  pill(true, 'Cargando catalogos...');
+  google.script.run
+    .withSuccessHandler(function(res){
+      CATS = res; pill(false); mostrarAlta();
+    })
+    .withFailureHandler(function(err){
+      pill(false);
+      toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');
+    })
+    .cargarCatalogos();
+}
+function mostrarAlta(){
+  opciones('f_maquina',  CATS.MAQUINA  || [], true);
+  opciones('f_proceso',  CATS.PROCESO  || [], true);
+  opciones('f_material', CATS.MATERIAL || [], true);
+  opciones('f_unidad',   CATS.UNIDAD   || [], true);
+  opciones('f_origen',   CATS.ORIGEN   || [], true);
+  opciones('f_paro',     CATS.MOTIVO_PARO || [], true);
+  opciones('f_turno',    CATS.TURNO       || [], true);
+  opciones('f_operador', CATS.OPERADOR    || [], true);
+  opciones('f_reimp',    CATS.REIMPRESION || [], true);
+  document.getElementById('f_origen').value = 'PROPIO';
+  document.getElementById('f_reimp').value = 'NO';
+  var hoy = new Date();
+  var mm = hoy.getMonth() + 1, dd = hoy.getDate();
+  document.getElementById('f_fecha').value =
+    hoy.getFullYear() + '-' + (mm < 10 ? '0' + mm : mm) + '-' + (dd < 10 ? '0' + dd : dd);
+  marcar('c_nota', false);
+  abrir('mAlta');
+}
+function val(id){ return document.getElementById(id).value; }
+function marcar(campo, malo){
+  var c = document.getElementById(campo);
+  if (!c) { return; }
+  if (malo) { c.classList.add('malo'); } else { c.classList.remove('malo'); }
+}
+function guardar(){
+  if (guardando) { return; }
+  var d = {
+    fecha: val('f_fecha'), maquina: val('f_maquina'), proceso: val('f_proceso'),
+    material: val('f_material'), unidad: val('f_unidad'), cant: val('f_cant'),
+    origen: val('f_origen'), cliente: val('f_cliente'), horas: val('f_horas'),
+    merma: val('f_merma'), paro: val('f_paro'), nota: val('f_nota'),
+    turno: val('f_turno'), operador: val('f_operador'), reimp: val('f_reimp')
+  };
+  /* Validacion en el cliente para dar aviso rapido. La que manda es la del
+     servidor: esta se puede saltar desde la consola. */
+  var faltan = [];
+  var oblig = [['fecha','c_fecha'],['maquina','c_maquina'],['proceso','c_proceso'],
+               ['material','c_material'],['unidad','c_unidad'],['origen','c_origen']];
+  for (var i = 0; i < oblig.length; i++) {
+    var vacio = !d[oblig[i][0]];
+    marcar(oblig[i][1], vacio);
+    if (vacio) { faltan.push(oblig[i][0]); }
+  }
+  var cn = Number(d.cant);
+  var malaCant = !isFinite(cn) || cn <= 0;
+  marcar('c_cant', malaCant);
+  if (malaCant) { faltan.push('cantidad'); }
+  var sinNota = d.reimp === 'SI' && !String(d.nota).trim();
+  marcar('c_nota', sinNota);
+  if (sinNota) { faltan.push('nota (obligatoria en reimpresion)'); }
+  if (faltan.length) {
+    toast('Faltan datos: ' + faltan.join(', '), 'err');
+    return;
+  }
+  guardando = true;
+  var btn = document.getElementById('btnGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  pill(true, 'Guardando el trabajo...');
+  google.script.run
+    .withSuccessHandler(function(res){
+      guardando = false; pill(false);
+      btn.disabled = false; btn.textContent = 'Guardar trabajo';
+      cerrar('mAlta');
+      document.getElementById('f_cant').value = '';
+      document.getElementById('f_horas').value = '';
+      document.getElementById('f_merma').value = '';
+      document.getElementById('f_cliente').value = '';
+      document.getElementById('f_nota').value = '';
+      toast('Trabajo guardado en la fila ' + res.fila + ' (' + res.semana + ')', 'ok');
+      pill(true, 'Recalculando el tablero...');
+      pedir(false);
+    })
+    .withFailureHandler(function(err){
+      guardando = false; pill(false);
+      btn.disabled = false; btn.textContent = 'Guardar trabajo';
+      toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
+    })
+    .guardarTrabajo(d);
+}
+
+var tRes = null;
+window.addEventListener('resize', function(){
+  if (!D) { return; }
+  if (tRes) { clearTimeout(tRes); }
+  tRes = setTimeout(pintar, 200);
+});
+
+init();
+</script>
+</body>
+</html>
