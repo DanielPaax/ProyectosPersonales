@@ -264,13 +264,7 @@ function configurarPlantilla() {
   asegurarFilas_(ven, FILAS_MIN);
   ven.getRange(1, 1, 1, ENC_VENTAS.length).setValues([ENC_VENTAS]);
   formatoEncabezado_(ven, ENC_VENTAS.length);
-  const nV = ven.getMaxRows() - 1;
-  ven.getRange(2, 1, nV, 1).setDataValidation(listaDesdeRango_(cat.getRange('A2:A'), false));
-  ven.getRange(2, 2, nV, 1).setNumberFormat('$#,##0.00').setDataValidation(numeroMin_(0));
-  ven.getRange(2, 3, nV, 1).setNumberFormat('0').setDataValidation(enteroEntre_(0, 100000));
-  ven.getRange(2, 4, nV, 1).setNumberFormat('0').setDataValidation(enteroEntre_(1, 53));
-  ven.getRange(2, 5, nV, 1).setDataValidation(listaDesdeRango_(cat.getRange('C2:C13'), false));
-  ven.getRange(2, 6, nV, 1).setNumberFormat('0').setDataValidation(enteroEntre_(2000, 2100));
+  validacionesVentas_(ven, cat, 2, ven.getMaxRows() - 1);
   ven.setColumnWidths(1, ENC_VENTAS.length, 150);
   bandas_(ven, ENC_VENTAS.length);
 
@@ -281,29 +275,7 @@ function configurarPlantilla() {
   asegurarColumnas_(pro, ENC_PRODUCCION.length);
   pro.getRange(1, 1, 1, ENC_PRODUCCION.length).setValues([ENC_PRODUCCION]);
   const nP = pro.getMaxRows() - 1;
-  const col = c => pro.getRange(2, c, nP, 1);
-  const listaCat = (c, n) => listaDesdeRango_(cat.getRange(2, c, n, 1), false);
-  const rangoMateriales = cat.getRange(2, CAT.material, cat.getMaxRows() - 1, 1);
-
-  col(P.proyecto).clearDataValidations().setNumberFormat('@');
-  col(P.cliente).clearDataValidations().setNumberFormat('@');
-  col(P.producto).setDataValidation(listaDesdeRango_(cat.getRange('B2:B'), false));
-  col(P.maquina).setDataValidation(listaCat(CAT.maquinas, MAQUINAS.length));
-  col(P.tipo).setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireValueInList(TIPOS_IMPRESION.concat([NO_APLICA]), true).setAllowInvalid(false).build());
-  col(P.material).setDataValidation(listaDesdeRango_(rangoMateriales, false));
-  col(P.material2).setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireValueInList([NO_APLICA], true).setAllowInvalid(false)
-    .setHelpText('Se habilita solo si la máquina es CNC o Cama Plana').build());
-  col(P.unidad).setDataValidation(listaCat(CAT.unidades, UNIDADES.length));
-  pro.getRange(2, P.cantidad, nP, 2).setNumberFormat('#,##0.00').setDataValidation(numeroMin_(0));
-  col(P.merma).clearDataValidations().setNumberFormat('0.0%').setBackground(FONDO_CALC);
-  col(P.costo).clearDataValidations().setNumberFormat('$#,##0.00').setBackground(FONDO_CALC);
-  col(P.acabados).setDataValidation(listaCat(CAT.acabados, ACABADOS.length));
-  pro.getRange(2, P.producidas, nP, 3).setNumberFormat('#,##0.##').setDataValidation(numeroMin_(0));
-  col(P.semana).setNumberFormat('0').setDataValidation(enteroEntre_(1, 53));
-  col(P.mes).setDataValidation(listaDesdeRango_(cat.getRange('C2:C13'), false));
-  col(P.anio).setNumberFormat('0').setDataValidation(enteroEntre_(2000, 2100));
+  validacionesProduccion_(pro, cat, 2, nP);
 
   // Columnas calculadas: se limpia cualquier dato suelto y se pone la fórmula en el encabezado
   pro.getRange(2, P.merma, nP, 2).clearContent();
@@ -385,6 +357,53 @@ function migrarProduccion_(sh) {
     sh.insertColumnsBefore(1, 2);                      // PROYECTO, CLIENTE
     sh.insertColumnsAfter(P.unidad, 4);                // Cantidad UNIDAD, Unidad usada real, Merma %, COSTO
   }
+}
+
+/** Validaciones y formatos de la hoja Ventas para las filas [fila, fila+n). */
+function validacionesVentas_(ven, cat, fila, n) {
+  ven.getRange(fila, 1, n, 1).setDataValidation(listaDesdeRango_(cat.getRange('A2:A'), false));
+  ven.getRange(fila, 2, n, 1).setNumberFormat('$#,##0.00').setDataValidation(numeroMin_(0));
+  ven.getRange(fila, 3, n, 1).setNumberFormat('0').setDataValidation(enteroEntre_(0, 100000));
+  ven.getRange(fila, 4, n, 1).setNumberFormat('0').setDataValidation(enteroEntre_(1, 53));
+  ven.getRange(fila, 5, n, 1).setDataValidation(listaDesdeRango_(cat.getRange('C2:C13'), false));
+  ven.getRange(fila, 6, n, 1).setNumberFormat('0').setDataValidation(enteroEntre_(2000, 2100));
+}
+
+/** Validaciones y formatos de la hoja Produccion para las filas [fila, fila+n). */
+function validacionesProduccion_(pro, cat, fila, n) {
+  const col = c => pro.getRange(fila, c, n, 1);
+  const listaCat = (c, k) => listaDesdeRango_(cat.getRange(2, c, k, 1), false);
+  const rangoMateriales = cat.getRange(2, CAT.material, cat.getMaxRows() - 1, 1);
+
+  col(P.proyecto).clearDataValidations().setNumberFormat('@');
+  col(P.cliente).clearDataValidations().setNumberFormat('@');
+  col(P.producto).setDataValidation(listaDesdeRango_(cat.getRange('B2:B'), false));
+  col(P.maquina).setDataValidation(listaCat(CAT.maquinas, MAQUINAS.length));
+  col(P.tipo).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(TIPOS_IMPRESION.concat([NO_APLICA]), true).setAllowInvalid(false).build());
+  col(P.material).setDataValidation(listaDesdeRango_(rangoMateriales, false));
+  col(P.material2).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList([NO_APLICA], true).setAllowInvalid(false)
+    .setHelpText('Se habilita solo si la máquina es CNC o Cama Plana').build());
+  col(P.unidad).setDataValidation(listaCat(CAT.unidades, UNIDADES.length));
+  pro.getRange(fila, P.cantidad, n, 2).setNumberFormat('#,##0.00').setDataValidation(numeroMin_(0));
+  col(P.merma).clearDataValidations().setNumberFormat('0.0%').setBackground(FONDO_CALC);
+  col(P.costo).clearDataValidations().setNumberFormat('$#,##0.00').setBackground(FONDO_CALC);
+  col(P.acabados).setDataValidation(listaCat(CAT.acabados, ACABADOS.length));
+  pro.getRange(fila, P.producidas, n, 3).setNumberFormat('#,##0.##').setDataValidation(numeroMin_(0));
+  col(P.semana).setNumberFormat('0').setDataValidation(enteroEntre_(1, 53));
+  col(P.mes).setDataValidation(listaDesdeRango_(cat.getRange('C2:C13'), false));
+  col(P.anio).setNumberFormat('0').setDataValidation(enteroEntre_(2000, 2100));
+}
+
+/** Agrega al catálogo los valores que falten, sin borrar los existentes. */
+function agregarACatalogo_(cat, col, valores) {
+  const n = Math.max(cat.getLastRow() - 1, 1);
+  const existentes = cat.getRange(2, col, n, 1).getValues().map(r => String(r[0]).trim()).filter(v => v);
+  const faltan = valores.filter(v => existentes.indexOf(v) < 0);
+  if (!faltan.length) return;
+  asegurarFilas_(cat, existentes.length + faltan.length + 5);
+  cat.getRange(existentes.length + 2, col, faltan.length, 1).setValues(faltan.map(v => [v]));
 }
 
 /* ===================== DATOS PARA EL DASHBOARD ===================== */
@@ -531,20 +550,31 @@ function cargarDatosEjemplo() {
     }
   });
 
-  escribirAlFinal_(ss.getSheetByName(HOJA_VENTAS), filasV);
+  // 1) Dar de alta en Catalogos los ejecutivos y productos de ejemplo (sin borrar los tuyos)
+  const cat = ss.getSheetByName(HOJA_CATALOGOS);
+  agregarACatalogo_(cat, CAT.ejecutivos, ejecutivos);
+  agregarACatalogo_(cat, CAT.productos, productos);
+  SpreadsheetApp.flush();
+
+  // 2) Ventas: se quitan las validaciones del bloque, se escribe y se vuelven a poner
+  const ven = ss.getSheetByName(HOJA_VENTAS);
+  const iniV = ultimaFilaConDatos_(ven) + 1;
+  asegurarFilas_(ven, iniV + filasV.length + 10);
+  const bloqueV = ven.getRange(iniV, 1, filasV.length, ENC_VENTAS.length);
+  bloqueV.clearDataValidations();
+  bloqueV.setValues(filasV);
+  validacionesVentas_(ven, cat, iniV, filasV.length);
 
   // Producción: se escribe en dos bloques para no tocar Merma % y COSTO (son fórmulas)
   const pro = ss.getSheetByName(HOJA_PRODUCCION);
   const inicio = ultimaFilaConDatos_(pro) + 1;
   asegurarFilas_(pro, inicio + filasP.length + 10);
+  pro.getRange(inicio, 1, filasP.length, ENC_PRODUCCION.length).clearDataValidations();
   pro.getRange(inicio, 1, filasP.length, P.real).setValues(filasP.map(f => f.slice(0, P.real)));
   pro.getRange(inicio, P.acabados, filasP.length, ENC_PRODUCCION.length - P.acabados + 1)
     .setValues(filasP.map(f => f.slice(P.acabados - 1)));
+  validacionesProduccion_(pro, cat, inicio, filasP.length);
   aplicarReglasRango_(pro, inicio, filasP.length);
-
-  const cat = ss.getSheetByName(HOJA_CATALOGOS);
-  cat.getRange(2, CAT.ejecutivos, cat.getMaxRows() - 1, 1).clearContent();
-  escribirLista_(cat, CAT.ejecutivos, ejecutivos);
 
   ui.alert('Datos de ejemplo cargados. Abre el dashboard desde el menú 📊 Dashboard.');
 }
