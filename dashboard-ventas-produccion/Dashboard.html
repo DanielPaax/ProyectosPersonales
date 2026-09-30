@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --azul: #1f3a5f; --azul2: #3b82c4; --verde: #2e9e6b; --naranja: #e08a2c;
+      --rojo: #d0463b; --gris: #6b7280; --fondo: #f3f5f8; --card: #ffffff; --borde: #e3e7ee;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Roboto, Arial, sans-serif; background: var(--fondo); color: #1c2533; }
+    header { background: var(--azul); color: #fff; padding: 16px 24px; display: flex; flex-wrap: wrap;
+             gap: 16px; align-items: center; justify-content: space-between; }
+    header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+    header small { opacity: .75; font-size: 12px; display: block; margin-top: 2px; }
+    .filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .filtros label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .85; display: block; margin-bottom: 3px; }
+    .filtros select, .filtros button { padding: 7px 10px; border-radius: 6px; border: 0; font-size: 13px; min-width: 120px; max-width: 220px; }
+    .filtros button { background: var(--azul2); color: #fff; cursor: pointer; min-width: 0; }
+    .filtros.claro { background: var(--card); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+    .filtros.claro label { color: var(--gris); }
+    .filtros.claro select { border: 1px solid var(--borde); background: #fff; }
+    main { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+    h2 { font-size: 16px; color: var(--azul); margin: 26px 0 12px; border-left: 4px solid var(--azul2); padding-left: 8px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .kpi { background: var(--card); border: 1px solid var(--borde); border-radius: 10px; padding: 14px 16px; }
+    .kpi .t { font-size: 12px; color: var(--gris); }
+    .kpi .v { font-size: 24px; font-weight: 700; margin-top: 4px; }
+    .kpi .s { font-size: 12px; margin-top: 4px; color: var(--gris); }
+    .up { color: var(--verde) !important; } .down { color: var(--rojo) !important; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; margin-top: 14px; }
+    .card { background: var(--card); border: 1px solid var(--borde); border-radius: 10px; padding: 14px 16px; }
+    .card h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+    .chart { position: relative; height: 280px; }
+    .tabla { max-height: 380px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--borde); }
+    th:first-child, td:first-child { text-align: left; }
+    td.txt, th.txt { text-align: left; }
+    th { background: #f7f9fc; color: var(--gris); font-weight: 600; font-size: 12px; position: sticky; top: 0; }
+    .barra { height: 6px; background: #e8edf5; border-radius: 3px; margin-top: 4px; }
+    .barra span { display: block; height: 100%; background: var(--azul2); border-radius: 3px; }
+    .aviso { background: #fff7e8; border: 1px solid #f3d9a8; color: #8a5a12; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+    #loading { position: fixed; inset: 0; background: rgba(243,245,248,.85); display: flex;
+               align-items: center; justify-content: center; font-size: 15px; color: var(--azul); z-index: 10; }
+    .vacio { color: var(--gris); font-size: 13px; padding: 20px 0; text-align: center; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } main { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <div id="loading">Cargando datos…</div>
+
+  <header>
+    <div>
+      <h1>Dashboard de Ventas y Producción</h1>
+      <small id="actualizado"></small>
+    </div>
+    <div class="filtros">
+      <div><label>Año</label><select id="fAnio"></select></div>
+      <div><label>Mes</label><select id="fMes"></select></div>
+      <div><button onclick="cargar()">↻ Actualizar</button></div>
+    </div>
+  </header>
+
+  <main>
+    <h2>Ventas</h2>
+    <div class="filtros claro">
+      <div><label>Ejecutivo</label><select id="fEjec"></select></div>
+    </div>
+    <div class="kpis" id="kpisVentas"></div>
+    <div class="grid">
+      <div class="card"><h3>Ventas y clientes por semana</h3><div class="chart"><canvas id="chVentasSemana"></canvas></div></div>
+      <div class="card"><h3>Ventas por ejecutivo</h3><div class="chart"><canvas id="chVentasEjec"></canvas></div></div>
+      <div class="card"><h3>Histórico mensual: año seleccionado vs año anterior</h3><div class="chart"><canvas id="chHistorico"></canvas></div></div>
+      <div class="card"><h3>Ranking de ejecutivos</h3><div id="tablaEjec"></div></div>
+    </div>
+
+    <h2>Producción</h2>
+    <div class="filtros claro">
+      <div><label>Cliente</label><select id="fCli"></select></div>
+      <div><label>Máquina</label><select id="fMaq"></select></div>
+      <div><label>Tipo de impresión</label><select id="fTipo"></select></div>
+      <div><label>Material</label><select id="fMat"></select></div>
+      <div><label>Unidad de medida</label><select id="fUni"></select></div>
+      <div><label>Producto</label><select id="fProd"></select></div>
+    </div>
+    <div id="avisos"></div>
+    <div class="kpis" id="kpisProd"></div>
+    <div class="grid">
+      <div class="card"><h3>Costo de producción y merma por semana</h3><div class="chart"><canvas id="chCostoSemana"></canvas></div></div>
+      <div class="card"><h3>Producción vs meta por semana</h3><div class="chart"><canvas id="chProdSemana"></canvas></div></div>
+      <div class="card"><h3>Costo por cliente (top 10)</h3><div class="chart"><canvas id="chCostoCliente"></canvas></div></div>
+      <div class="card"><h3>Costo por material (top 10)</h3><div class="chart"><canvas id="chCostoMaterial"></canvas></div></div>
+      <div class="card"><h3>Costo y merma por máquina</h3><div class="chart"><canvas id="chMaquina"></canvas></div></div>
+      <div class="card"><h3>Histórico mensual de costo: año seleccionado vs año anterior</h3><div class="chart"><canvas id="chCostoHistorico"></canvas></div></div>
+      <div class="card"><h3>Producción por tipo de impresión</h3><div class="chart"><canvas id="chProdTipo"></canvas></div></div>
+      <div class="card"><h3>Acabados más usados (n.º de registros)</h3><div class="chart"><canvas id="chAcabados"></canvas></div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>Detalle por máquina</h3><div class="tabla" id="tablaMaq"></div></div>
+      <div class="card"><h3>Proyectos con mayor costo</h3><div class="tabla" id="tablaProy"></div></div>
+    </div>
+  </main>
+
+<script>
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const MESES_C = MESES.map(m => m.slice(0, 3));
+  const MAQUINAS = ['Chona','Juana','La Mary','Mimaki','CNC','Laminadora','Cama Plana'];
+  const TIPOS = ['UV','Gran Formato','HD','NO APLICA'];
+  const UNIDADES = ['m2','mtl','lamina','pzs'];
+  const COLORES = ['#3b82c4','#2e9e6b','#e08a2c','#8b5cf6','#d0463b','#14b8a6','#f59e0b','#64748b'];
+  const COLOR_TIPO = { 'UV': '#8b5cf6', 'Gran Formato': '#3b82c4', 'HD': '#14b8a6', 'NO APLICA': '#cbd5e1' };
+  const fmtMoney = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+  const fmtNum = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 });
+  const pct = v => isFinite(v) ? (v * 100).toFixed(1) + '%' : '—';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let DATA = null;
+  const charts = {};
+
+  Chart.defaults.font.family = '"Segoe UI", Roboto, Arial, sans-serif';
+  Chart.defaults.font.size = 11;
+  Chart.defaults.maintainAspectRatio = false;
+
+  /* ---------- Carga ---------- */
+  function cargar() {
+    $('loading').style.display = 'flex';
+    google.script.run
+      .withSuccessHandler(d => { DATA = d; llenarFiltros(); render(); $('loading').style.display = 'none'; })
+      .withFailureHandler(e => { $('loading').textContent = 'Error al cargar datos: ' + e.message; })
+      .getDatosDashboard();
+  }
+
+  function unicos(arr) { return [...new Set(arr)].filter(v => v !== '' && v != null); }
+  function ordenar(valores, catalogo) {
+    return catalogo.filter(c => valores.includes(c)).concat(valores.filter(v => !catalogo.includes(v)).sort());
+  }
+
+  function setOpciones(sel, valores, etiquetaTodos, mapEtiqueta) {
+    const actual = sel.value;
+    sel.innerHTML = (etiquetaTodos ? `<option value="">${etiquetaTodos}</option>` : '') +
+      valores.map(v => `<option value="${esc(v)}">${esc(mapEtiqueta ? mapEtiqueta(v) : v)}</option>`).join('');
+    if ([...sel.options].some(o => o.value === actual)) sel.value = actual;
+  }
+
+  function llenarFiltros() {
+    const P = DATA.produccion;
+    const anios = unicos([...DATA.ventas.map(r => r.anio), ...P.map(r => r.anio)]).sort((a, b) => b - a);
+    const primeraVez = !$('fAnio').options.length;
+    setOpciones($('fAnio'), anios);
+    if (primeraVez && anios.length) $('fAnio').value = anios[0];
+    setOpciones($('fMes'), [1,2,3,4,5,6,7,8,9,10,11,12], 'Todos', m => MESES[m - 1]);
+    setOpciones($('fEjec'), unicos(DATA.ventas.map(r => r.ejecutivo)).sort(), 'Todos');
+    setOpciones($('fCli'), unicos(P.map(r => r.cliente)).sort(), 'Todos');
+    setOpciones($('fMaq'), ordenar(unicos(P.map(r => r.maquina)), MAQUINAS), 'Todas');
+    setOpciones($('fTipo'), ordenar(unicos(P.map(r => r.tipo)), TIPOS), 'Todos');
+    setOpciones($('fMat'), unicos(P.flatMap(r => [r.material, r.material2]).filter(m => m !== 'NO APLICA')).sort(), 'Todos');
+    setOpciones($('fUni'), ordenar(unicos(P.map(r => r.unidad)), UNIDADES), 'Todas');
+    setOpciones($('fProd'), unicos(P.map(r => r.producto)).sort(), 'Todos');
+    $('actualizado').textContent = 'Actualizado: ' + DATA.actualizado;
+  }
+  ['fAnio','fMes','fEjec','fCli','fMaq','fTipo','fMat','fUni','fProd']
+    .forEach(id => $(id).addEventListener('change', () => DATA && render()));
+
+  /* ---------- Utilidades ---------- */
+  function agrupar(arr, keyFn, campos) {
+    const m = new Map();
+    arr.forEach(r => {
+      const k = keyFn(r);
+      if (!m.has(k)) m.set(k, Object.fromEntries(campos.map(c => [c, 0])));
+      const o = m.get(k);
+      campos.forEach(c => o[c] += (c === 'n' ? 1 : (r[c] || 0)));
+    });
+    return m;
+  }
+  const suma = (arr, c) => arr.reduce((s, r) => s + (r[c] || 0), 0);
+  // Merma ponderada: (Σ usado real − Σ cantidad) / Σ usado real, solo filas con ambos datos
+  function merma(rows) {
+    const ok = rows.filter(r => r.real > 0 && r.cantidad > 0);
+    const real = suma(ok, 'real');
+    return real ? (real - suma(ok, 'cantidad')) / real : NaN;
+  }
+  const claseMerma = m => !isFinite(m) ? '' : (m > 0.10 ? 'down' : (m <= 0.05 ? 'up' : ''));
+
+  function dibujar(id, config) {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id), config);
+  }
+
+  function variacion(actual, anterior) {
+    if (!anterior) return '';
+    const v = actual / anterior - 1;
+    return `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${pct(Math.abs(v))}</span>`;
+  }
+  // Para costos, subir es malo
+  function variacionCosto(actual, anterior) {
+    if (!anterior) return '';
+    const v = actual / anterior - 1;
+    return `<span class="${v <= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${pct(Math.abs(v))}</span>`;
+  }
+
+  function kpi(titulo, valor, sub) {
+    return `<div class="kpi"><div class="t">${titulo}</div><div class="v">${valor}</div><div class="s">${sub || '&nbsp;'}</div></div>`;
+  }
+
+  const barrasH = (labels, data, color, fmt) => ({
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: color }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) } } },
+               scales: { x: { ticks: { callback: v => fmt(v) } }, y: { ticks: { callback: function (v) { const l = this.getLabelForValue(v); return l.length > 28 ? l.slice(0, 27) + '…' : l; } } } } }
+  });
+
+  /* ---------- Render ---------- */
+  function render() {
+    const anio = +$('fAnio').value, mes = $('fMes').value, ejec = $('fEjec').value;
+    const f = { cli: $('fCli').value, maq: $('fMaq').value, tipo: $('fTipo').value, mat: $('fMat').value, uni: $('fUni').value, prod: $('fProd').value };
+    const okMes = r => mes === '' || r.mes === +mes;
+    const vFilt = r => (ejec === '' || r.ejecutivo === ejec);
+    const pFilt = r => (f.cli === '' || r.cliente === f.cli) && (f.maq === '' || r.maquina === f.maq) &&
+                       (f.tipo === '' || r.tipo === f.tipo) && (f.uni === '' || r.unidad === f.uni) &&
+                       (f.prod === '' || r.producto === f.prod) &&
+                       (f.mat === '' || r.material === f.mat || r.material2 === f.mat);
+
+    const ventas = DATA.ventas.filter(r => r.anio === anio && okMes(r) && vFilt(r));
+    const ventasAnt = DATA.ventas.filter(r => r.anio === anio - 1 && okMes(r) && vFilt(r));
+    const produccion = DATA.produccion.filter(r => r.anio === anio && okMes(r) && pFilt(r));
+    const produccionAnt = DATA.produccion.filter(r => r.anio === anio - 1 && okMes(r) && pFilt(r));
+
+    renderVentas(ventas, ventasAnt, anio);
+    renderProduccion(produccion, produccionAnt, anio, pFilt);
+  }
+
+  function renderVentas(ventas, ventasAnt, anio) {
+    const total = suma(ventas, 'monto'), clientes = suma(ventas, 'clientes');
+    const totalAnt = suma(ventasAnt, 'monto');
+    const porSemana = agrupar(ventas, r => r.semana, ['monto', 'clientes']);
+    const semanas = [...porSemana.keys()].sort((a, b) => a - b);
+    const ult = semanas[semanas.length - 1], pen = semanas[semanas.length - 2];
+    const vUlt = ult ? porSemana.get(ult).monto : 0, vPen = pen ? porSemana.get(pen).monto : 0;
+
+    $('kpisVentas').innerHTML =
+      kpi('Ventas totales', fmtMoney.format(total), totalAnt ? `${variacion(total, totalAnt)} vs ${anio - 1}` : '') +
+      kpi('Clientes', fmtNum.format(clientes), '') +
+      kpi('Ticket promedio', fmtMoney.format(clientes ? total / clientes : 0), 'Venta / cliente') +
+      kpi(ult ? `Semana más reciente (S${ult})` : 'Semana más reciente', fmtMoney.format(vUlt), pen ? `${variacion(vUlt, vPen)} vs S${pen}` : '') +
+      kpi('Promedio semanal', fmtMoney.format(semanas.length ? total / semanas.length : 0), `${semanas.length} semanas`);
+
+    dibujar('chVentasSemana', {
+      data: {
+        labels: semanas.map(s => 'S' + s),
+        datasets: [
+          { type: 'bar', label: 'Ventas', data: semanas.map(s => porSemana.get(s).monto), backgroundColor: '#3b82c4', yAxisID: 'y' },
+          { type: 'line', label: 'Clientes', data: semanas.map(s => porSemana.get(s).clientes), borderColor: '#e08a2c', backgroundColor: '#e08a2c', tension: .3, yAxisID: 'y1', pointRadius: 2 }
+        ]
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        scales: { y: { ticks: { callback: v => fmtMoney.format(v) } }, y1: { position: 'right', grid: { drawOnChartArea: false } } },
+        plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.yAxisID === 'y' ? fmtMoney.format(c.raw) : fmtNum.format(c.raw)) } } }
+      }
+    });
+
+    const porEjec = agrupar(ventas, r => r.ejecutivo, ['monto', 'clientes']);
+    const ejecs = [...porEjec.entries()].sort((a, b) => b[1].monto - a[1].monto);
+    dibujar('chVentasEjec', barrasH(ejecs.map(e => e[0]), ejecs.map(e => e[1].monto), ejecs.map((_, i) => COLORES[i % COLORES.length]), v => fmtMoney.format(v)));
+
+    const ejec = $('fEjec').value;
+    const serie = a => {
+      const m = agrupar(DATA.ventas.filter(r => r.anio === a && (ejec === '' || r.ejecutivo === ejec)), r => r.mes, ['monto']);
+      return MESES.map((_, i) => m.has(i + 1) ? m.get(i + 1).monto : null);
+    };
+    dibujar('chHistorico', {
+      type: 'line',
+      data: { labels: MESES_C, datasets: [
+        { label: String(anio), data: serie(anio), borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,.12)', fill: true, tension: .3 },
+        { label: String(anio - 1), data: serie(anio - 1), borderColor: '#9ca3af', borderDash: [5, 4], tension: .3 }
+      ] },
+      options: { interaction: { mode: 'index', intersect: false }, scales: { y: { ticks: { callback: v => fmtMoney.format(v) } } },
+                 plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtMoney.format(c.raw || 0) } } } }
+    });
+
+    $('tablaEjec').innerHTML = ejecs.length ? `<table>
+      <tr><th>Ejecutivo</th><th>Ventas</th><th>Clientes</th><th>Ticket</th><th>% del total</th></tr>
+      ${ejecs.map(([n, o]) => `<tr><td>${esc(n)}</td><td>${fmtMoney.format(o.monto)}</td><td>${fmtNum.format(o.clientes)}</td>
+        <td>${fmtMoney.format(o.clientes ? o.monto / o.clientes : 0)}</td>
+        <td>${pct(total ? o.monto / total : 0)}<div class="barra"><span style="width:${total ? o.monto / total * 100 : 0}%"></span></div></td></tr>`).join('')}
+    </table>` : '<div class="vacio">Sin datos para el filtro seleccionado</div>';
+  }
+
+  function renderProduccion(produccion, produccionAnt, anio, pFilt) {
+    /* --- Avisos --- */
+    const avisos = [];
+    const unidades = ordenar(unicos(produccion.map(r => r.unidad)), UNIDADES);
+    const uTxt = unidades.length === 1 ? ' ' + unidades[0] : '';
+    if (unidades.length > 1) avisos.push(`Estás viendo varias unidades de medida juntas (${unidades.join(', ')}). Las cantidades se suman tal cual; filtra por <b>Unidad de medida</b> para comparar cifras equivalentes. Costo, merma % y cumplimiento sí son comparables.`);
+    const sinCosto = agrupar(produccion.filter(r => r.costoEstado), r => r.costoEstado, ['n']);
+    if (sinCosto.size) avisos.push(`Hay registros sin costo calculado: ${[...sinCosto.entries()].map(([k, o]) => `<b>${esc(k)}</b> (${o.n})`).join(', ')}. Revisa la columna COSTO en la hoja Produccion.`);
+    $('avisos').innerHTML = avisos.map(a => `<div class="aviso">⚠️ ${a}</div>`).join('');
+
+    /* --- KPIs --- */
+    const costo = suma(produccion, 'costo'), costoAnt = suma(produccionAnt, 'costo');
+    const real = suma(produccion, 'real');
+    const mermaTot = merma(produccion);
+    const prod = suma(produccion, 'producidas'), meta = suma(produccion, 'meta'), rech = suma(produccion, 'rechazadas');
+    const proyectos = unicos(produccion.map(r => r.proyecto)).length, clientes = unicos(produccion.map(r => r.cliente)).length;
+    const costoDesperdicio = produccion.reduce((s, r) => s + (r.real > 0 && r.cantidad > 0 && r.costo ? r.costo * Math.max(0, r.real - r.cantidad) / r.real : 0), 0);
+
+    $('kpisProd').innerHTML =
+      kpi('Costo de producción', fmtMoney.format(costo), costoAnt ? `${variacionCosto(costo, costoAnt)} vs ${anio - 1}` : '') +
+      kpi('Proyectos', fmtNum.format(proyectos), `${clientes} clientes · ${fmtMoney.format(proyectos ? costo / proyectos : 0)} por proyecto`) +
+      kpi('Material usado real', fmtNum.format(real) + uTxt, `Planeado: ${fmtNum.format(suma(produccion, 'cantidad'))}${uTxt}`) +
+      kpi('Merma', `<span class="${claseMerma(mermaTot)}">${pct(mermaTot)}</span>`, `Costo de la merma: ${fmtMoney.format(costoDesperdicio)}`) +
+      kpi('Cumplimiento de meta', `<span class="${prod >= meta ? 'up' : 'down'}">${pct(meta ? prod / meta : NaN)}</span>`, `${fmtNum.format(prod)} de ${fmtNum.format(meta)}${uTxt}`) +
+      kpi('Rechazo', pct(prod ? rech / prod : NaN), `${fmtNum.format(rech)}${uTxt} rechazados`);
+
+    /* --- Por semana: costo y merma --- */
+    const semanasSet = [...new Set(produccion.map(r => r.semana))].sort((a, b) => a - b);
+    const porSemana = agrupar(produccion, r => r.semana, ['costo', 'producidas', 'meta', 'rechazadas']);
+    const mermaSemana = semanasSet.map(s => { const m = merma(produccion.filter(r => r.semana === s)); return isFinite(m) ? +(m * 100).toFixed(2) : null; });
+    dibujar('chCostoSemana', {
+      data: { labels: semanasSet.map(s => 'S' + s), datasets: [
+        { type: 'bar', label: 'Costo', data: semanasSet.map(s => porSemana.get(s).costo), backgroundColor: '#3b82c4', yAxisID: 'y' },
+        { type: 'line', label: 'Merma %', data: mermaSemana, borderColor: '#d0463b', backgroundColor: '#d0463b', tension: .3, yAxisID: 'y1', pointRadius: 2 }
+      ] },
+      options: { interaction: { mode: 'index', intersect: false },
+        scales: { y: { ticks: { callback: v => fmtMoney.format(v) } }, y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' } } },
+        plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.yAxisID === 'y' ? fmtMoney.format(c.raw) : (c.raw == null ? '—' : c.raw + '%')) } } } }
+    });
+
+    /* --- Por semana: producción vs meta --- */
+    dibujar('chProdSemana', {
+      data: { labels: semanasSet.map(s => 'S' + s), datasets: [
+        { type: 'bar', label: 'Producida', data: semanasSet.map(s => porSemana.get(s).producidas), backgroundColor: '#2e9e6b' },
+        { type: 'bar', label: 'Rechazada', data: semanasSet.map(s => porSemana.get(s).rechazadas), backgroundColor: '#d0463b' },
+        { type: 'line', label: 'Meta', data: semanasSet.map(s => porSemana.get(s).meta), borderColor: '#1f3a5f', borderDash: [5, 4], pointRadius: 0 }
+      ] },
+      options: { interaction: { mode: 'index', intersect: false } }
+    });
+
+    /* --- Costo por cliente --- */
+    const porCli = [...agrupar(produccion, r => r.cliente || '(sin cliente)', ['costo']).entries()]
+      .sort((a, b) => b[1].costo - a[1].costo).slice(0, 10);
+    dibujar('chCostoCliente', barrasH(porCli.map(c => c[0]), porCli.map(c => c[1].costo), '#3b82c4', v => fmtMoney.format(v)));
+
+    /* --- Costo por material (reparte Material y Material 2 según su costo unitario) --- */
+    const cat = DATA.materiales || {};
+    const cu = m => (cat[m] && cat[m].costo) || 0;
+    const costoMat = new Map();
+    const add = (k, v) => costoMat.set(k, (costoMat.get(k) || 0) + v);
+    produccion.forEach(r => {
+      if (!r.costo) return;
+      const m2 = r.material2 && r.material2 !== 'NO APLICA' ? r.material2 : '';
+      const c1 = cu(r.material), c2 = m2 ? cu(m2) : 0;
+      if (c1 + c2 === 0) { add(r.material, r.costo); return; }
+      add(r.material, r.costo * c1 / (c1 + c2));
+      if (c2) add(m2, r.costo * c2 / (c1 + c2));
+    });
+    const mats = [...costoMat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    dibujar('chCostoMaterial', barrasH(mats.map(m => m[0]), mats.map(m => m[1]), '#8b5cf6', v => fmtMoney.format(v)));
+
+    /* --- Por máquina --- */
+    const porMaq = agrupar(produccion, r => r.maquina || '(sin máquina)', ['costo', 'real', 'cantidad', 'producidas', 'meta', 'rechazadas', 'n']);
+    const maqs = ordenar([...porMaq.keys()], MAQUINAS);
+    const mermaMaq = maqs.map(m => merma(produccion.filter(r => (r.maquina || '(sin máquina)') === m)));
+    dibujar('chMaquina', {
+      data: { labels: maqs, datasets: [
+        { type: 'bar', label: 'Costo', data: maqs.map(m => porMaq.get(m).costo), backgroundColor: '#3b82c4', yAxisID: 'y' },
+        { type: 'line', label: 'Merma %', data: mermaMaq.map(m => isFinite(m) ? +(m * 100).toFixed(2) : null), borderColor: '#d0463b', backgroundColor: '#d0463b', showLine: false, pointRadius: 5, yAxisID: 'y1' }
+      ] },
+      options: { interaction: { mode: 'index', intersect: false },
+        scales: { y: { ticks: { callback: v => fmtMoney.format(v) } }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' } } },
+        plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.yAxisID === 'y' ? fmtMoney.format(c.raw) : (c.raw == null ? '—' : c.raw + '%')) } } } }
+    });
+
+    /* --- Histórico mensual de costo --- */
+    const serie = a => {
+      const m = agrupar(DATA.produccion.filter(r => r.anio === a && pFilt(r)), r => r.mes, ['costo']);
+      return MESES.map((_, i) => m.has(i + 1) ? m.get(i + 1).costo : null);
+    };
+    dibujar('chCostoHistorico', {
+      type: 'line',
+      data: { labels: MESES_C, datasets: [
+        { label: String(anio), data: serie(anio), borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,.12)', fill: true, tension: .3 },
+        { label: String(anio - 1), data: serie(anio - 1), borderColor: '#9ca3af', borderDash: [5, 4], tension: .3 }
+      ] },
+      options: { interaction: { mode: 'index', intersect: false }, scales: { y: { ticks: { callback: v => fmtMoney.format(v) } } },
+                 plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtMoney.format(c.raw || 0) } } } }
+    });
+
+    /* --- Tipo de impresión --- */
+    const porTipo = agrupar(produccion, r => r.tipo || 'NO APLICA', ['real', 'n']);
+    const tipos = ordenar([...porTipo.keys()], TIPOS);
+    dibujar('chProdTipo', {
+      type: 'doughnut',
+      data: { labels: tipos, datasets: [{ data: tipos.map(t => porTipo.get(t).real), backgroundColor: tipos.map((t, i) => COLOR_TIPO[t] || COLORES[i % COLORES.length]) }] },
+      options: { plugins: { legend: { position: 'right' }, tooltip: { callbacks: {
+        label: c => `${c.label}: ${fmtNum.format(c.raw)}${uTxt} usados (${porTipo.get(c.label).n} registros)`
+      } } } }
+    });
+
+    /* --- Acabados --- */
+    const acabs = [...agrupar(produccion.filter(r => r.acabados), r => r.acabados, ['n']).entries()].sort((a, b) => b[1].n - a[1].n);
+    dibujar('chAcabados', barrasH(acabs.map(a => a[0]), acabs.map(a => a[1].n), '#e08a2c', v => fmtNum.format(v)));
+
+    /* --- Tabla por máquina --- */
+    $('tablaMaq').innerHTML = maqs.length ? `<table>
+      <tr><th>Máquina</th><th>Registros</th><th>Usado real</th><th>Merma</th><th>Costo</th><th>Cumplimiento</th></tr>
+      ${maqs.map((n, i) => { const o = porMaq.get(n); return `<tr><td>${esc(n)}</td><td>${o.n}</td>
+        <td>${fmtNum.format(o.real)}</td><td class="${claseMerma(mermaMaq[i])}">${pct(mermaMaq[i])}</td>
+        <td>${fmtMoney.format(o.costo)}</td>
+        <td class="${o.producidas >= o.meta ? 'up' : 'down'}">${pct(o.meta ? o.producidas / o.meta : NaN)}</td></tr>`; }).join('')}
+    </table>` : '<div class="vacio">Sin datos para el filtro seleccionado</div>';
+
+    /* --- Tabla de proyectos --- */
+    const porProy = new Map();
+    produccion.forEach(r => {
+      const k = r.proyecto || '(sin proyecto)';
+      if (!porProy.has(k)) porProy.set(k, { cliente: r.cliente, maquinas: new Set(), filas: [] });
+      const o = porProy.get(k); o.maquinas.add(r.maquina); o.filas.push(r);
+    });
+    const proys = [...porProy.entries()].map(([k, o]) => ({ k, cliente: o.cliente, maquinas: [...o.maquinas].join(', '),
+      real: suma(o.filas, 'real'), merma: merma(o.filas), costo: suma(o.filas, 'costo') }))
+      .sort((a, b) => b.costo - a.costo).slice(0, 25);
+    $('tablaProy').innerHTML = proys.length ? `<table>
+      <tr><th>Proyecto</th><th class="txt">Cliente</th><th class="txt">Máquinas</th><th>Usado real</th><th>Merma</th><th>Costo</th></tr>
+      ${proys.map(p => `<tr><td>${esc(p.k)}</td><td class="txt">${esc(p.cliente)}</td><td class="txt">${esc(p.maquinas)}</td>
+        <td>${fmtNum.format(p.real)}</td><td class="${claseMerma(p.merma)}">${pct(p.merma)}</td><td>${fmtMoney.format(p.costo)}</td></tr>`).join('')}
+    </table>` : '<div class="vacio">Sin datos para el filtro seleccionado</div>';
+  }
+
+  cargar();
+</script>
+</body>
+</html>
