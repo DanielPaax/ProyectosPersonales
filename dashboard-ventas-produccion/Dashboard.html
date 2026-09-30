@@ -3,7 +3,18 @@
 <head>
   <base target="_top">
   <meta charset="utf-8">
+  <script>
+    // Muestra cualquier error de JavaScript en pantalla en lugar de dejar la página a medias
+    window.onerror = function (msg, src, linea) {
+      var el = document.getElementById('loading');
+      if (el) { el.style.display = 'flex'; el.innerHTML = '<div class="error">⚠️ Error en el dashboard:<br><b>' + msg + '</b><br><small>línea ' + linea + '</small></div>'; }
+    };
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script>
+    // Respaldo si cdnjs está bloqueado
+    if (!window.Chart) document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>');
+  </script>
   <style>
     :root {
       --azul: #1f3a5f; --azul2: #3b82c4; --verde: #2e9e6b; --naranja: #e08a2c;
@@ -43,8 +54,9 @@
     .barra { height: 6px; background: #e8edf5; border-radius: 3px; margin-top: 4px; }
     .barra span { display: block; height: 100%; background: var(--azul2); border-radius: 3px; }
     .aviso { background: #fff7e8; border: 1px solid #f3d9a8; color: #8a5a12; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
-    #loading { position: fixed; inset: 0; background: rgba(243,245,248,.85); display: flex;
+    #loading { position: fixed; inset: 0; background: #f3f5f8; display: flex; text-align: center; padding: 24px;
                align-items: center; justify-content: center; font-size: 15px; color: var(--azul); z-index: 10; }
+    .error { color: #d0463b; font-size: 14px; line-height: 1.6; max-width: 640px; }
     .vacio { color: var(--gris); font-size: 13px; padding: 20px 0; text-align: center; }
     @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } main { padding: 16px; } }
   </style>
@@ -120,6 +132,7 @@
   let DATA = null;
   const charts = {};
 
+  if (!window.Chart) throw new Error('No se pudo cargar la librería de gráficas (Chart.js). Revisa tu conexión a internet o si tu red bloquea cdnjs.cloudflare.com y cdn.jsdelivr.net.');
   Chart.defaults.font.family = '"Segoe UI", Roboto, Arial, sans-serif';
   Chart.defaults.font.size = 11;
   Chart.defaults.maintainAspectRatio = false;
@@ -128,8 +141,20 @@
   function cargar() {
     $('loading').style.display = 'flex';
     google.script.run
-      .withSuccessHandler(d => { DATA = d; llenarFiltros(); render(); $('loading').style.display = 'none'; })
-      .withFailureHandler(e => { $('loading').textContent = 'Error al cargar datos: ' + e.message; })
+      .withSuccessHandler(d => {
+        try {
+          if (!d || (!d.ventas.length && !d.produccion.length)) {
+            $('loading').innerHTML = '<div class="error" style="color:#1f3a5f">No hay datos todavía.<br>' +
+              'En la hoja usa <b>📊 Dashboard → Configurar plantilla</b> y captura datos en <b>Ventas</b> y <b>Produccion</b>, ' +
+              'o usa <b>Cargar datos de ejemplo</b> para probar.<br><br><button onclick="cargar()">↻ Reintentar</button></div>';
+            return;
+          }
+          DATA = d; llenarFiltros(); render(); $('loading').style.display = 'none';
+        } catch (err) {
+          $('loading').innerHTML = '<div class="error">⚠️ Error al dibujar el dashboard:<br><b>' + err.message + '</b></div>';
+        }
+      })
+      .withFailureHandler(e => { $('loading').innerHTML = '<div class="error">⚠️ Error al leer la hoja:<br><b>' + e.message + '</b></div>'; })
       .getDatosDashboard();
   }
 
@@ -430,7 +455,11 @@
     </table>` : '<div class="vacio">Sin datos para el filtro seleccionado</div>';
   }
 
-  cargar();
+  if (typeof google === 'undefined' || !google.script) {
+    $('loading').innerHTML = '<div class="error">Este archivo solo funciona dentro de Google Sheets (menú 📊 Dashboard → Abrir dashboard) o publicado como Aplicación web desde Apps Script.</div>';
+  } else {
+    cargar();
+  }
 </script>
 </body>
 </html>

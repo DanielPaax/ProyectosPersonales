@@ -19,6 +19,13 @@ Plantilla de Google Sheets para el reporte semanal y el seguimiento histórico d
 6. Opcional: **Cargar datos de ejemplo** para probar, y luego **Abrir dashboard**.
 7. Para tener el dashboard en un link propio: **Implementar → Nueva implementación → Aplicación web**.
 
+## Si el dashboard no se ve bien
+
+- En el editor de Apps Script deben existir **dos** archivos: `Código.gs` y `Dashboard.html`. Si ves `Dashboard.gs`, bórralo y créalo de nuevo con **+ → HTML**.
+- `Dashboard.html` debe contener el código de **Dashboard.html** (empieza con `<!DOCTYPE html>`), no el de Code.gs.
+- Si aparece "No hay datos todavía", corre **Configurar plantilla** y captura datos (o **Cargar datos de ejemplo**).
+- Si aparece un mensaje de error en rojo, cópialo: indica la causa exacta.
+
 ## Hojas que crea
 
 ### Ventas
