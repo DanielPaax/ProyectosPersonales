@@ -29,7 +29,7 @@ var ROLES = {
   /* Venta, costos y margen son sensibles: NO los ve todo el dominio.
      Solo MASTER y los correos de esta lista abren la seccion de Venta.
      Para capturar venta ademas se necesita rol CAPTURA o MASTER. */
-  VENTAS:  ['eduardo.gongora@gpowib.com']
+  VENTAS:  ['eduardo.gongora@gpowib.com', 'danielpaax@gmail.com']
 };
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
