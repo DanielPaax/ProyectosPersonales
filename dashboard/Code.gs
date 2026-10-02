@@ -530,9 +530,11 @@ function guardarTrabajo(d) {
 
   var cats = _leerCatalogos_();
   var fecha    = _texto_(d.fecha, 10);
-  var maquina  = _enCatalogo_(cats, 'MAQUINA',  _texto_(d.maquina, 40),  true);
-  var proceso  = _enCatalogo_(cats, 'PROCESO',  _texto_(d.proceso, 40),  true);
-  var material = _enCatalogo_(cats, 'MATERIAL', _texto_(d.material, 40), true);
+  /* Los nombres de catalogo pueden ser largos (materiales de mas de 80
+     caracteres): recortarlos aqui impedia que empataran con CATALOGOS. */
+  var maquina  = _enCatalogo_(cats, 'MAQUINA',  _texto_(d.maquina, 80),  true);
+  var proceso  = _enCatalogo_(cats, 'PROCESO',  _texto_(d.proceso, 80),  true);
+  var material = _enCatalogo_(cats, 'MATERIAL', _texto_(d.material, 150), true);
   var unidad   = _enCatalogo_(cats, 'UNIDAD',   _texto_(d.unidad, 12),   true);
   var origen   = _enCatalogo_(cats, 'ORIGEN',   _texto_(d.origen, 12),   true);
   var paro     = _enCatalogo_(cats, 'MOTIVO_PARO', _texto_(d.paro, 40),  false);
@@ -1208,6 +1210,7 @@ function instalar() {
   var cat = ss.getSheetByName(CFG.HOJA_CATALOGOS);
   if (!cat) { throw new Error('No encuentro la hoja CATALOGOS.'); }
   hechos.push(asegurarCatalogosVenta(cat));
+  hechos.push(fusionarCatalogosProduccion(ss, cat));
 
   /* Esquema 3: VENTAS y TARIFAS. Si ya importaste la migracion, solo se
      verifican los encabezados; si no existen, se crean vacias. */
@@ -1265,6 +1268,52 @@ function asegurarCatalogosVenta(cat) {
   return agregadas.length
     ? 'Catalogos agregados a CATALOGOS: ' + agregadas.join(', ') + '.'
     : 'Catalogos de venta ya existian.';
+}
+
+function fusionarCatalogosProduccion(ss, cat) {
+  /* Si importaste la hoja CATALOGOS_PRODUCCION (la trae BASE_migracion.xlsx),
+     sus valores se AGREGAN a CATALOGOS: columnas que falten y valores que no
+     existan. Nunca se borra ni se cambia nada de lo que ya hay. */
+  var src = ss.getSheetByName('CATALOGOS_PRODUCCION');
+  if (!src) { return 'Sin hoja CATALOGOS_PRODUCCION: catalogos de produccion sin cambios.'; }
+  var ult = src.getLastRow(), anc = src.getLastColumn();
+  if (ult < 2 || anc < 1) { return 'CATALOGOS_PRODUCCION esta vacia.'; }
+  var datos = src.getRange(1, 1, ult, anc).getValues();
+  var agregados = [];
+  for (var c = 0; c < anc; c++) {
+    var nombre = String(datos[0][c] || '').trim().toUpperCase();
+    if (!nombre) { continue; }
+    var ancho = Math.max(cat.getLastColumn(), 1);
+    var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
+    var col = 0;
+    for (var k = 0; k < encab.length; k++) {
+      if (String(encab[k] || '').trim().toUpperCase() === nombre) { col = k + 1; break; }
+    }
+    if (!col) {
+      col = encab.join('') === '' ? 1 : ancho + 1;
+      cat.getRange(1, col).setValue(nombre);
+    }
+    var alto = Math.max(cat.getLastRow(), 1);
+    var actuales = cat.getRange(1, col, alto, 1).getValues();
+    var existen = {};
+    var ultima = 1;
+    for (var r = 1; r < actuales.length; r++) {
+      var v = String(actuales[r][0] || '').trim();
+      if (v) { existen[v.toUpperCase()] = true; ultima = r + 1; }
+    }
+    var nuevos = [];
+    for (var f = 1; f < datos.length; f++) {
+      var x = String(datos[f][c] || '').trim();
+      if (x && !existen[x.toUpperCase()]) { existen[x.toUpperCase()] = true; nuevos.push([x]); }
+    }
+    if (nuevos.length) {
+      cat.getRange(ultima + 1, col, nuevos.length, 1).setValues(nuevos);
+      agregados.push(nombre + ' (+' + nuevos.length + ')');
+    }
+  }
+  return agregados.length
+    ? 'Catalogos de produccion fusionados: ' + agregados.join(', ') + '.'
+    : 'Catalogos de produccion ya estaban completos.';
 }
 
 function migrarEncabezados(hoja, esperados) {
