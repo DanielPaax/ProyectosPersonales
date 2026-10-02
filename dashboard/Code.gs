@@ -1193,8 +1193,12 @@ function instalar() {
 
   var base = ss.getSheetByName(CFG.HOJA_BASE);
   if (!base) {
-    throw new Error('No encuentro la hoja BASE. Este script va dentro\n' +
-      'del Sheet de la plantilla.');
+    /* Una instalacion nueva no tiene BASE todavia: se crea vacia con sus
+       encabezados. Si el script esta pegado en el Sheet equivocado, aqui se
+       nota porque faltaran tambien CATALOGOS y las demas hojas. */
+    base = ss.insertSheet(CFG.HOJA_BASE);
+    base.setFrozenRows(1);
+    hechos.push('Hoja BASE creada vacia.');
   }
   /* La migracion de esquema va ANTES de verificar encabezados: una hoja v1
      con datos tiene 17 encabezados y la verificacion de 20 la rechazaria. */
