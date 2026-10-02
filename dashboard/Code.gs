@@ -1473,6 +1473,98 @@ function actualizarVenta(d) {
   }
 }
 
+/* ===================== CORRECCIONES PUNTUALES ===================== */
+/* Corrige errores de captura que ya estan en los datos. Cada correccion:
+   (1) solo actua si encuentra EXACTAMENTE el dato malo, asi que correrla dos
+   veces no hace nada la segunda; (2) muestra antes y despues y pide
+   confirmacion; (3) deja huella en OBS_MIGRACION y en BITACORA. */
+
+function _r4_(n) { return Math.round(_num_(n) * 10000) / 10000; }
+
+/* VINIL ED271: M2 de proyecto 8250 en lugar de 8.25 (la venta es de $3,135:
+   a 8,250 m2 saldrian $0.38 por m2). Corrige VENTAS (m2 y costos congelados,
+   con la MISMA formula del Excel original) y BASE (cantidad). */
+function corregirViniEd271() {
+  var ses = _ses_();
+  _exigeRol_(ses, ['MASTER']);
+  var ui = SpreadsheetApp.getUi();
+  var M2_MAL = 8250, M2_BIEN = 8.25;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) { throw new Error('El sistema esta ocupado. Intenta de nuevo en unos segundos.'); }
+  try {
+    var filas = _leerVentas_();
+    var tar = _leerTarifas_();
+    var objetivo = [];
+    for (var i = 0; i < filas.length; i++) {
+      if (filas[i].proyecto === 'VINIL ED271' && filas[i].m2p === M2_MAL) { objetivo.push(filas[i]); }
+    }
+    if (!objetivo.length) {
+      ui.alert('Corregir VINIL ED271', 'No hay nada que corregir: no encuentro renglones de VINIL ED271 con ' +
+        M2_MAL + ' m2 (ya estaban corregidos).', ui.ButtonSet.OK);
+      return 'sin cambios';
+    }
+    var plan = [], txt = [];
+    for (var k = 0; k < objetivo.length; k++) {
+      var f = objetivo[k];
+      var t = tar.mat[f.material.toUpperCase()];
+      if (!t) { throw new Error('El material "' + f.material + '" no esta en TARIFAS: no puedo recalcular el costo.'); }
+      /* Misma formula del Excel: material = tarifa x m2 proyecto;
+         merma = tarifa x (m2 reales - m2 proyecto); carga = carga por m2 x m2 proyecto. */
+      var nuevo = {
+        cMat: _r4_(t.c * M2_BIEN),
+        cMerma: _r4_(t.c * (f.m2r - M2_BIEN)),
+        carga: _r4_(tar.carga * M2_BIEN)
+      };
+      plan.push({ f: f, n: nuevo });
+      txt.push('ID ' + f.id + ' (fila ' + f.fila + '): M2 ' + f.m2p + ' -> ' + M2_BIEN +
+        '\n   Costo material ' + f.cMat + ' -> ' + nuevo.cMat +
+        '\n   Costo merma ' + f.cMerma + ' -> ' + nuevo.cMerma +
+        '\n   Carga administrativa ' + f.carga + ' -> ' + nuevo.carga);
+    }
+    var r = ui.alert('Corregir VINIL ED271',
+      'Se corregiran ' + plan.length + ' renglones de VENTAS y sus renglones de produccion en BASE:\n\n' +
+      txt.join('\n\n') + '\n\n¿Aplicar la correccion?', ui.ButtonSet.YES_NO);
+    if (r !== ui.Button.YES) { return 'cancelado'; }
+
+    var hv = _hoja_(CFG.HOJA_VENTAS), hb = _hoja_(CFG.HOJA_BASE);
+    var nota = '[M2 corregido de ' + M2_MAL + ' a ' + M2_BIEN + ' el ' + _hoyIso_() + ' por ' + ses.correo + ']';
+    var celdas = [], tocadosBase = 0;
+    for (var p = 0; p < plan.length; p++) {
+      var fila = plan[p].f.fila, n = plan[p].n;
+      hv.getRange(fila, CV.M2_PROYECTO).setValue(M2_BIEN);
+      hv.getRange(fila, CV.COSTO_MATERIAL).setValue(n.cMat);
+      hv.getRange(fila, CV.COSTO_MERMA).setValue(n.cMerma);
+      hv.getRange(fila, CV.CARGA_ADMIN).setValue(n.carga);
+      var obs = String(hv.getRange(fila, CV.OBS_MIGRACION).getValue() || '');
+      hv.getRange(fila, CV.OBS_MIGRACION).setValue((obs ? obs + ' ' : '') + nota);
+      celdas.push(String(hv.getRange(fila, CV.CELDA_ORIGEN).getValue() || '').trim());
+    }
+    /* BASE: mismo renglon de origen (CELDA_ORIGEN) y el mismo dato malo. */
+    var ub = hb.getLastRow();
+    if (ub >= 2) {
+      var bv = hb.getRange(2, 1, ub - 1, Math.min(COL_N, hb.getMaxColumns())).getValues();
+      for (var j = 0; j < bv.length; j++) {
+        var c = String(bv[j][COL.CELDA_ORIGEN - 1] || '').trim();
+        if (c && celdas.indexOf(c) >= 0 && _num_(bv[j][COL.CANTIDAD - 1]) === M2_MAL) {
+          hb.getRange(j + 2, COL.CANTIDAD).setValue(M2_BIEN);
+          var ob = String(bv[j][COL.OBS_MIGRACION - 1] || '');
+          hb.getRange(j + 2, COL.OBS_MIGRACION).setValue((ob ? ob + ' ' : '') + nota);
+          tocadosBase++;
+        }
+      }
+    }
+    var cache = CacheService.getScriptCache();
+    cache.removeAll(['base_v' + JG_SELLO.esquema + '_' + hb.getLastRow(),
+      'ventas_v' + JG_SELLO.esquema + '_' + hv.getLastRow()]);
+    var msg = 'VINIL ED271 corregido: ' + plan.length + ' renglones en VENTAS y ' + tocadosBase + ' en BASE.';
+    _bitacora_(ses.correo, 'CORRECCION', msg + ' M2 ' + M2_MAL + ' -> ' + M2_BIEN);
+    ui.alert('Corregir VINIL ED271', msg + '\n\nEspera hasta 2 minutos y pulsa Actualizar en el tablero.', ui.ButtonSet.OK);
+    return msg;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ===================== INSTALACION Y MIGRACION ===================== */
 /* Sin guion bajo: tienen que poder llamarse desde el editor y desde el menu. */
 
@@ -1484,6 +1576,8 @@ function onOpen() {
       .addSeparator()
       .addItem('Instalar / verificar hojas', 'instalar')
       .addItem('Vincular produccion con ventas (ORDEN)', 'vincularOrdenes')
+      .addSeparator()
+      .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
