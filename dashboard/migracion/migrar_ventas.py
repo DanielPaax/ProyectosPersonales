@@ -13,13 +13,20 @@ warnings.filterwarnings('ignore')
 
 ENCABEZADOS_VENTAS = [
     'ID', 'FECHA_VENTA', 'SEM_INICIO', 'SEMANA', 'FECHA_PROD', 'SEMANA_ORIG',
-    'ODC', 'ODP', 'CLIENTE', 'MODULO', 'TIPO_PROYECTO', 'PROYECTO', 'MAQUINA',
+    'ODC', 'ODP', 'CLIENTE', 'TIPO_PROYECTO', 'PROYECTO', 'MAQUINA',
     'MATERIAL', 'M2_PROYECTO', 'M2_REALES', 'VENTA', 'COSTO_MATERIAL',
     'COSTO_MERMA', 'MAQUILA', 'INSTALACION', 'MANO_OBRA', 'HORAS_EXTRAS',
     'OTROS', 'CARGA_ADMIN', 'COMERCIAL', 'FACTURA', 'FECHA_FACTURA',
     'METODO_PAGO', 'ESTATUS_COBRO', 'ESTATUS_MONTO', 'CELDA_ORIGEN',
-    'OBS_MIGRACION'
+    'OBS_MIGRACION', 'VENDEDOR'
 ]
+COLS = {n: i for i, n in enumerate(ENCABEZADOS_VENTAS)}
+
+# Errores de captura conocidos del archivo original: fila de Excel -> M2 correcto.
+# VINIL ED271 traia 8250 m2 en lugar de 8.25 (la venta es de $3,135: a 8,250 m2
+# saldrian $0.38 por m2). Los costos se recalculan con la misma formula del Excel.
+CORRECCIONES_M2 = {135: 8.25, 136: 8.25}
+
 
 # Unicos cambios de nombre automaticos: los deterministas. Lo dudoso se reporta.
 ALIAS_CLIENTE = {'FIBRA SHOP': 'FIBRASHOP'}
@@ -81,6 +88,8 @@ def main():
             monto_pedido[pedido(r)] += v
 
     out, resumen = [], collections.Counter()
+    tar_d = dict(tarifas)
+    ajuste = 0.0   # cambio total de costo por las correcciones de M2
     clientes = collections.Counter()
     for n, (xl, r) in enumerate(filas, start=1):
         fv, fp = r[1], r[2]
@@ -113,6 +122,18 @@ def main():
         else:
             c_mat = x - (merma + maq + inst + mo + hext + otros)
 
+        m2p = num(r[13])
+        if xl in CORRECCIONES_M2 and m2p != CORRECCIONES_M2[xl]:
+            t = tar_d[txt(r[12])]
+            antes = c_mat + merma + carga
+            m2p = CORRECCIONES_M2[xl]
+            c_mat = t * m2p
+            merma = t * ((num(r[14]) or 0) - m2p)
+            carga = carga_m2 * m2p
+            ajuste += (c_mat + merma + carga) - antes
+            obs.append('M2 corregido de %g a %g (error de captura); costos recalculados.' % (num(r[13]), m2p))
+            resumen['m2_corregido'] += 1
+
         if fv > hoy:
             obs.append('Fecha de venta futura (%s).' % fv.strftime('%d/%m/%Y'))
             resumen['fecha_futura'] += 1
@@ -123,25 +144,25 @@ def main():
         factura = txt(r[34])
         out.append([
             n, fv, l, etiqueta_semana(l), fp, txt(r[3]),
-            txt(r[4]), txt(r[5]), cliente, txt(r[7]), txt(r[8]), txt(r[10]),
+            txt(r[4]), txt(r[5]), cliente, txt(r[8]), txt(r[10]),
             txt(r[11]) or '(NO REPORTADA)', txt(r[12]) or '(NO REPORTADO)',
-            num(r[13]), num(r[14]),
+            m2p, num(r[14]),
             round(venta, 2) if venta else None,
             round(c_mat, 4), round(merma, 4), round(maq, 4), round(inst, 4),
             round(mo, 4), round(hext, 4), round(otros, 4), round(carga, 4),
             txt(r[32]).upper(), factura, r[35] if r[35] else None,
             txt(r[33]), 'FACTURADO' if factura else '',
             'PENDIENTE' if pendiente else 'CON MONTO',
-            "BASE DE DATOS!B%d" % xl, ' '.join(obs)
+            "BASE DE DATOS!B%d" % xl, ' '.join(obs), ''
         ])
 
     # ---- conciliacion contra el archivo original ----------------------------
     v_orig = sum(num(r[29]) or 0 for _, r in filas)
     c_orig = sum(num(r[28]) or 0 for _, r in filas)
-    v_new = sum(f[16] or 0 for f in out)
-    c_new = sum(sum(f[17:25]) for f in out)
+    v_new = sum(f[COLS['VENTA']] or 0 for f in out)
+    c_new = sum(sum(f[COLS['COSTO_MATERIAL']:COLS['CARGA_ADMIN'] + 1]) for f in out)
     ok_v = abs(v_orig - v_new) < 0.5
-    ok_c = abs(c_orig - c_new) < 1.0
+    ok_c = abs((c_orig + ajuste) - c_new) < 1.0
 
     # ---- libro de salida -----------------------------------------------------
     nuevo = openpyxl.Workbook()
@@ -151,7 +172,7 @@ def main():
     for f in out:
         v.append(f)
     for fila in v.iter_rows(min_row=2):
-        for idx in (1, 2, 4, 27):
+        for idx in (COLS['FECHA_VENTA'], COLS['SEM_INICIO'], COLS['FECHA_PROD'], COLS['FECHA_FACTURA']):
             fila[idx].number_format = 'dd/mm/yyyy'
     v.freeze_panes = 'A2'
 
@@ -169,7 +190,7 @@ def main():
     print('Renglones migrados: %d (descartados vacios: %d)' %
           (len(out), ws.max_row - 1 - len(out)))
     print('Venta   original %.2f | migrada %.2f | %s' % (v_orig, v_new, 'OK' if ok_v else 'NO CUADRA'))
-    print('Costo   original %.2f | migrado %.2f | %s' % (c_orig, c_new, 'OK' if ok_c else 'NO CUADRA'))
+    print('Costo   original %.2f %+.2f por correcciones de M2 | migrado %.2f | %s' % (c_orig, ajuste, c_new, 'OK' if ok_c else 'NO CUADRA'))
     print('Pendientes de monto: %d  (con pista de otra linea: %d | pedido sin monto: %d)' %
           (resumen['pend_con_pista'] + resumen['pend_sin_pista'],
            resumen['pend_con_pista'], resumen['pend_sin_pista']))

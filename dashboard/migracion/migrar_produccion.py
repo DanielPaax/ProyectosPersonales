@@ -21,10 +21,16 @@ ENCABEZADOS_BASE = [
     'ID', 'FECHA', 'SEM_INICIO', 'SEMANA', 'MAQUINA', 'PROCESO', 'MATERIAL',
     'UNIDAD', 'CANTIDAD', 'ORIGEN', 'CLIENTE_OT', 'HORAS_MAQ', 'MERMA_MT2',
     'MOTIVO_PARO', 'NOTA', 'CELDA_ORIGEN', 'OBS_MIGRACION',
-    'TURNO', 'OPERADOR', 'REIMPRESION'
+    'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN'
 ]
 VENTANA_INI = datetime.date(2025, 12, 29)   # lunes de la primera semana del archivo
 SIN_OPERADOR = {'MAQUILA', 'SERIGRAFIA'}    # no son personas
+
+# Errores de captura conocidos del archivo original: fila de Excel -> M2 correcto.
+# VINIL ED271 traia 8250 m2 en lugar de 8.25 (la venta es de $3,135: a 8,250 m2
+# saldrian $0.38 por m2). Los costos se recalculan con la misma formula del Excel.
+CORRECCIONES_M2 = {135: 8.25, 136: 8.25}
+
 
 
 def txt(v):
@@ -78,6 +84,10 @@ def main():
             continue
         fv, fp = r[1].date(), (r[2].date() if r[2] else None)
         obs = []
+        if xl in CORRECCIONES_M2 and m2 != CORRECCIONES_M2[xl]:
+            obs.append('M2 corregido de %g a %g (error de captura).' % (m2, CORRECCIONES_M2[xl]))
+            m2 = CORRECCIONES_M2[xl]
+            resumen['m2_corregido'] += 1
 
         # ---- fecha: la de produccion si es plausible ------------------------
         ok = lambda d: d is not None and VENTANA_INI <= d <= tope
@@ -126,7 +136,7 @@ def main():
             None, fecha, l, etiqueta(l), maquina, proceso,
             txt(r[12]) or '(NO REPORTADO)', unidad, round(m2, 4), origen, cliente_ot,
             horas, merma if merma > 0 else None, '', nota,
-            'BASE DE DATOS!B%d' % xl, ' '.join(obs), '', operador, reimp
+            'BASE DE DATOS!B%d' % xl, ' '.join(obs), '', operador, reimp, ref
         ])
 
     filas.sort(key=lambda f: (f[1], f[15]))
@@ -134,7 +144,7 @@ def main():
         f[0] = i
 
     # ---- conciliacion ---------------------------------------------------------
-    esperado = sum(num(r[13]) or 0 for _, r in crudas if (num(r[13]) or 0) > 0)
+    esperado = sum(CORRECCIONES_M2.get(xl, num(r[13]) or 0) for xl, r in crudas if (num(r[13]) or 0) > 0)
     obtenido = sum(f[8] for f in filas)
     ok_m2 = abs(esperado - obtenido) < 0.01
 
