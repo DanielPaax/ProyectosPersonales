@@ -24,8 +24,8 @@ var CFG = {
    (gpowib.com). Una cuenta personal de Gmail nunca va a empatar y esa
    persona se queda como LECTOR sin entender por que. */
 var ROLES = {
-  MASTER:  ['eduardo.gongora@gpowib.com'],
-  CAPTURA: ['eduardo.gongora@gpowib.com'],
+  MASTER:  ['eduardo.gongora@gpowib.com', 'danielpaax@gmail.com'],
+  CAPTURA: ['eduardo.gongora@gpowib.com', 'danielpaax@gmail.com'],
   /* Venta, costos y margen son sensibles: NO los ve todo el dominio.
      Solo MASTER y los correos de esta lista abren la seccion de Venta.
      Para capturar venta ademas se necesita rol CAPTURA o MASTER. */
