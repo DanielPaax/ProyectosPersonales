@@ -154,6 +154,24 @@ td.cero{color:var(--tinta-3)}
 .campo.malo input,.campo.malo select,.campo.malo textarea{border-color:var(--rojo); background:var(--rojo-l)}
 .pie{text-align:center; font-size:11px; color:var(--tinta-3); padding:22px 10px 0; font-weight:500}
 
+/* ---------- pestañas y vista de venta ---------- */
+.tabs{background:var(--navy-l); display:flex; gap:4px; padding:0 20px}
+.tabs button{background:none; border:none; border-bottom:3px solid transparent; border-radius:0; color:#A9C4CE; padding:11px 16px; font-size:13px}
+.tabs button:hover:not(:disabled){color:#fff}
+.tabs button.on{color:#fff; border-bottom-color:var(--ambar)}
+.barra{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px}
+.barra h2{flex:1 1 auto; font-size:16px}
+.seg{display:inline-flex; border:1px solid var(--linea); border-radius:8px; overflow:hidden; background:#fff}
+.seg button{border:none; border-radius:0; background:#fff; color:var(--tinta-2); padding:7px 13px}
+.seg button.on{background:var(--teal); color:#fff}
+.bseg.c{background:var(--navy-l)}
+.neg{color:var(--rojo)}
+.buscar{display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:14px 16px; border-bottom:1px solid var(--linea)}
+.buscar input[type=text]{flex:1 1 220px; font-family:inherit; font-size:13.5px; padding:8px 11px; border:1px solid var(--linea); border-radius:8px}
+.buscar label{font-size:12.5px; color:var(--tinta-2); font-weight:500}
+td.izq{text-align:left}
+td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tinta-2); text-align:left}
+
 /* ============ BLOQUES DE TOQUE Y PANTALLA CHICA — AL FINAL ============ */
 /* Van al final a proposito: cualquier regla posterior los pisaria. */
 @media (hover:none){
@@ -191,7 +209,12 @@ td.cero{color:var(--tinta-3)}
   <button class="b-pri" id="btnAlta" onclick="abrirAlta()" style="display:none">+ Capturar trabajo</button>
 </div>
 
-<div class="wrap">
+<div class="tabs" id="tabs" style="display:none">
+  <button class="on" id="tabProd" onclick="tab('prod')">Producción</button>
+  <button id="tabVenta" onclick="tab('venta')">Venta</button>
+</div>
+
+<div class="wrap" id="vProd">
   <div id="banner"></div>
   <div class="kpis" id="kpis"></div>
 
@@ -248,6 +271,84 @@ td.cero{color:var(--tinta-3)}
   <p class="pie"><?= sello.nombre ?> · v<?= sello.version ?> · liberada <?= sello.liberada ?></p>
 </div>
 
+
+<div class="wrap" id="vVenta" style="display:none">
+  <div class="barra">
+    <h2>Venta y margen</h2>
+    <div class="seg" id="segPer">
+      <button class="on" onclick="periodo('mes')">Por mes</button>
+      <button onclick="periodo('sem')">Por semana</button>
+    </div>
+    <button class="b-sec" id="btnRefV" onclick="pedirVentas(false)">Actualizar</button>
+    <button class="b-pri" id="btnAltaV" onclick="abrirVenta()" style="display:none">+ Capturar venta</button>
+  </div>
+  <div id="bannerV"></div>
+  <div class="kpis" id="kpisV"></div>
+
+  <section class="card">
+    <header><h2 id="tituloBarrasV">Venta por mes</h2>
+      <span class="sub">Cada barra es la venta del periodo, partida en costo y margen. Periodo por fecha de venta. El margen incluye carga administrativa.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="barras" id="barrasV"></div>
+      <div class="leyenda">
+        <span><i style="background:var(--navy-l)"></i>Costo total</span>
+        <span><i style="background:var(--teal)"></i>Margen</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header><h2 id="tituloTablaV">Detalle por mes</h2>
+      <span class="sub">El costo de un pedido sin monto de venta en ninguna línea no entra al margen: se muestra aparte en los indicadores.</span>
+    </header>
+    <div class="tscroll"><table id="tPerV"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>Por cliente</h2><span class="sub">Los doce con más venta; el resto se agrupa en «OTROS».</span></header>
+    <div class="tscroll"><table id="tCliV"></table></div>
+  </section>
+  <section class="card">
+    <header><h2>Por módulo de negocio</h2></header>
+    <div class="tscroll"><table id="tModV"></table></div>
+  </section>
+  <section class="card">
+    <header><h2>Por comercial</h2><span class="sub">Muchos proyectos no tienen comercial capturado y aparecen como (SIN COMERCIAL).</span></header>
+    <div class="tscroll"><table id="tComV"></table></div>
+  </section>
+  <section class="card">
+    <header><h2>Por máquina</h2></header>
+    <div class="tscroll"><table id="tMaqV"></table></div>
+  </section>
+  <section class="card">
+    <header><h2>Por material</h2></header>
+    <div class="tscroll"><table id="tMatV"></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>Calidad del dato de venta</h2>
+      <span class="sub">Pendientes de monto, fechas dudosas y pedidos que pierden dinero.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="agrid" id="aGridV"></div>
+      <div class="tscroll"><table id="tAleV"></table></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header><h2>Proyectos</h2>
+      <span class="sub">Busca por cliente, proyecto, ODC, ODP o factura. Desde aquí se captura el monto de un pendiente y la cobranza.</span>
+    </header>
+    <div class="buscar">
+      <input type="text" id="qV" placeholder="Buscar…" onkeydown="if(event.key==='Enter'){buscarV()}">
+      <label><input type="checkbox" id="soloPendV"> Solo pendientes de monto</label>
+      <button class="b-sec" onclick="buscarV()">Buscar</button>
+    </div>
+    <div class="tscroll"><table id="tProyV"></table></div>
+  </section>
+</div>
+
 <div id="overlay"><div class="spin"></div><p id="ovTxt">Cargando el tablero…</p></div>
 <div id="pill"><span class="spin-s"></span><span id="pillTxt">Actualizando…</span></div>
 <div id="toast"></div>
@@ -287,6 +388,66 @@ td.cero{color:var(--tinta-3)}
     <header><h3 id="detTit">Detalle</h3><button class="cerrar" onclick="cerrar('mDet')" aria-label="Cerrar">&times;</button></header>
     <div class="mcuerpo"><div class="tscroll"><table id="tDet"></table></div></div>
     <footer><button class="b-sec" onclick="cerrar('mDet')">Cerrar</button></footer>
+  </div>
+</div>
+
+
+<div class="mfondo" id="mVenta">
+  <div class="modal ancho">
+    <header><h3>Capturar una venta</h3><button class="cerrar" onclick="cerrar('mVenta')" aria-label="Cerrar">&times;</button></header>
+    <div class="mcuerpo">
+      <div class="aviso warn"><span>Un renglón por línea de proyecto. Costo de material, merma y carga administrativa se calculan solos con la hoja TARIFAS. Si dejas el monto vacío, el proyecto queda como <b>pendiente</b>.</span></div>
+      <div class="campos">
+        <div class="campo" id="cv_fecha"><label>Fecha de venta <span class="req">*</span></label><input type="date" id="v_fecha"></div>
+        <div class="campo"><label>Fecha de producción</label><input type="date" id="v_fprod"></div>
+        <div class="campo" id="cv_cliente"><label>Cliente <span class="req">*</span></label><input type="text" id="v_cliente" list="dlCli" maxlength="80"><datalist id="dlCli"></datalist><span class="pista">Elige uno existente para no duplicar nombres.</span></div>
+        <div class="campo" id="cv_modulo"><label>Módulo de negocio <span class="req">*</span></label><select id="v_modulo"></select></div>
+        <div class="campo full" id="cv_proyecto"><label>Proyecto <span class="req">*</span></label><input type="text" id="v_proyecto" maxlength="160" placeholder="TENA 2 ESPECTACULARES"></div>
+        <div class="campo"><label>ODC</label><input type="text" id="v_odc" maxlength="30" placeholder="P22819"></div>
+        <div class="campo"><label>ODP</label><input type="text" id="v_odp" maxlength="30" placeholder="6427"></div>
+        <div class="campo"><label>Tipo de proyecto</label><select id="v_tipo"></select></div>
+        <div class="campo"><label>Máquina</label><input type="text" id="v_maquina" list="dlMaq" maxlength="80"><datalist id="dlMaq"></datalist></div>
+        <div class="campo full"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Debe existir en TARIFAS: de ahí sale el costo.</span></div>
+        <div class="campo"><label>M2 del proyecto</label><input type="number" id="v_m2p" step="0.01" min="0"></div>
+        <div class="campo"><label>M2 reales utilizados</label><input type="number" id="v_m2r" step="0.01" min="0"><span class="pista">La diferencia contra el proyecto es la merma.</span></div>
+        <div class="campo"><label>Monto de venta (subtotal)</label><input type="number" id="v_venta" step="0.01" min="0" placeholder="vacío = pendiente"></div>
+        <div class="campo"><label>Comercial</label><select id="v_comercial"></select></div>
+        <div class="campo"><label>Maquila ($)</label><input type="number" id="v_maq" step="0.01" min="0"></div>
+        <div class="campo"><label>Instalación ($)</label><input type="number" id="v_inst" step="0.01" min="0"></div>
+        <div class="campo"><label>Mano de obra ($)</label><input type="number" id="v_mo" step="0.01" min="0"></div>
+        <div class="campo"><label>Horas extras ($)</label><input type="number" id="v_hext" step="0.01" min="0"></div>
+        <div class="campo"><label>Otros ($)</label><input type="number" id="v_otros" step="0.01" min="0"></div>
+        <div class="campo"><label>Factura</label><input type="text" id="v_factura" maxlength="30"></div>
+        <div class="campo"><label>Fecha de factura</label><input type="date" id="v_ffactura"></div>
+        <div class="campo"><label>Método de pago</label><select id="v_metodo"></select></div>
+        <div class="campo"><label>Estatus de cobro</label><select id="v_cobro"></select></div>
+      </div>
+    </div>
+    <footer>
+      <button class="b-sec" onclick="cerrar('mVenta')">Cancelar</button>
+      <button class="b-pri" id="btnGuardarV" onclick="guardarV()">Guardar venta</button>
+    </footer>
+  </div>
+</div>
+
+<div class="mfondo" id="mEditV">
+  <div class="modal">
+    <header><h3 id="editTit">Editar proyecto</h3><button class="cerrar" onclick="cerrar('mEditV')" aria-label="Cerrar">&times;</button></header>
+    <div class="mcuerpo">
+      <div class="aviso warn" id="editObs" style="display:none"></div>
+      <div class="campos">
+        <div class="campo full" id="ce_venta"><label>Monto de venta (subtotal)</label><input type="number" id="e_venta" step="0.01" min="0"><span class="pista" id="e_pista"></span></div>
+        <div class="campo"><label>Factura</label><input type="text" id="e_factura" maxlength="30"></div>
+        <div class="campo"><label>Fecha de factura</label><input type="date" id="e_ffactura"></div>
+        <div class="campo"><label>Método de pago</label><select id="e_metodo"></select></div>
+        <div class="campo"><label>Estatus de cobro</label><select id="e_cobro"></select></div>
+        <div class="campo full"><label>Comercial</label><select id="e_comercial"></select></div>
+      </div>
+    </div>
+    <footer>
+      <button class="b-sec" onclick="cerrar('mEditV')">Cancelar</button>
+      <button class="b-pri" id="btnEditV" onclick="guardarEdit()">Guardar cambios</button>
+    </footer>
   </div>
 </div>
 
@@ -383,6 +544,8 @@ function pintar(){
   if (D.ses.rol === 'CAPTURA' || D.ses.rol === 'MASTER') {
     document.getElementById('btnAlta').style.display = '';
   }
+  /* Venta, costos y margen: la pestaña solo existe para quien el servidor autoriza. */
+  document.getElementById('tabs').style.display = D.ses.venta ? '' : 'none';
 
   if (!s.length) {
     document.getElementById('banner').innerHTML =
@@ -683,11 +846,375 @@ function guardar(){
     .guardarTrabajo(d);
 }
 
+/* =====================================================================
+   VENTA
+   ===================================================================== */
+var V = null;          /* ultimo resultado de cargarVentas */
+var CATV = null;       /* catalogos de venta, se piden una sola vez */
+var LV = {};           /* proyectos listados, por id, para el modal de edicion */
+var vPer = 'mes';
+var guardandoV = false;
+var editId = null;
+
+function money(v){
+  var n = Number(v);
+  if (!isFinite(n)) { return '$0'; }
+  return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX',{maximumFractionDigits:0});
+}
+function pct(v){ return (v === null || v === undefined || !isFinite(Number(v))) ? '—' : n2(v) + '%'; }
+function cm(v){
+  var n = Number(v);
+  if (!isFinite(n) || n === 0) { return '<td class="num cero">$0</td>'; }
+  return '<td class="num' + (n < 0 ? ' neg' : '') + '">' + money(n) + '</td>';
+}
+function cp(v){
+  var neg = (v !== null && v !== undefined && Number(v) < 0);
+  return '<td class="num' + (neg ? ' neg' : '') + '">' + pct(v) + '</td>';
+}
+var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function mesTxt(k){ return MESES[Number(k.slice(5,7)) - 1] + ' ' + k.slice(2,4); }
+
+function tab(cual){
+  var v = cual === 'venta';
+  document.getElementById('vProd').style.display = v ? 'none' : '';
+  document.getElementById('vVenta').style.display = v ? '' : 'none';
+  document.getElementById('tabProd').className = v ? '' : 'on';
+  document.getElementById('tabVenta').className = v ? 'on' : '';
+  if (v && !V) { overlay(true, 'Cargando ventas...'); pedirVentas(true); }
+  else if (v) { pintarVentas(); }
+}
+function periodo(p){
+  vPer = p;
+  var b = document.getElementById('segPer').getElementsByTagName('button');
+  b[0].className = p === 'mes' ? 'on' : '';
+  b[1].className = p === 'sem' ? 'on' : '';
+  if (V) { pintarVentas(); }
+}
+function pedirVentas(primera){
+  if (!primera) { pill(true, 'Actualizando ventas...'); }
+  document.getElementById('btnRefV').disabled = true;
+  google.script.run
+    .withSuccessHandler(function(res){
+      V = res;
+      overlay(false); pill(false);
+      document.getElementById('btnRefV').disabled = false;
+      pintarVentas();
+      if (!primera) { toast('Ventas actualizadas en ' + res.ms + ' ms', 'ok'); }
+    })
+    .withFailureHandler(function(err){
+      overlay(false); pill(false);
+      document.getElementById('btnRefV').disabled = false;
+      var m = (err && err.message) ? err.message : 'Error desconocido';
+      document.getElementById('bannerV').innerHTML =
+        '<div class="aviso err"><span><b>No se pudieron cargar las ventas.</b><br>' + esc(m) + '</span></div>';
+      toast(m, 'err');
+    })
+    .cargarVentas();
+}
+
+function rankV(id, filas){
+  if (!filas.length) {
+    document.getElementById(id).innerHTML = '<tbody><tr><td class="vacio">Sin datos.</td></tr></tbody>';
+    return;
+  }
+  var tot = V.total.venta || 1;
+  var h = '<thead><tr><th>Nombre</th><th>Venta</th><th>% del total</th><th>Margen</th>' +
+          '<th>Margen %</th><th>Pedidos</th><th>M2</th><th>Peso</th></tr></thead><tbody>';
+  for (var i = 0; i < filas.length; i++) {
+    var r = filas[i];
+    var peso = Math.max(0, Math.min(100, r.venta / tot * 100));
+    h += '<tr><td>' + esc(r.nombre) + '</td>' + cm(r.venta) +
+         '<td class="num">' + n2(r.venta / tot * 100) + '%</td>' + cm(r.margen) + cp(r.margenPct) +
+         celda(r.pedidos,0) + celda(r.m2,0) +
+         '<td><div class="mini"><span style="width:' + Math.max(2, Math.round(peso)) + '%"></span></div></td></tr>';
+  }
+  document.getElementById(id).innerHTML = h + '</tbody>';
+}
+
+function pintarVentas(){
+  if (!V) { return; }
+  var t = V.total;
+  document.getElementById('btnAltaV').style.display =
+    (V.ses.rol === 'CAPTURA' || V.ses.rol === 'MASTER') ? '' : 'none';
+  document.getElementById('bannerV').innerHTML = t.lineas ? '' :
+    '<div class="aviso warn"><span>La hoja VENTAS no tiene renglones todavia.</span></div>';
+
+  var k = [
+    ['Venta total', money(t.venta), t.pedidosConMonto + ' pedidos con monto', ''],
+    ['Margen', money(t.margen), t.margenPct === null ? 'sin venta' : pct(t.margenPct) + ' sobre venta (con carga admin.)', t.margen < 0 ? 'al' : ''],
+    ['Costo total', money(t.costo), 'material, merma, maquila, mano de obra y carga', 'mq'],
+    ['Ticket promedio', t.ticket === null ? '—' : money(t.ticket), 'venta por pedido', ''],
+    ['M2 vendidos', n0(t.m2), 'm2 de proyecto', ''],
+    ['Facturado', money(t.ventaFacturada), t.conFactura + ' renglones con factura', t.conFactura ? '' : 'al'],
+    ['Por facturar', money(t.porFacturar), 'venta sin factura capturada', t.conFactura ? 'mq' : 'al'],
+    ['Pendientes de monto', n0(t.pendientes), t.pendSinPista + ' pedidos sin monto en ninguna línea', t.pendientes ? 'al' : '']
+  ];
+  var h = '';
+  for (var i = 0; i < k.length; i++) {
+    h += '<div class="kpi ' + k[i][3] + '"><div class="et">' + k[i][0] + '</div>' +
+         '<div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></div>';
+  }
+  document.getElementById('kpisV').innerHTML = h;
+
+  var serie = vPer === 'mes' ? V.porMes : V.porSemana;
+  document.getElementById('tituloBarrasV').textContent = vPer === 'mes' ? 'Venta por mes' : 'Venta por semana (últimas 12)';
+  document.getElementById('tituloTablaV').textContent = vPer === 'mes' ? 'Detalle por mes' : 'Detalle por semana';
+
+  /* barras: venta partida en costo y margen. La altura la manda el CSS (--hmax). */
+  var cont = document.getElementById('barrasV');
+  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
+  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
+  var ult = serie.slice(-12), max = 0;
+  for (var a = 0; a < ult.length; a++) { if (ult[a].venta > max) { max = ult[a].venta; } }
+  if (max <= 0) { max = 1; }
+  h = '';
+  for (var b = 0; b < ult.length; b++) {
+    var d = ult[b];
+    var costo = Math.min(Math.max(d.costo, 0), d.venta);
+    var hc = Math.round(costo / max * hMax);
+    var hg = Math.round(Math.max(d.margen, 0) / max * hMax);
+    if (d.venta > 0 && hc + hg < 2) { hg = 2; }
+    var et = vPer === 'mes' ? mesTxt(d.nombre) : d.etiqueta;
+    h += '<div class="bcol" title="' + esc(et) + ': ' + money(d.venta) + ' | margen ' + pct(d.margenPct) + '">' +
+         '<div class="bv">' + (d.venta >= 1000 ? n0(d.venta / 1000) + 'k' : n0(d.venta)) + '</div>' +
+         '<div class="bpila" style="height:' + (hc + hg) + 'px">' +
+         '<div class="bseg p" style="height:' + hg + 'px"></div>' +
+         '<div class="bseg c" style="height:' + hc + 'px"></div></div>' +
+         '<div class="be">' + esc(et) + '</div></div>';
+  }
+  cont.innerHTML = h || '<div class="vacio">Sin datos</div>';
+
+  h = '<thead><tr><th>Periodo</th><th>Venta</th><th>Costo</th><th>Margen</th><th>Margen %</th>' +
+      '<th>Pedidos</th><th>M2</th></tr></thead><tbody>';
+  for (var j = serie.length - 1; j >= 0; j--) {
+    var r = serie[j];
+    h += '<tr><td>' + esc(vPer === 'mes' ? mesTxt(r.nombre) : r.etiqueta) + '</td>' + cm(r.venta) +
+         cm(r.costo) + cm(r.margen) + cp(r.margenPct) + celda(r.pedidos,0) + celda(r.m2,0) + '</tr>';
+  }
+  h += '<tr class="tot"><td>TOTAL</td>' + cm(t.venta) + cm(t.costo) + cm(t.margen) + cp(t.margenPct) +
+       celda(t.pedidos,0) + celda(t.m2,0) + '</tr></tbody>';
+  document.getElementById('tPerV').innerHTML = h;
+
+  rankV('tCliV', V.porCliente); rankV('tModV', V.porModulo); rankV('tComV', V.porComercial);
+  rankV('tMaqV', V.porMaquina); rankV('tMatV', V.porMaterial);
+
+  /* calidad */
+  var c = V.calidad.c;
+  var cel = [
+    [t.pendConPista, 'sin monto, pero otra línea del pedido sí lo trae', t.pendConPista ? 'mal' : 'bien'],
+    [t.pendSinPista, 'pedidos sin monto en ninguna línea', t.pendSinPista ? 'mal' : 'bien'],
+    [c.fechaFutura, 'con fecha de venta futura', c.fechaFutura ? 'mal' : 'bien'],
+    [c.fechasDistantes, 'venta y producción a más de 90 días', c.fechasDistantes ? 'mal' : 'bien'],
+    [c.margenNegativo, 'pedidos con margen negativo', c.margenNegativo ? 'mal' : 'bien'],
+    [c.sinMaterial, 'sin material', c.sinMaterial ? 'mal' : 'bien'],
+    [c.sinComercial, 'sin comercial', c.sinComercial ? 'mal' : 'bien']
+  ];
+  h = '';
+  for (var m = 0; m < cel.length; m++) {
+    h += '<div class="acel ' + cel[m][2] + '"><div class="n">' + n0(cel[m][0]) + '</div>' +
+         '<div class="d">' + cel[m][1] + '</div></div>';
+  }
+  document.getElementById('aGridV').innerHTML = h;
+  var ej = V.calidad.ejemplos;
+  if (!ej.length) {
+    document.getElementById('tAleV').innerHTML =
+      '<tbody><tr><td class="vacio">Ningún proyecto tiene pendientes.</td></tr></tbody>';
+  } else {
+    h = '<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Proyecto</th><th>Venta</th><th>Qué falta</th><th></th></tr></thead><tbody>';
+    for (var e = 0; e < ej.length; e++) {
+      var x = ej[e];
+      h += '<tr><td>' + x.id + '</td><td>' + esc(x.fecha || 'sin fecha') + '</td><td class="izq">' + esc(x.cliente) +
+           '</td><td class="izq">' + esc(x.proyecto) + '</td>' + cm(x.venta) +
+           '<td class="ancho">' + esc(x.motivo) + '</td>' +
+           '<td><button class="link" onclick="editarVenta(' + x.id + ')">editar</button></td></tr>';
+    }
+    h += '</tbody>';
+    document.getElementById('tAleV').innerHTML = h;
+  }
+  /* los ejemplos no traen todos los campos: el modal los toma de la lista */
+}
+
+/* ---------- catalogos de venta ---------- */
+function conCatalogosV(fn){
+  if (CATV) { return fn(); }
+  pill(true, 'Cargando catalogos...');
+  google.script.run
+    .withSuccessHandler(function(res){ CATV = res; pill(false); fn(); })
+    .withFailureHandler(function(err){
+      pill(false);
+      toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');
+    })
+    .cargarCatalogosVenta();
+}
+function lista(id, arr){
+  var h = '';
+  for (var i = 0; i < arr.length; i++) { h += '<option value="' + esc(arr[i]) + '">'; }
+  document.getElementById(id).innerHTML = h;
+}
+
+/* ---------- captura de venta ---------- */
+function abrirVenta(){ conCatalogosV(mostrarVenta); }
+function mostrarVenta(){
+  opciones('v_modulo', CATV.MODULO, true);
+  opciones('v_tipo', CATV.TIPO_PROYECTO, true);
+  opciones('v_comercial', CATV.COMERCIAL, true);
+  opciones('v_metodo', CATV.METODO_PAGO, true);
+  opciones('v_cobro', CATV.ESTATUS_COBRO, true);
+  lista('dlCli', CATV.CLIENTE); lista('dlMaq', CATV.MAQUINA); lista('dlMat', CATV.MATERIAL);
+  var hoy = new Date(), mm = hoy.getMonth() + 1, dd = hoy.getDate();
+  document.getElementById('v_fecha').value =
+    hoy.getFullYear() + '-' + (mm < 10 ? '0' + mm : mm) + '-' + (dd < 10 ? '0' + dd : dd);
+  abrir('mVenta');
+}
+function guardarV(){
+  if (guardandoV) { return; }
+  var d = {
+    fecha: val('v_fecha'), fprod: val('v_fprod'), cliente: val('v_cliente'),
+    modulo: val('v_modulo'), proyecto: val('v_proyecto'), odc: val('v_odc'),
+    odp: val('v_odp'), tipo: val('v_tipo'), maquina: val('v_maquina'),
+    material: val('v_material'), m2p: val('v_m2p'), m2r: val('v_m2r'),
+    venta: val('v_venta'), comercial: val('v_comercial'), maq: val('v_maq'),
+    inst: val('v_inst'), mo: val('v_mo'), hext: val('v_hext'), otros: val('v_otros'),
+    factura: val('v_factura'), fFactura: val('v_ffactura'),
+    metodo: val('v_metodo'), cobro: val('v_cobro')
+  };
+  /* Validacion rapida en el cliente; la que manda es la del servidor. */
+  var faltan = [];
+  var oblig = [['fecha','cv_fecha'],['cliente','cv_cliente'],['modulo','cv_modulo'],['proyecto','cv_proyecto']];
+  for (var i = 0; i < oblig.length; i++) {
+    var vacio = !String(d[oblig[i][0]]).trim();
+    marcar(oblig[i][1], vacio);
+    if (vacio) { faltan.push(oblig[i][0]); }
+  }
+  if (faltan.length) { toast('Faltan datos: ' + faltan.join(', '), 'err'); return; }
+  guardandoV = true;
+  var btn = document.getElementById('btnGuardarV');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  pill(true, 'Guardando la venta...');
+  google.script.run
+    .withSuccessHandler(function(res){
+      guardandoV = false; pill(false);
+      btn.disabled = false; btn.textContent = 'Guardar venta';
+      cerrar('mVenta');
+      var ids = ['v_cliente','v_proyecto','v_odc','v_odp','v_maquina','v_material','v_m2p','v_m2r',
+                 'v_venta','v_maq','v_inst','v_mo','v_hext','v_otros','v_factura','v_ffactura','v_fprod'];
+      for (var q = 0; q < ids.length; q++) { document.getElementById(ids[q]).value = ''; }
+      CATV = null;   /* el cliente nuevo debe aparecer en la lista la proxima vez */
+      toast('Venta guardada (' + res.semana + ')' + (res.pendiente ? ' como PENDIENTE de monto' : ''), 'ok');
+      pedirVentas(false);
+    })
+    .withFailureHandler(function(err){
+      guardandoV = false; pill(false);
+      btn.disabled = false; btn.textContent = 'Guardar venta';
+      toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
+    })
+    .guardarVenta(d);
+}
+
+/* ---------- proyectos: buscar y editar ---------- */
+function buscarV(){
+  document.getElementById('tProyV').innerHTML =
+    '<tbody><tr><td class="vacio">Buscando...</td></tr></tbody>';
+  google.script.run
+    .withSuccessHandler(function(res){
+      LV = {};
+      if (!res.filas.length) {
+        document.getElementById('tProyV').innerHTML =
+          '<tbody><tr><td class="vacio">Sin resultados.</td></tr></tbody>';
+        return;
+      }
+      var h = '<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Proyecto</th><th>ODC / ODP</th>' +
+              '<th>Venta</th><th>Costo</th><th>Factura</th><th>Cobro</th><th></th></tr></thead><tbody>';
+      for (var i = 0; i < res.filas.length; i++) {
+        var r = res.filas[i];
+        LV[r.id] = r;
+        h += '<tr><td>' + r.id + '</td><td>' + esc(r.fecha || 'sin fecha') + '</td>' +
+             '<td class="izq">' + esc(r.cliente) + '</td><td class="izq">' + esc(r.proyecto) + '</td>' +
+             '<td class="izq">' + esc(r.odc || r.odp) + '</td>' +
+             (r.pendiente ? '<td><span class="chip dn">pendiente</span></td>' : cm(r.venta)) +
+             cm(r.costo) + '<td>' + esc(r.factura) + '</td><td>' + esc(r.cobro) + '</td>' +
+             '<td><button class="link" onclick="editarVenta(' + r.id + ')">editar</button></td></tr>';
+      }
+      if (res.total > res.filas.length) {
+        h += '<tr><td class="vacio" colspan="10">Se muestran ' + res.filas.length + ' de ' + res.total +
+             '. Afina la búsqueda para ver el resto.</td></tr>';
+      }
+      document.getElementById('tProyV').innerHTML = h + '</tbody>';
+    })
+    .withFailureHandler(function(err){
+      var m = (err && err.message) ? err.message : 'Error desconocido';
+      document.getElementById('tProyV').innerHTML = '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
+      toast(m, 'err');
+    })
+    .listarVentas({ q: val('qV'), soloPendientes: document.getElementById('soloPendV').checked });
+}
+function editarVenta(id){
+  if (LV[id]) { return conCatalogosV(function(){ mostrarEdit(LV[id]); }); }
+  /* viene de la tabla de calidad: se trae el proyecto por su ID */
+  pill(true, 'Buscando el proyecto...');
+  google.script.run
+    .withSuccessHandler(function(res){
+      pill(false);
+      var f = null;
+      for (var i = 0; i < res.filas.length; i++) { if (res.filas[i].id === id) { f = res.filas[i]; } }
+      if (!f) { toast('No se encontro el proyecto ' + id + '. Usa el buscador de abajo.', 'err'); return; }
+      LV[id] = f;
+      conCatalogosV(function(){ mostrarEdit(f); });
+    })
+    .withFailureHandler(function(err){
+      pill(false);
+      toast((err && err.message) ? err.message : 'No se pudo buscar', 'err');
+    })
+    .listarVentas({ id: id });
+}
+function mostrarEdit(r){
+  editId = r.id;
+  document.getElementById('editTit').textContent = 'Proyecto ' + r.id + ' · ' + r.cliente;
+  var o = document.getElementById('editObs');
+  o.style.display = r.obs ? '' : 'none';
+  o.innerHTML = '<span>' + esc(r.obs) + '</span>';
+  opciones('e_metodo', CATV.METODO_PAGO, true);
+  opciones('e_cobro', CATV.ESTATUS_COBRO, true);
+  opciones('e_comercial', CATV.COMERCIAL, true);
+  document.getElementById('e_venta').value = r.venta > 0 ? r.venta : '';
+  document.getElementById('e_pista').textContent = r.pendiente
+    ? 'Pendiente de monto: captura el subtotal de la venta.' : 'Ya tiene monto. Cambiarlo queda en la bitácora.';
+  document.getElementById('e_factura').value = r.factura || '';
+  document.getElementById('e_ffactura').value = r.fFactura || '';
+  document.getElementById('e_metodo').value = r.metodo || '';
+  document.getElementById('e_cobro').value = r.cobro || '';
+  document.getElementById('e_comercial').value = r.comercial || '';
+  abrir('mEditV');
+}
+function guardarEdit(){
+  var r = LV[editId];
+  var d = { id: editId, factura: val('e_factura'), fFactura: val('e_ffactura'),
+            metodo: val('e_metodo'), cobro: val('e_cobro'), comercial: val('e_comercial') };
+  var nv = val('e_venta');
+  if (nv !== '' && Number(nv) !== r.venta) { d.venta = nv; }
+  var btn = document.getElementById('btnEditV');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  google.script.run
+    .withSuccessHandler(function(){
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+      cerrar('mEditV');
+      toast('Proyecto ' + editId + ' actualizado', 'ok');
+      LV = {};
+      pedirVentas(false);
+      if (document.getElementById('tProyV').innerHTML) { buscarV(); }
+    })
+    .withFailureHandler(function(err){
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+      toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
+    })
+    .actualizarVenta(d);
+}
+
 var tRes = null;
 window.addEventListener('resize', function(){
   if (!D) { return; }
   if (tRes) { clearTimeout(tRes); }
-  tRes = setTimeout(pintar, 200);
+  tRes = setTimeout(function(){ pintar(); pintarVentas(); }, 200);
 });
 
 init();

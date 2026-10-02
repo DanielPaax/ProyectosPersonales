@@ -1,9 +1,9 @@
 var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'Dashboard de Produccion Gran Formato',
-  version:  '1.1.0',
-  liberada: '2026-09-29',
-  esquema:  2
+  version:  '1.2.0',
+  liberada: '2026-10-02',
+  esquema:  3
 };
 
 /* ===================== CONFIGURACION ===================== */
@@ -13,6 +13,8 @@ var CFG = {
   HOJA_BASE:      'BASE',
   HOJA_CATALOGOS: 'CATALOGOS',
   HOJA_BITACORA:  'BITACORA',
+  HOJA_VENTAS:    'VENTAS',
+  HOJA_TARIFAS:   'TARIFAS',
   CACHE_SEG:      120,
   TOPE_FILAS:     20000
 };
@@ -23,7 +25,11 @@ var CFG = {
    persona se queda como LECTOR sin entender por que. */
 var ROLES = {
   MASTER:  ['eduardo.gongora@gpowib.com'],
-  CAPTURA: ['eduardo.gongora@gpowib.com']
+  CAPTURA: ['eduardo.gongora@gpowib.com'],
+  /* Venta, costos y margen son sensibles: NO los ve todo el dominio.
+     Solo MASTER y los correos de esta lista abren la seccion de Venta.
+     Para capturar venta ademas se necesita rol CAPTURA o MASTER. */
+  VENTAS:  ['eduardo.gongora@gpowib.com']
 };
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
@@ -44,6 +50,41 @@ var ENCABEZADOS_BASE = [
   'TURNO', 'OPERADOR', 'REIMPRESION'
 ];
 var ENCABEZADOS_BITACORA = ['TIMESTAMP', 'CORREO', 'ACCION', 'DETALLE'];
+
+/* Hoja VENTAS (esquema 3): un renglon por LINEA de proyecto. Los costos van
+   CONGELADOS como valores al momento de la venta: cambiar una tarifa despues
+   no reescribe el margen historico. El margen se calcula en el servidor. */
+var CV = {
+  ID: 1, FECHA_VENTA: 2, SEM_INICIO: 3, SEMANA: 4, FECHA_PROD: 5, SEMANA_ORIG: 6,
+  ODC: 7, ODP: 8, CLIENTE: 9, MODULO: 10, TIPO_PROYECTO: 11, PROYECTO: 12,
+  MAQUINA: 13, MATERIAL: 14, M2_PROYECTO: 15, M2_REALES: 16, VENTA: 17,
+  COSTO_MATERIAL: 18, COSTO_MERMA: 19, MAQUILA: 20, INSTALACION: 21,
+  MANO_OBRA: 22, HORAS_EXTRAS: 23, OTROS: 24, CARGA_ADMIN: 25, COMERCIAL: 26,
+  FACTURA: 27, FECHA_FACTURA: 28, METODO_PAGO: 29, ESTATUS_COBRO: 30,
+  ESTATUS_MONTO: 31, CELDA_ORIGEN: 32, OBS_MIGRACION: 33
+};
+var CV_N = 33;
+
+var ENCABEZADOS_VENTAS = [
+  'ID', 'FECHA_VENTA', 'SEM_INICIO', 'SEMANA', 'FECHA_PROD', 'SEMANA_ORIG',
+  'ODC', 'ODP', 'CLIENTE', 'MODULO', 'TIPO_PROYECTO', 'PROYECTO', 'MAQUINA',
+  'MATERIAL', 'M2_PROYECTO', 'M2_REALES', 'VENTA', 'COSTO_MATERIAL',
+  'COSTO_MERMA', 'MAQUILA', 'INSTALACION', 'MANO_OBRA', 'HORAS_EXTRAS',
+  'OTROS', 'CARGA_ADMIN', 'COMERCIAL', 'FACTURA', 'FECHA_FACTURA',
+  'METODO_PAGO', 'ESTATUS_COBRO', 'ESTATUS_MONTO', 'CELDA_ORIGEN',
+  'OBS_MIGRACION'
+];
+var ENCABEZADOS_TARIFAS = ['MATERIAL', 'COSTO_M2'];
+
+/* Catalogos nuevos que Instalar agrega a CATALOGOS si no existen. */
+var CATALOGOS_VENTA = {
+  MODULO:        ['IMJ', 'Bigfoot', 'Ibalma'],
+  COMERCIAL:     ['ADMON', 'CARMEN', 'FERNANDO', 'HUMBERTO', 'JOSE RAMON',
+                  'JUAN CARLOS', 'JACQUELINE', 'ISABEL'],
+  METODO_PAGO:   ['Transferencia', 'Efectivo'],
+  ESTATUS_COBRO: ['FACTURADO', 'COBRADO'],
+  TIPO_PROYECTO: ['Impresión', 'Serigrafia', 'Maquila']
+};
 
 var PROCESOS_IMPRESION = ['IMPRESION GRAN FORMATO', 'IMPRESION HD', 'IMPRESION UV'];
 
@@ -80,7 +121,8 @@ function _ses_() {
   var rol = 'LECTOR';
   if (_enLista_(ROLES.CAPTURA, correo)) { rol = 'CAPTURA'; }
   if (_enLista_(ROLES.MASTER, correo))  { rol = 'MASTER'; }
-  return { correo: correo, rol: rol };
+  var venta = (rol === 'MASTER') || _enLista_(ROLES.VENTAS, correo);
+  return { correo: correo, rol: rol, venta: venta };
 }
 
 function _enLista_(lista, correo) {
@@ -569,6 +611,550 @@ function guardarTrabajo(d) {
   }
 }
 
+/* ===================== VENTAS (esquema 3) ===================== */
+/* Todo lo de venta se resuelve EN EL SERVIDOR: el rol y el permiso de venta
+   se calculan aqui, no en el HTML. Dinero en CENTAVOS enteros, igual que los
+   MT2: el total no depende del orden de suma. */
+
+function _exigeVenta_(ses, escribe) {
+  var sinEscritura = escribe && ses.rol !== 'CAPTURA' && ses.rol !== 'MASTER';
+  if (!ses.venta || sinEscritura) {
+    _bitacora_(ses.correo, 'ACCESO_NEGADO', 'ventas escribe=' + !!escribe + ' rol=' + ses.rol);
+    throw new Error('Sin autorizacion para esta accion.');
+  }
+}
+
+function _leerVentas_() {
+  var cache = CacheService.getScriptCache();
+  var h = _hoja_(CFG.HOJA_VENTAS);
+  var ultima = h.getLastRow();
+  var clave = 'ventas_v' + JG_SELLO.esquema + '_' + ultima;
+  var guardado = cache.get(clave);
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { /* se relee */ }
+  }
+  if (ultima < 2) { return []; }
+  if (ultima - 1 > CFG.TOPE_FILAS) {
+    throw new Error('La hoja VENTAS supera ' + CFG.TOPE_FILAS +
+      ' renglones. Hay que archivar por ano.');
+  }
+  var vals = h.getRange(2, 1, ultima - 1, CV_N).getValues();
+  var out = [];
+  for (var i = 0; i < vals.length; i++) {
+    var r = vals[i];
+    if (!r[CV.FECHA_VENTA - 1] && !r[CV.CLIENTE - 1] && !r[CV.VENTA - 1]) { continue; }
+    out.push({
+      fila:     i + 2,
+      id:       _num_(r[CV.ID - 1]),
+      fecha:    _fecha_(r[CV.FECHA_VENTA - 1]),
+      semIni:   _fecha_(r[CV.SEM_INICIO - 1]),
+      semana:   String(r[CV.SEMANA - 1] || ''),
+      fprod:    _fecha_(r[CV.FECHA_PROD - 1]),
+      odc:      String(r[CV.ODC - 1] || ''),
+      odp:      String(r[CV.ODP - 1] || ''),
+      cliente:  String(r[CV.CLIENTE - 1] || ''),
+      modulo:   String(r[CV.MODULO - 1] || ''),
+      tipo:     String(r[CV.TIPO_PROYECTO - 1] || ''),
+      proyecto: String(r[CV.PROYECTO - 1] || ''),
+      maquina:  String(r[CV.MAQUINA - 1] || ''),
+      material: String(r[CV.MATERIAL - 1] || ''),
+      m2p:      _num_(r[CV.M2_PROYECTO - 1]),
+      m2r:      _num_(r[CV.M2_REALES - 1]),
+      venta:    _num_(r[CV.VENTA - 1]),
+      cMat:     _num_(r[CV.COSTO_MATERIAL - 1]),
+      cMerma:   _num_(r[CV.COSTO_MERMA - 1]),
+      maq:      _num_(r[CV.MAQUILA - 1]),
+      inst:     _num_(r[CV.INSTALACION - 1]),
+      mo:       _num_(r[CV.MANO_OBRA - 1]),
+      hext:     _num_(r[CV.HORAS_EXTRAS - 1]),
+      otros:    _num_(r[CV.OTROS - 1]),
+      carga:    _num_(r[CV.CARGA_ADMIN - 1]),
+      comercial: String(r[CV.COMERCIAL - 1] || ''),
+      factura:  String(r[CV.FACTURA - 1] || ''),
+      fFactura: _fecha_(r[CV.FECHA_FACTURA - 1]),
+      metodo:   String(r[CV.METODO_PAGO - 1] || ''),
+      cobro:    String(r[CV.ESTATUS_COBRO - 1] || ''),
+      estatus:  String(r[CV.ESTATUS_MONTO - 1] || ''),
+      obs:      String(r[CV.OBS_MIGRACION - 1] || '')
+    });
+  }
+  /* cache.put tiene tope de 100 KB por entrada: si no cabe, se relee. */
+  try { cache.put(clave, JSON.stringify(out), CFG.CACHE_SEG); } catch (e) {}
+  return out;
+}
+
+function _limpiaCacheVentas_() {
+  var h = _hoja_(CFG.HOJA_VENTAS);
+  CacheService.getScriptCache().removeAll([
+    'ventas_v' + JG_SELLO.esquema + '_' + h.getLastRow(),
+    'ventas_v' + JG_SELLO.esquema + '_' + (h.getLastRow() - 1)
+  ]);
+}
+
+function _leerTarifas_() {
+  var cache = CacheService.getScriptCache();
+  var g = cache.get('tarifas_v' + JG_SELLO.esquema);
+  if (g) { try { return JSON.parse(g); } catch (e) { /* se relee */ } }
+  var h = _hoja_(CFG.HOJA_TARIFAS);
+  var ultima = h.getLastRow();
+  var out = { mat: {}, nombres: [], carga: 0 };
+  if (ultima >= 2) {
+    var vals = h.getRange(2, 1, ultima - 1, 5).getValues();
+    for (var i = 0; i < vals.length; i++) {
+      var m = String(vals[i][0] || '').trim();
+      if (m) {
+        out.mat[m.toUpperCase()] = { nombre: m, c: _num_(vals[i][1]) };
+        out.nombres.push(m);
+      }
+      if (String(vals[i][3] || '').trim() === 'CARGA_M2') { out.carga = _num_(vals[i][4]); }
+    }
+  }
+  try { cache.put('tarifas_v' + JG_SELLO.esquema, JSON.stringify(out), 21600); } catch (e) {}
+  return out;
+}
+
+function _clavePed_(f) { return f.odc || f.odp || ('F' + f.fila); }
+
+function _costoCC_(f) {
+  return _cc_(f.cMat) + _cc_(f.cMerma) + _cc_(f.maq) + _cc_(f.inst) +
+         _cc_(f.mo) + _cc_(f.hext) + _cc_(f.otros) + _cc_(f.carga);
+}
+
+function _hoyIso_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function _diasEntre_(a, b) {
+  return Math.round(Math.abs(_aDate_(a).getTime() - _aDate_(b).getTime()) / 86400000);
+}
+
+/* Acumula en un mapa {nombre: {venta, costo, m2, peds}} en centavos. El costo
+   de un renglon solo entra al margen si su PEDIDO tiene monto en alguna linea:
+   el costo de un pedido sin venta asignada distorsionaria el margen. */
+function _acumula_(mapa, nombre, f, vc, costo, entra, pedKey) {
+  var a = mapa[nombre];
+  if (!a) { a = mapa[nombre] = { venta: 0, costo: 0, m2: 0, peds: {} }; }
+  a.venta += vc;
+  if (entra) { a.costo += costo; }
+  a.m2 += _cc_(f.m2p);
+  a.peds[pedKey] = true;
+}
+
+function _listaAgg_(mapa, tope, ordenPorClave) {
+  var arr = [];
+  for (var k in mapa) {
+    if (!mapa.hasOwnProperty(k)) { continue; }
+    var a = mapa[k];
+    var n = 0;
+    for (var p in a.peds) { if (a.peds.hasOwnProperty(p)) { n++; } }
+    var margen = a.venta - a.costo;
+    arr.push({ k: k, nombre: k, venta: a.venta, costo: a.costo, margen: margen,
+      m2: a.m2, pedidos: n, etiqueta: a.etiqueta });
+  }
+  if (ordenPorClave) {
+    arr.sort(function (x, y) { return x.k < y.k ? -1 : 1; });
+  } else {
+    arr.sort(function (x, y) { return y.venta - x.venta; });
+    if (tope && arr.length > tope) {
+      var resto = { k: '(OTROS ' + (arr.length - tope) + ')', venta: 0, costo: 0,
+        margen: 0, m2: 0, pedidos: 0 };
+      for (var i = tope; i < arr.length; i++) {
+        resto.venta += arr[i].venta; resto.costo += arr[i].costo;
+        resto.margen += arr[i].margen; resto.m2 += arr[i].m2; resto.pedidos += arr[i].pedidos;
+      }
+      resto.nombre = resto.k;
+      arr = arr.slice(0, tope);
+      arr.push(resto);
+    }
+  }
+  var out = [];
+  for (var j = 0; j < arr.length; j++) {
+    var r = arr[j];
+    out.push({
+      nombre: r.nombre, etiqueta: r.etiqueta || r.nombre,
+      venta: _dc_(r.venta), costo: _dc_(r.costo), margen: _dc_(r.margen),
+      margenPct: r.venta > 0 ? _r2_(r.margen / r.venta * 100) : null,
+      m2: _dc_(r.m2), pedidos: r.pedidos
+    });
+  }
+  return out;
+}
+
+function cargarVentas() {
+  var ses = _ses_();
+  _exigeVenta_(ses, false);
+  var t0 = new Date().getTime();
+  var filas = _leerVentas_();
+  var hoy = _hoyIso_();
+
+  /* venta y costo por pedido, para decidir quien entra al margen */
+  var ventaPed = {};
+  for (var i = 0; i < filas.length; i++) {
+    var kp = _clavePed_(filas[i]);
+    ventaPed[kp] = (ventaPed[kp] || 0) + _cc_(filas[i].venta);
+  }
+
+  var mMes = {}, mSem = {}, mCli = {}, mMod = {}, mCom = {}, mMaq = {}, mMat = {};
+  var costoPed = {};
+  var tot = { venta: 0, costo: 0, m2: 0, costoSinVenta: 0, pendientes: 0,
+    pendConPista: 0, pendSinPista: 0, ventaFact: 0, conFactura: 0 };
+  var pedidos = {}, pedidosConMonto = {};
+  var cal = { sinFecha: 0, fechaFutura: 0, fechasDistantes: 0, sinMaterial: 0,
+    sinComercial: 0, margenNegativo: 0 };
+  var ejemplos = [], ejemplosLeves = [];
+
+  for (var j = 0; j < filas.length; j++) {
+    var f = filas[j];
+    var vc = _cc_(f.venta);
+    var costo = _costoCC_(f);
+    var pk = _clavePed_(f);
+    var entra = ventaPed[pk] > 0;
+    pedidos[pk] = true;
+    if (entra) { pedidosConMonto[pk] = true; costoPed[pk] = (costoPed[pk] || 0) + costo; }
+
+    tot.venta += vc;
+    tot.m2 += _cc_(f.m2p);
+    if (entra) { tot.costo += costo; } else { tot.costoSinVenta += costo; }
+    if (f.factura) { tot.conFactura++; tot.ventaFact += vc; }
+
+    var motivos = [];
+    if (vc <= 0) {
+      tot.pendientes++;
+      if (ventaPed[pk] > 0) {
+        tot.pendConPista++; motivos.push('sin monto (otra linea del pedido si trae)');
+      } else {
+        tot.pendSinPista++; motivos.push('pedido sin monto');
+      }
+    }
+    if (!f.fecha) { cal.sinFecha++; motivos.push('sin fecha de venta'); }
+    else if (f.fecha > hoy) { cal.fechaFutura++; motivos.push('fecha de venta futura'); }
+    if (f.fecha && f.fprod && _diasEntre_(f.fecha, f.fprod) > 90) {
+      cal.fechasDistantes++; motivos.push('venta y produccion a >90 dias');
+    }
+    if (f.material === '(NO REPORTADO)' || !f.material) {
+      cal.sinMaterial++; motivos.push('sin material');
+    }
+    if (!f.comercial) { cal.sinComercial++; }
+    if (motivos.length) {
+      /* Lo grave va primero: un renglon cuyo UNICO motivo es "sin monto pero
+         otra linea del pedido si trae" es leve y no debe enterrar al resto. */
+      var leve = motivos.length === 1 && motivos[0].indexOf('otra linea') >= 0;
+      var lista = leve ? ejemplosLeves : ejemplos;
+      if (lista.length < 60) {
+        lista.push({ fila: f.fila, id: f.id, fecha: f.fecha, cliente: f.cliente,
+          proyecto: f.proyecto, venta: f.venta, motivo: motivos.join(', ') });
+      }
+    }
+
+    if (f.fecha) {
+      _acumula_(mMes, f.fecha.slice(0, 7), f, vc, costo, entra, pk);
+      var s = f.semIni || f.fecha;
+      _acumula_(mSem, s, f, vc, costo, entra, pk);
+      if (!mSem[s].etiqueta) { mSem[s].etiqueta = f.semana || s; }
+    }
+    _acumula_(mCli, f.cliente || '(SIN DATO)', f, vc, costo, entra, pk);
+    _acumula_(mMod, f.modulo || '(SIN DATO)', f, vc, costo, entra, pk);
+    _acumula_(mCom, f.comercial || '(SIN COMERCIAL)', f, vc, costo, entra, pk);
+    _acumula_(mMaq, f.maquina || '(SIN DATO)', f, vc, costo, entra, pk);
+    _acumula_(mMat, f.material || '(SIN DATO)', f, vc, costo, entra, pk);
+  }
+
+  for (var p in pedidosConMonto) {
+    if (pedidosConMonto.hasOwnProperty(p) && ventaPed[p] - (costoPed[p] || 0) < 0) {
+      cal.margenNegativo++;
+    }
+  }
+  var nPed = 0, nPedMonto = 0;
+  for (var a in pedidos) { if (pedidos.hasOwnProperty(a)) { nPed++; } }
+  for (var b in pedidosConMonto) { if (pedidosConMonto.hasOwnProperty(b)) { nPedMonto++; } }
+
+  var margen = tot.venta - tot.costo;
+  var total = {
+    venta: _dc_(tot.venta), costo: _dc_(tot.costo), margen: _dc_(margen),
+    margenPct: tot.venta > 0 ? _r2_(margen / tot.venta * 100) : null,
+    pedidos: nPed, pedidosConMonto: nPedMonto, lineas: filas.length,
+    ticket: nPedMonto > 0 ? _r2_(_dc_(tot.venta) / nPedMonto) : null,
+    m2: _dc_(tot.m2), costoSinVenta: _dc_(tot.costoSinVenta),
+    pendientes: tot.pendientes, pendConPista: tot.pendConPista,
+    pendSinPista: tot.pendSinPista,
+    ventaFacturada: _dc_(tot.ventaFact), porFacturar: _dc_(tot.venta - tot.ventaFact),
+    conFactura: tot.conFactura
+  };
+
+  /* semanas ordenadas por fecha de inicio (la clave ES la fecha) */
+  return {
+    ses: ses,
+    total: total,
+    porMes: _listaAgg_(mMes, 0, true),
+    porSemana: _listaAgg_(mSem, 0, true),
+    porCliente: _listaAgg_(mCli, 12, false),
+    porModulo: _listaAgg_(mMod, 0, false),
+    porComercial: _listaAgg_(mCom, 0, false),
+    porMaquina: _listaAgg_(mMaq, 0, false),
+    porMaterial: _listaAgg_(mMat, 12, false),
+    calidad: { c: cal, ejemplos: ejemplos.concat(ejemplosLeves).slice(0, 80) },
+    ms: new Date().getTime() - t0
+  };
+}
+
+function cargarCatalogosVenta() {
+  var ses = _ses_();
+  _exigeVenta_(ses, true);
+  var cats = _leerCatalogos_();
+  var tar = _leerTarifas_();
+  var filas = _leerVentas_();
+  var cli = {}, maq = {};
+  for (var i = 0; i < filas.length; i++) {
+    if (filas[i].cliente) { cli[filas[i].cliente] = true; }
+    if (filas[i].maquina && filas[i].maquina !== '(NO REPORTADA)') { maq[filas[i].maquina] = true; }
+  }
+  return {
+    MODULO: cats.MODULO || [], COMERCIAL: cats.COMERCIAL || [],
+    METODO_PAGO: cats.METODO_PAGO || [], ESTATUS_COBRO: cats.ESTATUS_COBRO || [],
+    TIPO_PROYECTO: cats.TIPO_PROYECTO || [],
+    MATERIAL: tar.nombres, CARGA_M2: tar.carga,
+    CLIENTE: Object.keys(cli).sort(), MAQUINA: Object.keys(maq).sort()
+  };
+}
+
+/* Lista de proyectos para buscar y editar. Maximo 300, los mas recientes. */
+function listarVentas(filtro) {
+  var ses = _ses_();
+  _exigeVenta_(ses, false);
+  var q = String((filtro && filtro.q) || '').toUpperCase().trim();
+  var soloPend = !!(filtro && filtro.soloPendientes);
+  var filas = _leerVentas_();
+  var out = [];
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    if (filtro && filtro.id && f.id !== _num_(filtro.id)) { continue; }
+    if (soloPend && f.venta > 0) { continue; }
+    if (q) {
+      var pajar = (f.cliente + ' ' + f.proyecto + ' ' + f.odc + ' ' + f.odp + ' ' +
+        f.factura).toUpperCase();
+      if (pajar.indexOf(q) < 0) { continue; }
+    }
+    out.push(f);
+  }
+  out.sort(function (a, b) {
+    if (a.fecha !== b.fecha) { return a.fecha < b.fecha ? 1 : -1; }
+    return b.id - a.id;
+  });
+  var total = out.length;
+  out = out.slice(0, 300);
+  var res = [];
+  for (var j = 0; j < out.length; j++) {
+    var o = out[j];
+    res.push({
+      id: o.id, fecha: o.fecha, odc: o.odc, odp: o.odp, cliente: o.cliente,
+      modulo: o.modulo, proyecto: o.proyecto, venta: o.venta,
+      costo: _dc_(_costoCC_(o)), factura: o.factura, fFactura: o.fFactura,
+      metodo: o.metodo, cobro: o.cobro, comercial: o.comercial,
+      pendiente: !(o.venta > 0), obs: o.obs
+    });
+  }
+  return { total: total, filas: res };
+}
+
+function guardarVenta(d) {
+  var ses = _ses_();
+  _exigeVenta_(ses, true);
+  if (!d) { throw new Error('No llego nada que guardar.'); }
+
+  var cats = _leerCatalogos_();
+  var tar = _leerTarifas_();
+  var fecha    = _texto_(d.fecha, 10);
+  var fprod    = _texto_(d.fprod, 10);
+  var cliente  = _texto_(d.cliente, 80).toUpperCase().replace(/\s+/g, ' ');
+  var proyecto = _texto_(d.proyecto, 160);
+  var odc      = _texto_(d.odc, 30);
+  var odp      = _texto_(d.odp, 30);
+  var maquina  = _texto_(d.maquina, 80);
+  var modulo   = _enCatalogo_(cats, 'MODULO',        _texto_(d.modulo, 30),   true);
+  var tipo     = _enCatalogo_(cats, 'TIPO_PROYECTO', _texto_(d.tipo, 30),     false);
+  var comercial = _enCatalogo_(cats, 'COMERCIAL',    _texto_(d.comercial, 40), false);
+  var metodo   = _enCatalogo_(cats, 'METODO_PAGO',   _texto_(d.metodo, 30),   false);
+  var cobro    = _enCatalogo_(cats, 'ESTATUS_COBRO', _texto_(d.cobro, 30),    false);
+  var factura  = _texto_(d.factura, 30);
+  var fFactura = _texto_(d.fFactura, 10);
+  var m2p = _num_(d.m2p), m2r = _num_(d.m2r), venta = _num_(d.venta);
+  var maq = _num_(d.maq), inst = _num_(d.inst), mo = _num_(d.mo);
+  var hext = _num_(d.hext), otros = _num_(d.otros);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new Error('La fecha de venta es obligatoria y va en formato yyyy-mm-dd.');
+  }
+  if (fprod && !/^\d{4}-\d{2}-\d{2}$/.test(fprod)) { throw new Error('Fecha de produccion invalida.'); }
+  if (fFactura && !/^\d{4}-\d{2}-\d{2}$/.test(fFactura)) { throw new Error('Fecha de factura invalida.'); }
+  if (!cliente)  { throw new Error('Falta el cliente.'); }
+  if (!proyecto) { throw new Error('Falta el nombre del proyecto.'); }
+  if (venta < 0 || m2p < 0 || m2r < 0 || maq < 0 || inst < 0 || mo < 0 || hext < 0 || otros < 0) {
+    throw new Error('Ningun importe ni cantidad puede ser negativo.');
+  }
+
+  /* Costos que se calculan solos con TARIFAS, igual que la hoja vieja:
+     material = tarifa x m2 del proyecto; merma = tarifa x (m2 reales - m2 proyecto);
+     carga administrativa = carga por m2 x m2 del proyecto. */
+  var obs = [];
+  var cMat = 0, cMerma = 0;
+  var material = _texto_(d.material, 120);
+  if (material) {
+    var t = tar.mat[material.toUpperCase()];
+    if (!t) { throw new Error('El material "' + material + '" no esta en la hoja TARIFAS.'); }
+    material = t.nombre;
+    cMat = _r2_(t.c * m2p);
+    cMerma = _r2_(t.c * Math.max(m2r - m2p, 0));
+  } else {
+    material = '(NO REPORTADO)';
+    obs.push('Sin material: costo de material y merma en cero.');
+  }
+  var carga = _r2_(tar.carga * m2p);
+  var pendiente = venta <= 0;
+  if (pendiente) { obs.push('Pendiente de monto de venta.'); }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    throw new Error('El sistema esta ocupado guardando otro registro.\n' +
+      'Intenta de nuevo en unos segundos.');
+  }
+  try {
+    var h = _hoja_(CFG.HOJA_VENTAS);
+    var filas = _leerVentas_();
+    var lunes = _semanaDe_(fecha);
+    var etiqueta = _etiquetaSemana_(lunes, filas);
+    var maxId = 0;
+    for (var i = 0; i < filas.length; i++) { if (filas[i].id > maxId) { maxId = filas[i].id; } }
+
+    var reng = new Array(CV_N);
+    for (var c = 0; c < CV_N; c++) { reng[c] = ''; }
+    reng[CV.ID - 1] = maxId + 1;
+    reng[CV.FECHA_VENTA - 1] = fecha;
+    reng[CV.SEM_INICIO - 1] = lunes;
+    reng[CV.SEMANA - 1] = etiqueta;
+    reng[CV.FECHA_PROD - 1] = fprod;
+    reng[CV.ODC - 1] = odc;
+    reng[CV.ODP - 1] = odp;
+    reng[CV.CLIENTE - 1] = cliente;
+    reng[CV.MODULO - 1] = modulo;
+    reng[CV.TIPO_PROYECTO - 1] = tipo;
+    reng[CV.PROYECTO - 1] = proyecto;
+    reng[CV.MAQUINA - 1] = maquina || '(NO REPORTADA)';
+    reng[CV.MATERIAL - 1] = material;
+    reng[CV.M2_PROYECTO - 1] = m2p || '';
+    reng[CV.M2_REALES - 1] = m2r || '';
+    reng[CV.VENTA - 1] = venta > 0 ? venta : '';
+    reng[CV.COSTO_MATERIAL - 1] = cMat;
+    reng[CV.COSTO_MERMA - 1] = cMerma;
+    reng[CV.MAQUILA - 1] = maq;
+    reng[CV.INSTALACION - 1] = inst;
+    reng[CV.MANO_OBRA - 1] = mo;
+    reng[CV.HORAS_EXTRAS - 1] = hext;
+    reng[CV.OTROS - 1] = otros;
+    reng[CV.CARGA_ADMIN - 1] = carga;
+    reng[CV.COMERCIAL - 1] = comercial;
+    reng[CV.FACTURA - 1] = factura;
+    reng[CV.METODO_PAGO - 1] = metodo;
+    reng[CV.ESTATUS_COBRO - 1] = cobro || (factura ? 'FACTURADO' : '');
+    reng[CV.ESTATUS_MONTO - 1] = pendiente ? 'PENDIENTE' : 'CON MONTO';
+    reng[CV.CELDA_ORIGEN - 1] = 'CAPTURA EN APP';
+    reng[CV.OBS_MIGRACION - 1] = obs.join(' ');
+
+    var nueva = h.getLastRow() + 1;
+    h.getRange(nueva, 1, 1, CV_N).setValues([reng]);
+    /* Las fechas entran como texto: se vuelven fecha con formato explicito. */
+    var fechas = [[_aDate_(fecha), _aDate_(lunes), fprod ? _aDate_(fprod) : '']];
+    h.getRange(nueva, CV.FECHA_VENTA, 1, 1).setValue(fechas[0][0]);
+    h.getRange(nueva, CV.SEM_INICIO, 1, 1).setValue(fechas[0][1]);
+    h.getRange(nueva, CV.FECHA_PROD, 1, 1).setValue(fechas[0][2]);
+    if (fFactura) { h.getRange(nueva, CV.FECHA_FACTURA, 1, 1).setValue(_aDate_(fFactura)); }
+    h.getRange(nueva, CV.FECHA_VENTA, 1, 1).setNumberFormat('dd/mm/yyyy');
+    h.getRange(nueva, CV.SEM_INICIO, 1, 1).setNumberFormat('dd/mm/yyyy');
+    h.getRange(nueva, CV.FECHA_PROD, 1, 1).setNumberFormat('dd/mm/yyyy');
+    h.getRange(nueva, CV.FECHA_FACTURA, 1, 1).setNumberFormat('dd/mm/yyyy');
+
+    _limpiaCacheVentas_();
+    _bitacora_(ses.correo, 'ALTA_VENTA',
+      'id=' + (maxId + 1) + ' fila=' + nueva + ' ' + cliente + ' / ' + proyecto +
+      ' venta=' + venta + ' semana=' + etiqueta);
+    return { ok: true, id: maxId + 1, fila: nueva, semana: etiqueta, pendiente: pendiente };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* Completa el monto de un pendiente y/o la cobranza de un proyecto ya
+   capturado. Solo toca estas columnas: lo demas del renglon no se edita. */
+function actualizarVenta(d) {
+  var ses = _ses_();
+  _exigeVenta_(ses, true);
+  if (!d || !d.id) { throw new Error('Falta el ID del proyecto.'); }
+  var cats = _leerCatalogos_();
+  var id = _num_(d.id);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    throw new Error('El sistema esta ocupado. Intenta de nuevo en unos segundos.');
+  }
+  try {
+    var h = _hoja_(CFG.HOJA_VENTAS);
+    var ultima = h.getLastRow();
+    var ids = ultima >= 2 ? h.getRange(2, 1, ultima - 1, 1).getValues() : [];
+    var fila = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (_num_(ids[i][0]) === id) { fila = i + 2; break; }
+    }
+    if (!fila) { throw new Error('No encuentro el proyecto con ID ' + id + '.'); }
+
+    var cambios = [];
+    if (d.venta !== undefined && d.venta !== null && String(d.venta) !== '') {
+      var v = _num_(d.venta);
+      if (v <= 0) { throw new Error('El monto de venta tiene que ser mayor que cero.'); }
+      var antes = _num_(h.getRange(fila, CV.VENTA).getValue());
+      h.getRange(fila, CV.VENTA).setValue(v);
+      h.getRange(fila, CV.ESTATUS_MONTO).setValue('CON MONTO');
+      var obsAnt = String(h.getRange(fila, CV.OBS_MIGRACION).getValue() || '');
+      h.getRange(fila, CV.OBS_MIGRACION).setValue(
+        (obsAnt ? obsAnt + ' ' : '') + '[Monto capturado ' + _hoyIso_() + ' por ' + ses.correo + ']');
+      cambios.push('venta ' + antes + '->' + v);
+    }
+    if (d.factura !== undefined) {
+      var fac = _texto_(d.factura, 30);
+      h.getRange(fila, CV.FACTURA).setValue(fac);
+      cambios.push('factura=' + fac);
+      if (fac && !_texto_(d.cobro, 30)) { h.getRange(fila, CV.ESTATUS_COBRO).setValue('FACTURADO'); }
+    }
+    if (d.fFactura !== undefined) {
+      var ff = _texto_(d.fFactura, 10);
+      if (ff && !/^\d{4}-\d{2}-\d{2}$/.test(ff)) { throw new Error('Fecha de factura invalida.'); }
+      var cel = h.getRange(fila, CV.FECHA_FACTURA);
+      if (ff) { cel.setValue(_aDate_(ff)); cel.setNumberFormat('dd/mm/yyyy'); } else { cel.clearContent(); }
+      cambios.push('fecha factura=' + ff);
+    }
+    if (d.metodo !== undefined) {
+      var me = _enCatalogo_(cats, 'METODO_PAGO', _texto_(d.metodo, 30), false);
+      h.getRange(fila, CV.METODO_PAGO).setValue(me);
+      cambios.push('metodo=' + me);
+    }
+    if (d.cobro !== undefined && _texto_(d.cobro, 30)) {
+      var co = _enCatalogo_(cats, 'ESTATUS_COBRO', _texto_(d.cobro, 30), false);
+      h.getRange(fila, CV.ESTATUS_COBRO).setValue(co);
+      cambios.push('cobro=' + co);
+    }
+    if (d.comercial !== undefined) {
+      var cm = _enCatalogo_(cats, 'COMERCIAL', _texto_(d.comercial, 40), false);
+      h.getRange(fila, CV.COMERCIAL).setValue(cm);
+      cambios.push('comercial=' + cm);
+    }
+    if (!cambios.length) { throw new Error('No hay nada que actualizar.'); }
+
+    _limpiaCacheVentas_();
+    _bitacora_(ses.correo, 'EDITA_VENTA', 'id=' + id + ' fila=' + fila + ' ' + cambios.join(' | '));
+    return { ok: true, id: id, fila: fila };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ===================== INSTALACION Y MIGRACION ===================== */
 /* Sin guion bajo: tienen que poder llamarse desde el editor y desde el menu. */
 
@@ -617,6 +1203,18 @@ function instalar() {
 
   var cat = ss.getSheetByName(CFG.HOJA_CATALOGOS);
   if (!cat) { throw new Error('No encuentro la hoja CATALOGOS.'); }
+  hechos.push(asegurarCatalogosVenta(cat));
+
+  /* Esquema 3: VENTAS y TARIFAS. Si ya importaste la migracion, solo se
+     verifican los encabezados; si no existen, se crean vacias. */
+  var ven = ss.getSheetByName(CFG.HOJA_VENTAS);
+  if (!ven) { ven = ss.insertSheet(CFG.HOJA_VENTAS); hechos.push('Hoja VENTAS creada.'); }
+  hechos.push(migrarEncabezados(ven, ENCABEZADOS_VENTAS));
+  ven.setFrozenRows(1);
+  var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
+  if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
+  hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
+  tar.setFrozenRows(1);
 
   var bit = ss.getSheetByName(CFG.HOJA_BITACORA);
   if (!bit) {
@@ -632,11 +1230,37 @@ function instalar() {
     hechos.push('Hoja BITACORA protegida.');
   } catch (e) { hechos.push('No se pudo proteger BITACORA: ' + e.message); }
 
-  CacheService.getScriptCache().remove('catalogos_v' + JG_SELLO.esquema);
+  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema,
+    'tarifas_v' + JG_SELLO.esquema]);
   _bitacora_(_correoSeguro_(), 'INSTALACION', JG_SELLO.version + ' | ' + hechos.join(' '));
 
   try { SpreadsheetApp.getUi().alert('Instalacion\n\n' + hechos.join('\n')); } catch (e) {}
   return hechos;
+}
+
+function asegurarCatalogosVenta(cat) {
+  /* Agrega a CATALOGOS las columnas nuevas de venta que falten. Nunca toca
+     una columna que ya existe: si ya la editaste a mano, se respeta. */
+  var ancho = Math.max(cat.getLastColumn(), 1);
+  var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
+  var existentes = {};
+  for (var i = 0; i < encab.length; i++) {
+    existentes[String(encab[i] || '').trim().toUpperCase()] = true;
+  }
+  var agregadas = [];
+  var col = (cat.getLastRow() >= 1 && encab.join('').length) ? ancho + 1 : 1;
+  for (var nombre in CATALOGOS_VENTA) {
+    if (!CATALOGOS_VENTA.hasOwnProperty(nombre) || existentes[nombre]) { continue; }
+    var lista = CATALOGOS_VENTA[nombre];
+    var datos = [[nombre]];
+    for (var j = 0; j < lista.length; j++) { datos.push([lista[j]]); }
+    cat.getRange(1, col, datos.length, 1).setValues(datos);
+    agregadas.push(nombre);
+    col++;
+  }
+  return agregadas.length
+    ? 'Catalogos agregados a CATALOGOS: ' + agregadas.join(', ') + '.'
+    : 'Catalogos de venta ya existian.';
 }
 
 function migrarEncabezados(hoja, esperados) {
@@ -679,6 +1303,12 @@ function migrarEsquema(base) {
     }
     props.setProperty('esquema', '2');
     actual = 2;
+  }
+  if (actual < 3) {
+    /* v2 -> v3: hojas VENTAS y TARIFAS. Las crea o verifica instalar(); aqui
+       solo se registra el peldano. */
+    props.setProperty('esquema', '3');
+    actual = 3;
   }
   /* Peldanos futuros van aqui, siempre con if (actual < n), nunca de un salto:
      una instalacion puede estar dos o tres versiones atras. */
