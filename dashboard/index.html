@@ -156,8 +156,8 @@ td.cero{color:var(--tinta-3)}
 
 /* ---------- cabecera fija, filtros y areas ---------- */
 .cab{position:sticky; top:0; z-index:40; box-shadow:0 2px 8px rgba(24,48,60,.18)}
-.filtros{background:#fff; border-bottom:1px solid var(--linea); padding:10px 20px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end}
-.filtros .fw{display:flex; flex-direction:column; gap:3px; min-width:140px; flex:1 1 140px; max-width:230px}
+.filtros{background:#fff; border-bottom:1px solid var(--linea); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end}
+.filtros .fw{display:flex; flex-direction:column; gap:3px; min-width:108px; flex:1 1 108px; max-width:210px}
 .filtros label{font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--tinta-3)}
 .filtros select{font-family:inherit; font-size:12.5px; padding:7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%; text-overflow:ellipsis}
 .filtros select.activo{border-color:var(--teal); background:var(--teal-l); font-weight:600}
@@ -186,6 +186,39 @@ td.cero{color:var(--tinta-3)}
 td.izq{text-align:left}
 td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tinta-2); text-align:left}
 .neg{color:var(--rojo)}
+
+/* ---------- seleccion multiple, fechas, tarjetas clicables ---------- */
+.ms{position:relative}
+.msb{width:100%; display:flex; align-items:center; justify-content:space-between; gap:6px; font-family:inherit; font-size:12.5px; font-weight:500; padding:7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); text-align:left}
+.msb:hover:not(:disabled){border-color:var(--teal)}
+.msb .mst{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.msb i{border:solid var(--tinta-2); border-width:0 2px 2px 0; padding:3px; transform:rotate(45deg); margin-top:-3px; flex:0 0 auto}
+.msb.activo{border-color:var(--teal); background:var(--teal-l); font-weight:600}
+.msp{position:absolute; left:0; top:calc(100% + 4px); z-index:70; min-width:100%; width:max-content; max-width:min(440px,92vw); background:#fff; border:1px solid var(--linea); border-radius:10px; box-shadow:0 10px 30px rgba(24,48,60,.22); padding:8px}
+.mss{width:100%; font-family:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--linea); border-radius:7px}
+.msl{max-height:240px; overflow-y:auto; margin:6px 0}
+.filtros .mso{display:flex; gap:8px; align-items:flex-start; padding:5px 4px; font-size:12.5px; text-transform:none; letter-spacing:0; font-weight:500; color:var(--tinta); cursor:pointer; border-radius:6px; white-space:normal}
+.filtros .mso:hover{background:var(--teal-l)}
+.mso input{margin-top:2px; flex:0 0 auto}
+.msf{display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--linea); padding-top:6px}
+.msf .b-sec{padding:5px 12px; font-size:12px}
+.filtros input[type=date]{font-family:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%}
+.filtros input[type=date].activo{border-color:var(--teal); background:var(--teal-l); font-weight:600}
+.filtros .fw.fecha{min-width:116px; flex:0 1 124px}
+button.kpi{display:block; width:100%; text-align:left; font-family:inherit; font-size:inherit; font-weight:inherit; color:inherit; padding:13px 15px; border-radius:var(--r); cursor:pointer; background:#fff; border:1px solid var(--linea); border-left:3px solid var(--teal); box-shadow:var(--sombra); transition:transform .08s, box-shadow .12s, background .12s}
+button.kpi.mq{border-left-color:var(--ambar)}
+button.kpi.al{border-left-color:var(--rojo)}
+button.kpi:hover:not(:disabled){box-shadow:0 4px 14px rgba(24,48,60,.16); transform:translateY(-1px)}
+button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 0 0 2px var(--teal)}
+.subbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--tinta-2); margin:-6px 0 16px}
+.subbar .chip{background:var(--teal); color:#fff; display:inline-flex; gap:6px; align-items:center; padding:3px 4px 3px 10px}
+.subbar .chip button{background:none; border:none; color:#fff; padding:0 6px 0 0; font-size:14px; line-height:1; cursor:pointer; min-height:0}
+.seg{display:inline-flex; border:1px solid var(--linea); border-radius:8px; overflow:hidden; background:#fff}
+.seg button{border:none; border-radius:0; background:#fff; color:var(--tinta-2); padding:6px 13px}
+.seg button.on{background:var(--teal); color:#fff}
+.kpis.s{grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:16px}
+.bv.rot{writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; font-size:10.5px}
+.aviso.perm{margin-bottom:0}
 
 /* ---------- impresion ---------- */
 @media print{
@@ -242,13 +275,15 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
     <button class="b-fan" id="btnRef" onclick="refrescar()">Actualizar</button>
   </div>
   <div class="filtros" id="barraG">
-    <div class="fw"><label for="g_sem">Semana</label><select id="g_sem" onchange="cambioG()"></select></div>
-    <div class="fw"><label for="g_mes">Mes</label><select id="g_mes" onchange="cambioG()"></select></div>
-    <div class="fw"><label for="g_maq">Máquina</label><select id="g_maq" onchange="cambioG()"></select></div>
-    <div class="fw"><label for="g_ope">Operador</label><select id="g_ope" onchange="cambioG()"></select></div>
-    <div class="fw fv"><label for="g_ven">Vendedor</label><select id="g_ven" onchange="cambioG()"></select></div>
-    <div class="fw"><label for="g_mat">Material</label><select id="g_mat" onchange="cambioG()"></select></div>
-    <div class="fw fv"><label for="g_cli">Cliente</label><select id="g_cli" onchange="cambioG()"></select></div>
+    <div class="fw"><label>Semana</label><div class="ms" id="g_sem"></div></div>
+    <div class="fw"><label>Mes</label><div class="ms" id="g_mes"></div></div>
+    <div class="fw"><label>Máquina</label><div class="ms" id="g_maq"></div></div>
+    <div class="fw"><label>Operador</label><div class="ms" id="g_ope"></div></div>
+    <div class="fw fv"><label>Vendedor</label><div class="ms" id="g_ven"></div></div>
+    <div class="fw"><label>Material</label><div class="ms" id="g_mat"></div></div>
+    <div class="fw fv"><label>Cliente</label><div class="ms" id="g_cli"></div></div>
+    <div class="fw fecha"><label for="g_desde">Desde</label><input type="date" id="g_desde" onchange="cambioG()"></div>
+    <div class="fw fecha"><label for="g_hasta">Hasta</label><input type="date" id="g_hasta" onchange="cambioG()"></div>
     <button class="b-sec" onclick="limpiaG()">Limpiar filtros</button>
   </div>
 </div>
@@ -264,6 +299,7 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
 
   <div id="banner"></div>
   <div class="kpis" id="kpis"></div>
+  <div id="subBar"></div>
 
   <section class="card">
     <header>
@@ -284,6 +320,23 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
       <span class="sub">Solo unidad MT2. El router (láminas), los marcos (piezas) y los servicios de campo (eventos) no aparecen aquí.</span>
     </header>
     <div class="tscroll"><table id="tMaq"></table></div>
+  </section>
+
+  <section class="card" id="cCostos" style="display:none">
+    <header><h2>Costos de producción</h2>
+      <div class="seg" id="segCosto">
+        <button class="on" onclick="perCosto('mes')">Por mes</button>
+        <button onclick="perCosto('sem')">Por semana</button>
+      </div>
+      <span class="sub">Tendencia e histórico de costos con montos exactos. Salen de los proyectos (hoja VENTAS) y se reparten por fecha de producción. Respetan los filtros de arriba, salvo Operador y los sub-filtros de tarjeta, porque el costo es del proyecto.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="kpis s" id="kpisC"></div>
+      <div class="barras" id="barrasC"></div>
+      <div class="leyenda" id="leyC"></div>
+      <div class="nota" id="notaC" style="display:none;margin-top:12px"></div>
+    </div>
+    <div class="tscroll"><table id="tCos"></table></div>
   </section>
 
   <section class="card">
@@ -317,21 +370,23 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
 </section>
 
 <!-- ================================ COMERCIAL ================================= -->
-<section class="area" id="areaCom" style="display:none">
+<section class="area" id="areaCom">
   <div class="sep com">
     <h2>COMERCIAL</h2>
     <button class="b-pri" id="btnAltaV" onclick="abrirVenta()" style="display:none">+ Capturar venta</button>
   </div>
 
-  <div class="filtros local" id="barraL">
-    <div class="tit">Filtros de COMERCIAL · se suman a los de arriba y mandan sobre ellos en la misma opción</div>
-    <div class="fw"><label for="l_sem">Semana</label><select id="l_sem" onchange="cambioL()"></select></div>
-    <div class="fw"><label for="l_mes">Mes</label><select id="l_mes" onchange="cambioL()"></select></div>
-    <div class="fw"><label for="l_anio">Año</label><select id="l_anio" onchange="cambioL()"></select></div>
-    <div class="fw"><label for="l_ven">Vendedor</label><select id="l_ven" onchange="cambioL()"></select></div>
-    <div class="fw"><label for="l_cli">Cliente</label><select id="l_cli" onchange="cambioL()"></select></div>
-    <button class="b-sec" onclick="limpiaL()">Limpiar</button>
-  </div>
+  <div id="comAviso"></div>
+  <div id="comBody">
+    <div class="filtros local" id="barraL">
+      <div class="tit">Filtros de COMERCIAL · se suman a los de arriba y mandan sobre ellos en la misma opción</div>
+      <div class="fw"><label>Semana</label><div class="ms" id="l_sem"></div></div>
+      <div class="fw"><label>Mes</label><div class="ms" id="l_mes"></div></div>
+      <div class="fw"><label>Año</label><div class="ms" id="l_anio"></div></div>
+      <div class="fw"><label>Vendedor</label><div class="ms" id="l_ven"></div></div>
+      <div class="fw"><label>Cliente</label><div class="ms" id="l_cli"></div></div>
+      <button class="b-sec" onclick="limpiaL()">Limpiar</button>
+    </div>
 
   <div id="bannerV"></div>
   <div id="notaV"></div>
@@ -394,6 +449,7 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
     </div>
     <div class="tscroll"><table id="tProyV"></table></div>
   </section>
+  </div>
 </section>
 
 <p class="pie"><?= sello.nombre ?> · v<?= sello.version ?> · liberada <?= sello.liberada ?></p>
@@ -451,7 +507,6 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
         <div class="campo" id="cv_fecha"><label>Fecha de venta <span class="req">*</span></label><input type="date" id="v_fecha"></div>
         <div class="campo"><label>Fecha de producción</label><input type="date" id="v_fprod"></div>
         <div class="campo" id="cv_cliente"><label>Cliente <span class="req">*</span></label><input type="text" id="v_cliente" list="dlCli" maxlength="80"><datalist id="dlCli"></datalist><span class="pista">Elige uno existente para no duplicar nombres.</span></div>
-        <div class="campo" id="cv_modulo"><label>Módulo de negocio <span class="req">*</span></label><select id="v_modulo"></select></div>
         <div class="campo full" id="cv_proyecto"><label>Proyecto <span class="req">*</span></label><input type="text" id="v_proyecto" maxlength="160" placeholder="TENA 2 ESPECTACULARES"></div>
         <div class="campo"><label>ODC</label><input type="text" id="v_odc" maxlength="30" placeholder="P22819"></div>
         <div class="campo"><label>ODP</label><input type="text" id="v_odp" maxlength="30" placeholder="6427"></div>
@@ -550,56 +605,136 @@ function abrir(id){ document.getElementById(id).classList.add('on'); }
 function cerrar(id){ document.getElementById(id).classList.remove('on'); }
 document.addEventListener('keydown', function(e){
   if (e.key !== 'Escape') { return; }
+  msCerrar();
   var ab = document.querySelectorAll('.mfondo.on');
   if (ab.length) { ab[ab.length - 1].classList.remove('on'); }
 });
 
 /* ---------- filtros ---------- */
 var OP = null;          /* opciones de los selectores */
-var FG = {};            /* filtro general (barra de arriba) */
-var FL = {};            /* filtro del area COMERCIAL */
+var FG = {};            /* filtro general (barra de arriba): listas + rango de fechas */
+var FL = {};            /* filtro del area COMERCIAL: listas */
+var SUB = [];           /* sub-filtros activados con las tarjetas de PRODUCCION */
+var MS = {};            /* estado de cada selector multiple: {opts, sel, vacio} */
+var msTimer = null;
 var GK = ['sem','mes','maq','ope','ven','mat','cli'];
 var LK = ['sem','mes','anio','ven','cli'];
 var MESES_L = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 function mesLargo(k){ return MESES_L[Number(k.slice(5,7)) - 1] + ' ' + k.slice(0,4); }
 
-/* Los selectores se rellenan una sola vez con TODAS las opciones; al filtrar
-   no se encogen. Se conserva lo elegido cuando se vuelven a llenar. */
-function sel(id, arr, vacio, sin){
-  var s = document.getElementById(id), prev = s.value;
-  var h = '<option value="">' + vacio + '</option>';
-  if (sin) { h += '<option value="__SIN__">' + sin + '</option>'; }
-  for (var i = 0; i < arr.length; i++) {
-    var v = (typeof arr[i] === 'string') ? arr[i] : arr[i].v;
-    var t = (typeof arr[i] === 'string') ? arr[i] : arr[i].t;
-    h += '<option value="' + esc(v) + '">' + esc(t) + '</option>';
+/* ---- selector multiple ---------------------------------------------------
+   Un boton que abre un panel con casillas y buscador. Se rellena con TODAS las
+   opciones y conserva lo elegido cuando se vuelve a llenar. Cada casilla que
+   marcas recalcula (con una pausa corta para poder marcar varias seguidas). */
+function msBuild(id, arr, vacio, sin){
+  var prev = MS[id] ? MS[id].sel : [];
+  var opts = [], vistos = {}, i;
+  if (sin) { opts.push({ v: '__SIN__', t: sin }); }
+  for (i = 0; i < arr.length; i++) {
+    opts.push(typeof arr[i] === 'string' ? { v: arr[i], t: arr[i] } : arr[i]);
   }
-  s.innerHTML = h;
-  s.value = prev;
-  if (s.value !== prev) { s.value = ''; }
+  for (i = 0; i < opts.length; i++) { vistos[opts[i].v] = true; }
+  var sel = [];
+  for (i = 0; i < prev.length; i++) { if (vistos[prev[i]]) { sel.push(prev[i]); } }
+  MS[id] = { opts: opts, sel: sel, vacio: vacio };
+  msPinta(id);
 }
+function msTexto(m){
+  if (!m.sel.length) { return m.vacio; }
+  if (m.sel.length === 1) {
+    for (var i = 0; i < m.opts.length; i++) { if (m.opts[i].v === m.sel[0]) { return m.opts[i].t; } }
+  }
+  return m.sel.length + ' seleccionados';
+}
+function msPinta(id){
+  var m = MS[id], marcados = {}, i;
+  for (i = 0; i < m.sel.length; i++) { marcados[m.sel[i]] = true; }
+  var h = '<button type="button" class="msb' + (m.sel.length ? ' activo' : '') + '" onclick="msTog(\'' + id + '\', event)">' +
+          '<span class="mst">' + esc(msTexto(m)) + '</span><i></i></button>' +
+          '<div class="msp" style="display:none" onclick="event.stopPropagation()">' +
+          '<input type="text" class="mss" placeholder="Buscar..." oninput="msBus(\'' + id + '\')"><div class="msl">';
+  for (i = 0; i < m.opts.length; i++) {
+    h += '<label class="mso"><input type="checkbox" value="' + esc(m.opts[i].v) + '"' + (marcados[m.opts[i].v] ? ' checked' : '') +
+         ' onchange="msCambia(\'' + id + '\')"><span>' + esc(m.opts[i].t) + '</span></label>';
+  }
+  h += '</div><div class="msf"><button type="button" class="link" onclick="msLim(\'' + id + '\')">Limpiar</button>' +
+       '<button type="button" class="b-sec" onclick="msCerrar()">Listo</button></div></div>';
+  document.getElementById(id).innerHTML = h;
+}
+function msTog(id, ev){
+  if (ev) { ev.stopPropagation(); }
+  var p = document.getElementById(id).querySelector('.msp');
+  var abierto = p.style.display !== 'none';
+  msCerrar();
+  if (!abierto) {
+    p.style.display = '';
+    var b = p.querySelector('.mss'); if (b) { b.value = ''; msBus(id); b.focus(); }
+  }
+}
+function msCerrar(){
+  var ps = document.querySelectorAll('.ms .msp');
+  for (var i = 0; i < ps.length; i++) { ps[i].style.display = 'none'; }
+}
+function msBus(id){
+  var q = document.getElementById(id).querySelector('.mss').value.toLowerCase();
+  var ls = document.getElementById(id).querySelectorAll('.mso');
+  for (var i = 0; i < ls.length; i++) {
+    ls[i].style.display = ls[i].textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+  }
+}
+function msCambia(id){
+  var cs = document.getElementById(id).querySelectorAll('.mso input'), sel = [];
+  for (var i = 0; i < cs.length; i++) { if (cs[i].checked) { sel.push(cs[i].value); } }
+  MS[id].sel = sel;
+  var b = document.getElementById(id).querySelector('.msb');
+  b.className = 'msb' + (sel.length ? ' activo' : '');
+  b.querySelector('.mst').textContent = msTexto(MS[id]);
+  if (msTimer) { clearTimeout(msTimer); }
+  msTimer = setTimeout(function(){ if (id.charAt(0) === 'g') { cambioG(); } else { cambioL(); } }, 350);
+}
+function msLim(id){
+  var cs = document.getElementById(id).querySelectorAll('.mso input');
+  for (var i = 0; i < cs.length; i++) { cs[i].checked = false; }
+  msCambia(id);
+}
+function msVacia(id){ MS[id].sel = []; msPinta(id); }
+document.addEventListener('click', function(e){
+  if (!e.target.closest || !e.target.closest('.ms')) { msCerrar(); }
+});
+
 function llenaFiltros(){
   var o = OP, meses = [];
   for (var i = 0; i < o.meses.length; i++) { meses.push({ v: o.meses[i], t: mesLargo(o.meses[i]) }); }
-  sel('g_sem', o.semanas, 'Todas'); sel('g_mes', meses, 'Todos'); sel('g_maq', o.maquinas, 'Todas');
-  sel('g_ope', o.operadores, 'Todos', '(Sin operador)'); sel('g_ven', o.vendedores, 'Todos', '(Sin vendedor)');
-  sel('g_mat', o.materiales, 'Todos'); sel('g_cli', o.clientes, 'Todos');
-  sel('l_sem', o.semanas, 'Todas'); sel('l_mes', meses, 'Todos'); sel('l_anio', o.anios, 'Todos');
-  sel('l_ven', o.vendedores, 'Todos', '(Sin vendedor)'); sel('l_cli', o.clientes, 'Todos');
+  msBuild('g_sem', o.semanas, 'Todas'); msBuild('g_mes', meses, 'Todos'); msBuild('g_maq', o.maquinas, 'Todas');
+  msBuild('g_ope', o.operadores, 'Todos', '(Sin operador)'); msBuild('g_ven', o.vendedores, 'Todos', '(Sin vendedor)');
+  msBuild('g_mat', o.materiales, 'Todos'); msBuild('g_cli', o.clientes, 'Todos');
+  msBuild('l_sem', o.semanas, 'Todas'); msBuild('l_mes', meses, 'Todos'); msBuild('l_anio', o.anios, 'Todos');
+  msBuild('l_ven', o.vendedores, 'Todos', '(Sin vendedor)'); msBuild('l_cli', o.clientes, 'Todos');
   leeG(); leeL();
 }
-function lee(pref, ks){
-  var f = {};
-  for (var i = 0; i < ks.length; i++) {
-    var s = document.getElementById(pref + ks[i]);
-    f[ks[i]] = s.value;
-    s.className = s.value ? 'activo' : '';
+function leeG(){
+  var f = {}, i;
+  for (i = 0; i < GK.length; i++) { f[GK[i]] = MS['g_' + GK[i]].sel.slice(); }
+  var fd = ['desde','hasta'];
+  for (i = 0; i < fd.length; i++) {
+    var el = document.getElementById('g_' + fd[i]);
+    f[fd[i]] = el.value;
+    el.className = el.value ? 'activo' : '';
   }
-  return f;
+  FG = f;
 }
-function leeG(){ FG = lee('g_', GK); }
-function leeL(){ FL = lee('l_', LK); }
-function hayFiltro(f){ for (var k in f) { if (f.hasOwnProperty(k) && f[k]) { return true; } } return false; }
+function leeL(){
+  var f = {};
+  for (var i = 0; i < LK.length; i++) { f[LK[i]] = MS['l_' + LK[i]].sel.slice(); }
+  FL = f;
+}
+function hayFiltro(f){
+  for (var k in f) {
+    if (!f.hasOwnProperty(k)) { continue; }
+    if (Object.prototype.toString.call(f[k]) === '[object Array]' ? f[k].length : f[k]) { return true; }
+  }
+  return false;
+}
 /* La barra general afecta a PRODUCCION y a COMERCIAL; la de COMERCIAL solo a esa area. */
 function cambioG(){
   leeG();
@@ -609,18 +744,62 @@ function cambioG(){
 }
 function cambioL(){ leeL(); pill(true, 'Aplicando filtros...'); pedirCom(false, true); }
 function limpiaG(){
-  for (var i = 0; i < GK.length; i++) { document.getElementById('g_' + GK[i]).value = ''; }
+  for (var i = 0; i < GK.length; i++) { msVacia('g_' + GK[i]); }
+  document.getElementById('g_desde').value = ''; document.getElementById('g_hasta').value = '';
+  SUB = [];
   cambioG();
 }
 function limpiaL(){
-  for (var i = 0; i < LK.length; i++) { document.getElementById('l_' + LK[i]).value = ''; }
+  for (var i = 0; i < LK.length; i++) { msVacia('l_' + LK[i]); }
   cambioL();
 }
 function areas(){
   var v = OP.ses.venta;
-  document.getElementById('areaCom').style.display = v ? '' : 'none';
+  document.getElementById('comBody').style.display = v ? '' : 'none';
+  /* Sin permiso NO se oculta en silencio: se explica por que y como arreglarlo. */
+  document.getElementById('comAviso').innerHTML = v ? '' :
+    '<div class="aviso warn perm"><span><b>No tienes permiso para ver COMERCIAL ni los costos.</b><br>' +
+    'Entraste como <b>' + esc(OP.ses.correo) + '</b> (rol ' + esc(OP.ses.rol) + '). Pide que agreguen ese correo, exactamente igual, en ' +
+    '<b>ROLES.VENTAS</b> (y en <b>CAPTURA</b> si debe capturar) dentro de <b>Code.gs</b>, y vuelvan a implementar la aplicación.</span></div>';
+  document.getElementById('btnAltaV').style.display = 'none';
   var fv = document.querySelectorAll('.fv');
   for (var i = 0; i < fv.length; i++) { fv[i].style.display = v ? '' : 'none'; }
+}
+
+/* ---- tarjetas de PRODUCCION como sub-filtros ----------------------------- */
+var SUBNOM = { propios: 'MT2 propios', maquila: 'MT2 maquilados', planta: 'MT2 total planta',
+               eventos: 'Eventos de campo', horas: 'Horas máquina', merma: 'Merma MT2', reimp: 'Reimpresiones' };
+var SUBORIGEN = ['propios','maquila','planta'];   /* excluyentes entre si */
+function toggleSub(k){
+  var i = SUB.indexOf(k);
+  if (i >= 0) { SUB.splice(i, 1); }
+  else {
+    if (SUBORIGEN.indexOf(k) >= 0) {
+      SUB = SUB.filter(function(x){ return SUBORIGEN.indexOf(x) < 0; });
+    }
+    SUB.push(k);
+  }
+  pill(true, 'Aplicando sub-filtro...');
+  pedir(false, true);
+}
+function quitaSub(k){
+  var i = SUB.indexOf(k);
+  if (i >= 0) { SUB.splice(i, 1); }
+  pill(true, 'Aplicando sub-filtro...');
+  pedir(false, true);
+}
+function pintaSubBar(){
+  var h = '';
+  if (!SUB.length) {
+    h = '<div class="subbar">Haz clic en una tarjeta para filtrar esta sección con ella; vuelve a hacer clic para quitarla.</div>';
+  } else {
+    h = '<div class="subbar"><b>Sub-filtro activo:</b>';
+    for (var i = 0; i < SUB.length; i++) {
+      h += '<span class="chip">' + esc(SUBNOM[SUB[i]]) + '<button type="button" onclick="quitaSub(\'' + SUB[i] + '\')" aria-label="Quitar">&times;</button></span>';
+    }
+    h += '<span>· las tarjetas muestran el total sin sub-filtro; el resto de la sección sí lo aplica.</span></div>';
+  }
+  document.getElementById('subBar').innerHTML = h;
 }
 
 /* ---------- carga ---------- */
@@ -670,7 +849,107 @@ function pedir(primera, silencioso){
       if (!primera && !silencioso) { toast('Tablero actualizado en ' + res.ms + ' ms', 'ok'); }
     })
     .withFailureHandler(fallaInicial)
-    .cargarTablero(FG);
+    .cargarTablero(FG, SUB);
+}
+
+/* ---------- costos de produccion ---------- */
+var perC = 'mes';
+/* Un color por componente. Merma puede ser negativa (se uso menos material del
+   cotizado): no se apila hacia abajo, pero SI descuenta en el total exacto. */
+var COSCOLS = [
+  ['mat','Material','#0093AE'], ['merma','Merma','#C0392B'], ['maq','Maquila','#F0A80C'],
+  ['inst','Instalación','#7D5BA6'], ['mo','Mano de obra','#1E8E5A'], ['hext','Horas extras','#E07B39'],
+  ['otros','Otros','#91A1AA'], ['carga','Carga administrativa','#2B4A5A']
+];
+/* Monto EXACTO, con centavos. */
+function peso(v){
+  var n = Number(v);
+  if (!isFinite(n)) { return '$0.00'; }
+  return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function cp2(v){
+  var n = Number(v);
+  if (!isFinite(n) || n === 0) { return '<td class="num cero">$0.00</td>'; }
+  return '<td class="num' + (n < 0 ? ' neg' : '') + '">' + peso(n) + '</td>';
+}
+function perCosto(p){
+  perC = p;
+  var b = document.getElementById('segCosto').getElementsByTagName('button');
+  b[0].className = p === 'mes' ? 'on' : ''; b[1].className = p === 'sem' ? 'on' : '';
+  pintaCostos();
+}
+function pintaCostos(){
+  var card = document.getElementById('cCostos');
+  if (!D || !D.costos) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  var C = D.costos, serie = perC === 'mes' ? C.mensual : C.semanal, t = C.total, i, c, h;
+
+  /* indicadores */
+  var mayor = null;
+  for (i = 0; i < COSCOLS.length; i++) { if (mayor === null || t[COSCOLS[i][0]] > t[mayor[0]]) { mayor = COSCOLS[i]; } }
+  var kc = [
+    ['Costo total', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras, otros y carga', ''],
+    ['Costo por MT2 de planta', t.costoMt2 === null ? '—' : peso(t.costoMt2), 'costo total ÷ ' + n2(t.mt2) + ' MT2 de planta', 'mq'],
+    ['Mayor componente', mayor && t.total ? esc(mayor[1]) : '—', mayor && t.total ? peso(t[mayor[0]]) + ' · ' + n2(t[mayor[0]] / t.total * 100) + '% del total' : '', '']
+  ];
+  h = '';
+  for (i = 0; i < kc.length; i++) {
+    h += '<div class="kpi ' + kc[i][3] + '"><div class="et">' + kc[i][0] + '</div><div class="vl">' + kc[i][1] + '</div><div class="un">' + kc[i][2] + '</div></div>';
+  }
+  document.getElementById('kpisC').innerHTML = h;
+
+  /* barras apiladas por componente; etiqueta = total EXACTO del periodo */
+  var cont = document.getElementById('barrasC');
+  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
+  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
+  var ult = serie.slice(perC === 'mes' ? -12 : -16), max = 0, pos;
+  function positivo(d){ var s = 0; for (var q = 0; q < COSCOLS.length; q++) { if (d[COSCOLS[q][0]] > 0) { s += d[COSCOLS[q][0]]; } } return s; }
+  for (i = 0; i < ult.length; i++) { pos = positivo(ult[i]); if (pos > max) { max = pos; } }
+  if (max <= 0) { max = 1; }
+  var rot = ult.length > 10;
+  h = '';
+  for (i = 0; i < ult.length; i++) {
+    var d = ult[i], seg = '', alto = 0, tip = [];
+    for (c = COSCOLS.length - 1; c >= 0; c--) {
+      var v = d[COSCOLS[c][0]];
+      if (v !== 0) { tip.unshift(COSCOLS[c][1] + ': ' + peso(v)); }
+      if (v > 0) {
+        var hh = Math.max(1, Math.round(v / max * hMax));
+        alto += hh;
+        seg += '<div class="bseg" style="height:' + hh + 'px;background:' + COSCOLS[c][2] + '"></div>';
+      }
+    }
+    var et = perC === 'mes' ? mesTxt(d.k) : d.etiqueta.replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1');
+    h += '<div class="bcol" title="' + esc((perC === 'mes' ? mesLargo(d.k) : d.etiqueta) + ' | Total ' + peso(d.total) + ' | ' + tip.join(' | ')) + '">' +
+         '<div class="bv' + (rot ? ' rot' : '') + '">' + peso(d.total) + '</div>' +
+         '<div class="bpila" style="height:' + alto + 'px">' + seg + '</div>' +
+         '<div class="be">' + esc(et) + '</div></div>';
+  }
+  cont.innerHTML = h || '<div class="vacio">Sin costos en el periodo</div>';
+  h = '';
+  for (c = 0; c < COSCOLS.length; c++) { h += '<span><i style="background:' + COSCOLS[c][2] + '"></i>' + COSCOLS[c][1] + '</span>'; }
+  document.getElementById('leyC').innerHTML = h;
+  var hayNeg = false;
+  for (i = 0; i < serie.length; i++) { for (c = 0; c < COSCOLS.length; c++) { if (serie[i][COSCOLS[c][0]] < 0) { hayNeg = true; } } }
+  var nota = document.getElementById('notaC');
+  nota.style.display = hayNeg ? '' : 'none';
+  nota.textContent = 'Un monto negativo (normalmente en Merma) significa que se usaron menos m² de los cotizados. No se dibuja hacia abajo en la barra, pero el total exacto sí lo descuenta.';
+
+  /* historico con montos exactos */
+  if (!serie.length) { document.getElementById('tCos').innerHTML = '<tbody><tr><td class="vacio">Sin costos en el periodo.</td></tr></tbody>'; return; }
+  h = '<thead><tr><th>Periodo</th><th>MT2 planta</th>';
+  for (c = 0; c < COSCOLS.length; c++) { h += '<th>' + COSCOLS[c][1] + '</th>'; }
+  h += '<th>Total</th><th>Costo / MT2</th></tr></thead><tbody>';
+  for (i = 0; i < serie.length; i++) {
+    var r = serie[i];
+    h += '<tr><td>' + esc(perC === 'mes' ? mesLargo(r.k) : r.etiqueta) + '</td>' + celda(r.mt2);
+    for (c = 0; c < COSCOLS.length; c++) { h += cp2(r[COSCOLS[c][0]]); }
+    h += '<td class="num"><b>' + peso(r.total) + '</b></td>' + (r.costoMt2 === null ? '<td class="num cero">—</td>' : cp2(r.costoMt2)) + '</tr>';
+  }
+  h += '<tr class="tot"><td>TOTAL</td>' + celda(t.mt2);
+  for (c = 0; c < COSCOLS.length; c++) { h += cp2(t[COSCOLS[c][0]]); }
+  h += '<td class="num">' + peso(t.total) + '</td>' + (t.costoMt2 === null ? '<td></td>' : cp2(t.costoMt2)) + '</tr></tbody>';
+  document.getElementById('tCos').innerHTML = h;
 }
 
 /* ---------- pintado ---------- */
@@ -690,26 +969,31 @@ function pintar(){
     document.getElementById('banner').innerHTML = '';
   }
 
-  /* KPIs */
+  /* KPIs: cada tarjeta es un sub-filtro. Los valores son los del filtro general
+     SIN sub-filtro (D.kpi): la fila funciona como menu y no cambia al elegir. */
+  var kp = D.kpi;
   var k = [
-    ['MT2 propios', n2(t.propios), 'impresion en planta', ''],
-    ['MT2 maquilados', n2(t.maquila), t.pctMaquila + '% del total', 'mq'],
-    ['MT2 total planta', n2(t.planta), 'propios + maquila', ''],
-    ['Eventos de campo', n0(t.eventos), 'instalaciones, entregas, rotulaciones', ''],
-    ['Horas maquina', t.horas > 0 ? n2(t.horas) : 'sin capturar',
-      t.mt2Hora !== null ? n2(t.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
-      t.horas > 0 ? '' : 'al'],
-    ['Merma MT2', t.merma > 0 ? n2(t.merma) : 'sin capturar',
-      t.merma > 0 ? t.mermaPct + '% de lo impreso' : 'sin este dato no se sabe que se reimprimio',
-      t.merma > 0 ? '' : 'al'],
-    ['Reimpresiones', n0(t.reimp), 'renglones marcados como reimpresion', t.reimp > 0 ? 'mq' : '']
+    ['MT2 propios', n2(kp.propios), 'impresion en planta', '', 'propios'],
+    ['MT2 maquilados', n2(kp.maquila), kp.pctMaquila + '% del total', 'mq', 'maquila'],
+    ['MT2 total planta', n2(kp.planta), 'propios + maquila', '', 'planta'],
+    ['Eventos de campo', n0(kp.eventos), 'instalaciones, entregas, rotulaciones', '', 'eventos'],
+    ['Horas maquina', kp.horas > 0 ? n2(kp.horas) : 'sin capturar',
+      kp.mt2Hora !== null ? n2(kp.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
+      kp.horas > 0 ? '' : 'al', 'horas'],
+    ['Merma MT2', kp.merma > 0 ? n2(kp.merma) : 'sin capturar',
+      kp.merma > 0 ? kp.mermaPct + '% de lo impreso' : 'sin este dato no se sabe que se reimprimio',
+      kp.merma > 0 ? '' : 'al', 'merma'],
+    ['Reimpresiones', n0(kp.reimp), 'renglones marcados como reimpresion', kp.reimp > 0 ? 'mq' : '', 'reimp']
   ];
   var h = '';
   for (var i = 0; i < k.length; i++) {
-    h += '<div class="kpi ' + k[i][3] + '"><div class="et">' + k[i][0] + '</div>' +
-         '<div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></div>';
+    var act = SUB.indexOf(k[i][4]) >= 0;
+    h += '<button type="button" class="kpi ' + k[i][3] + (act ? ' sel' : '') + '" aria-pressed="' + act + '" onclick="toggleSub(\'' + k[i][4] + '\')">' +
+         '<div class="et">' + k[i][0] + '</div><div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></button>';
   }
   document.getElementById('kpis').innerHTML = h;
+  pintaSubBar();
+  pintaCostos();
 
   /* barras */
   var max = 0;
@@ -874,7 +1158,7 @@ function verSemana(sem){
         '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
       toast(m, 'err');
     })
-    .detalleSemana(sem, FG);
+    .detalleSemana(sem, FG, SUB);
 }
 
 /* ---------- captura ---------- */
@@ -1171,7 +1455,8 @@ function pintarCom(){
     [c2.sinVendedor, 'con venta y sin vendedor asignado', c2.sinVendedor ? 'mal' : 'bien'],
     [c2.fechaFutura, 'con fecha de venta futura', c2.fechaFutura ? 'mal' : 'bien'],
     [c2.fechasDistantes, 'venta y producción a más de 90 días', c2.fechasDistantes ? 'mal' : 'bien'],
-    [c2.sinMaterial, 'sin material', c2.sinMaterial ? 'mal' : 'bien']
+    [c2.sinMaterial, 'sin material', c2.sinMaterial ? 'mal' : 'bien'],
+    [c2.m2Distantes, 'M2 de proyecto y reales difieren más de 5 veces', c2.m2Distantes ? 'mal' : 'bien']
   ];
   h = '';
   for (i = 0; i < cel.length; i++) {
@@ -1214,7 +1499,6 @@ function lista(id, arr){
 /* ---------- captura de venta ---------- */
 function abrirVenta(){ conCatalogosV(mostrarVenta); }
 function mostrarVenta(){
-  opciones('v_modulo', CATV.MODULO, true);
   opciones('v_tipo', CATV.TIPO_PROYECTO, true);
   opciones('v_vendedor', CATV.VENDEDOR, true);
   opciones('v_metodo', CATV.METODO_PAGO, true);
@@ -1229,7 +1513,7 @@ function guardarV(){
   if (guardandoV) { return; }
   var d = {
     fecha: val('v_fecha'), fprod: val('v_fprod'), cliente: val('v_cliente'),
-    modulo: val('v_modulo'), proyecto: val('v_proyecto'), odc: val('v_odc'),
+    proyecto: val('v_proyecto'), odc: val('v_odc'),
     odp: val('v_odp'), vendedor: val('v_vendedor'), tipo: val('v_tipo'),
     maquina: val('v_maquina'), material: val('v_material'), m2p: val('v_m2p'),
     m2r: val('v_m2r'), venta: val('v_venta'), maq: val('v_maq'),
@@ -1239,7 +1523,7 @@ function guardarV(){
   };
   /* Validacion rapida en el cliente; la que manda es la del servidor. */
   var faltan = [];
-  var oblig = [['fecha','cv_fecha'],['cliente','cv_cliente'],['modulo','cv_modulo'],['proyecto','cv_proyecto']];
+  var oblig = [['fecha','cv_fecha'],['cliente','cv_cliente'],['proyecto','cv_proyecto']];
   for (var i = 0; i < oblig.length; i++) {
     var vacio = !String(d[oblig[i][0]]).trim();
     marcar(oblig[i][1], vacio);

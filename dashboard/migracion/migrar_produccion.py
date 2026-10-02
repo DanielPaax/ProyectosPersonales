@@ -21,7 +21,7 @@ ENCABEZADOS_BASE = [
     'ID', 'FECHA', 'SEM_INICIO', 'SEMANA', 'MAQUINA', 'PROCESO', 'MATERIAL',
     'UNIDAD', 'CANTIDAD', 'ORIGEN', 'CLIENTE_OT', 'HORAS_MAQ', 'MERMA_MT2',
     'MOTIVO_PARO', 'NOTA', 'CELDA_ORIGEN', 'OBS_MIGRACION',
-    'TURNO', 'OPERADOR', 'REIMPRESION'
+    'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN'
 ]
 VENTANA_INI = datetime.date(2025, 12, 29)   # lunes de la primera semana del archivo
 SIN_OPERADOR = {'MAQUILA', 'SERIGRAFIA'}    # no son personas
@@ -126,7 +126,7 @@ def main():
             None, fecha, l, etiqueta(l), maquina, proceso,
             txt(r[12]) or '(NO REPORTADO)', unidad, round(m2, 4), origen, cliente_ot,
             horas, merma if merma > 0 else None, '', nota,
-            'BASE DE DATOS!B%d' % xl, ' '.join(obs), '', operador, reimp
+            'BASE DE DATOS!B%d' % xl, ' '.join(obs), '', operador, reimp, ref
         ])
 
     filas.sort(key=lambda f: (f[1], f[15]))

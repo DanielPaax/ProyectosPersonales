@@ -13,13 +13,14 @@ warnings.filterwarnings('ignore')
 
 ENCABEZADOS_VENTAS = [
     'ID', 'FECHA_VENTA', 'SEM_INICIO', 'SEMANA', 'FECHA_PROD', 'SEMANA_ORIG',
-    'ODC', 'ODP', 'CLIENTE', 'MODULO', 'TIPO_PROYECTO', 'PROYECTO', 'MAQUINA',
+    'ODC', 'ODP', 'CLIENTE', 'TIPO_PROYECTO', 'PROYECTO', 'MAQUINA',
     'MATERIAL', 'M2_PROYECTO', 'M2_REALES', 'VENTA', 'COSTO_MATERIAL',
     'COSTO_MERMA', 'MAQUILA', 'INSTALACION', 'MANO_OBRA', 'HORAS_EXTRAS',
     'OTROS', 'CARGA_ADMIN', 'COMERCIAL', 'FACTURA', 'FECHA_FACTURA',
     'METODO_PAGO', 'ESTATUS_COBRO', 'ESTATUS_MONTO', 'CELDA_ORIGEN',
-    'OBS_MIGRACION'
+    'OBS_MIGRACION', 'VENDEDOR'
 ]
+COLS = {n: i for i, n in enumerate(ENCABEZADOS_VENTAS)}
 
 # Unicos cambios de nombre automaticos: los deterministas. Lo dudoso se reporta.
 ALIAS_CLIENTE = {'FIBRA SHOP': 'FIBRASHOP'}
@@ -123,7 +124,7 @@ def main():
         factura = txt(r[34])
         out.append([
             n, fv, l, etiqueta_semana(l), fp, txt(r[3]),
-            txt(r[4]), txt(r[5]), cliente, txt(r[7]), txt(r[8]), txt(r[10]),
+            txt(r[4]), txt(r[5]), cliente, txt(r[8]), txt(r[10]),
             txt(r[11]) or '(NO REPORTADA)', txt(r[12]) or '(NO REPORTADO)',
             num(r[13]), num(r[14]),
             round(venta, 2) if venta else None,
@@ -132,14 +133,14 @@ def main():
             txt(r[32]).upper(), factura, r[35] if r[35] else None,
             txt(r[33]), 'FACTURADO' if factura else '',
             'PENDIENTE' if pendiente else 'CON MONTO',
-            "BASE DE DATOS!B%d" % xl, ' '.join(obs)
+            "BASE DE DATOS!B%d" % xl, ' '.join(obs), ''
         ])
 
     # ---- conciliacion contra el archivo original ----------------------------
     v_orig = sum(num(r[29]) or 0 for _, r in filas)
     c_orig = sum(num(r[28]) or 0 for _, r in filas)
-    v_new = sum(f[16] or 0 for f in out)
-    c_new = sum(sum(f[17:25]) for f in out)
+    v_new = sum(f[COLS['VENTA']] or 0 for f in out)
+    c_new = sum(sum(f[COLS['COSTO_MATERIAL']:COLS['CARGA_ADMIN'] + 1]) for f in out)
     ok_v = abs(v_orig - v_new) < 0.5
     ok_c = abs(c_orig - c_new) < 1.0
 
@@ -151,7 +152,7 @@ def main():
     for f in out:
         v.append(f)
     for fila in v.iter_rows(min_row=2):
-        for idx in (1, 2, 4, 27):
+        for idx in (COLS['FECHA_VENTA'], COLS['SEM_INICIO'], COLS['FECHA_PROD'], COLS['FECHA_FACTURA']):
             fila[idx].number_format = 'dd/mm/yyyy'
     v.freeze_panes = 'A2'
 
