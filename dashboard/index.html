@@ -558,7 +558,8 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 
 <script>
 var D = null;        /* ultimo tablero recibido */
-var CATS = null;     /* catalogos, se piden una sola vez */
+var CATS = null;     /* catalogos de captura de trabajo */
+var CATSt = 0;       /* cuando se pidieron: se vuelven a pedir pasado 1 minuto */
 var guardando = false;
 
 /* ---------- utilidades ---------- */
@@ -1173,11 +1174,11 @@ function opciones(sel, lista, blanco){
   s.innerHTML = h;
 }
 function abrirAlta(){
-  if (CATS) { return mostrarAlta(); }
+  if (CATS && Date.now() - CATSt < 60000) { return mostrarAlta(); }
   pill(true, 'Cargando catalogos...');
   google.script.run
     .withSuccessHandler(function(res){
-      CATS = res; pill(false); mostrarAlta();
+      CATS = res; CATSt = Date.now(); pill(false); mostrarAlta();
     })
     .withFailureHandler(function(err){
       pill(false);
@@ -1271,7 +1272,8 @@ function guardar(){
    COMERCIAL
    ===================================================================== */
 var CO = null;         /* ultimo resultado de cargarComercial */
-var CATV = null;       /* catalogos de venta, se piden una sola vez */
+var CATV = null;       /* catalogos de venta */
+var CATVt = 0;         /* cuando se pidieron: se vuelven a pedir pasado 1 minuto */
 var LV = {};           /* proyectos listados, por id, para el modal de edicion */
 var guardandoV = false;
 var editId = null;
@@ -1480,10 +1482,10 @@ function pintarCom(){
 
 /* ---------- catalogos de venta ---------- */
 function conCatalogosV(fn){
-  if (CATV) { return fn(); }
+  if (CATV && Date.now() - CATVt < 60000) { return fn(); }
   pill(true, 'Cargando catalogos...');
   google.script.run
-    .withSuccessHandler(function(res){ CATV = res; pill(false); fn(); })
+    .withSuccessHandler(function(res){ CATV = res; CATVt = Date.now(); pill(false); fn(); })
     .withFailureHandler(function(err){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');

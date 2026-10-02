@@ -230,6 +230,34 @@ function _leerBase_() {
   return out;
 }
 
+/* Nombre de catalogo en su forma canonica: sin acentos, en mayusculas y con
+   guion bajo. "Material", "MATERIAL " y "Materiales" son el mismo catalogo
+   (MATERIAL). Antes la coincidencia era exacta y un encabezado con otra
+   capitalizacion dejaba el catalogo VACIO en los formularios, sin aviso. */
+var CAT_ALIAS = {
+  MAQUINAS: 'MAQUINA', PROCESOS: 'PROCESO', MATERIALES: 'MATERIAL', UNIDADES: 'UNIDAD',
+  ORIGENES: 'ORIGEN', OPERADORES: 'OPERADOR', VENDEDORES: 'VENDEDOR', TURNOS: 'TURNO',
+  MOTIVO_DE_PARO: 'MOTIVO_PARO', MOTIVOS_DE_PARO: 'MOTIVO_PARO', MOTIVOS_PARO: 'MOTIVO_PARO',
+  METODOS_PAGO: 'METODO_PAGO', METODO_DE_PAGO: 'METODO_PAGO', ESTATUS_DE_COBRO: 'ESTATUS_COBRO',
+  TIPOS_PROYECTO: 'TIPO_PROYECTO', TIPO_DE_PROYECTO: 'TIPO_PROYECTO'
+};
+
+function _normCat_(t) {
+  var s = String(t === null || t === undefined ? '' : t).trim().toUpperCase();
+  s = s.replace(/[ÁÀÂÄ]/g, 'A').replace(/[ÉÈÊË]/g, 'E').replace(/[ÍÌÎÏ]/g, 'I')
+       .replace(/[ÓÒÔÖ]/g, 'O').replace(/[ÚÙÛÜ]/g, 'U').replace(/Ñ/g, 'N');
+  s = s.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return CAT_ALIAS[s] || s;
+}
+
+/* Memoria corta (5 min) y ademas se vacia sola al editar CATALOGOS (onEdit):
+   antes eran 6 horas y un valor recien agregado no aparecia en los formularios. */
+var CACHE_CATALOGOS_SEG = 300;
+
+function _limpiaCacheCatalogos_() {
+  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema]);
+}
+
 function _leerCatalogos_() {
   var cache = CacheService.getScriptCache();
   var guardado = cache.get('catalogos_v' + JG_SELLO.esquema);
@@ -243,17 +271,19 @@ function _leerCatalogos_() {
   if (ultima >= 1 && ancho >= 1) {
     var vals = h.getRange(1, 1, ultima, ancho).getValues();
     for (var c = 0; c < ancho; c++) {
-      var nombre = String(vals[0][c] || '').trim();
+      var nombre = _normCat_(vals[0][c]);
       if (!nombre) { continue; }
-      var lista = [];
+      var lista = out[nombre] || [];
+      var vistos = {};
+      for (var k = 0; k < lista.length; k++) { vistos[lista[k].toUpperCase()] = true; }
       for (var f = 1; f < vals.length; f++) {
         var v = String(vals[f][c] || '').trim();
-        if (v) { lista.push(v); }
+        if (v && !vistos[v.toUpperCase()]) { vistos[v.toUpperCase()] = true; lista.push(v); }
       }
       out[nombre] = lista;
     }
   }
-  try { cache.put('catalogos_v' + JG_SELLO.esquema, JSON.stringify(out), 21600); } catch (e) {}
+  try { cache.put('catalogos_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
   return out;
 }
 
@@ -1029,7 +1059,7 @@ function _leerTarifas_() {
       if (String(vals[i][3] || '').trim() === 'CARGA_M2') { out.carga = _num_(vals[i][4]); }
     }
   }
-  try { cache.put('tarifas_v' + JG_SELLO.esquema, JSON.stringify(out), 21600); } catch (e) {}
+  try { cache.put('tarifas_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
   return out;
 }
 
@@ -1578,6 +1608,7 @@ function onOpen() {
       .addItem('Vincular produccion con ventas (ORDEN)', 'vincularOrdenes')
       .addSeparator()
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
+      .addItem('Refrescar catalogos', 'refrescarCatalogos')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
@@ -1655,8 +1686,8 @@ function instalar() {
     hechos.push('Hoja BITACORA protegida.');
   } catch (e) { hechos.push('No se pudo proteger BITACORA: ' + e.message); }
 
-  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema,
-    'tarifas_v' + JG_SELLO.esquema]);
+  _limpiaCacheCatalogos_();
+  hechos.push(_resumenCatalogos_());
   _bitacora_(_correoSeguro_(), 'INSTALACION', JG_SELLO.version + ' | ' + hechos.join(' '));
 
   try { SpreadsheetApp.getUi().alert('Instalacion\n\n' + hechos.join('\n')); } catch (e) {}
@@ -1670,12 +1701,12 @@ function asegurarCatalogosVenta(cat) {
   var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
   var existentes = {};
   for (var i = 0; i < encab.length; i++) {
-    existentes[String(encab[i] || '').trim().toUpperCase()] = true;
+    existentes[_normCat_(encab[i])] = true;
   }
   var agregadas = [];
   var col = (cat.getLastRow() >= 1 && encab.join('').length) ? ancho + 1 : 1;
   for (var nombre in CATALOGOS_VENTA) {
-    if (!CATALOGOS_VENTA.hasOwnProperty(nombre) || existentes[nombre]) { continue; }
+    if (!CATALOGOS_VENTA.hasOwnProperty(nombre) || existentes[_normCat_(nombre)]) { continue; }
     var lista = CATALOGOS_VENTA[nombre];
     var datos = [[nombre]];
     for (var j = 0; j < lista.length; j++) { datos.push([lista[j]]); }
@@ -1705,7 +1736,7 @@ function fusionarCatalogosProduccion(ss, cat) {
     var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
     var col = 0;
     for (var k = 0; k < encab.length; k++) {
-      if (String(encab[k] || '').trim().toUpperCase() === nombre) { col = k + 1; break; }
+      if (_normCat_(encab[k]) === _normCat_(nombre)) { col = k + 1; break; }
     }
     if (!col) {
       col = encab.join('') === '' ? 1 : ancho + 1;
@@ -1744,6 +1775,41 @@ function _colPorNombre_(hoja, nombre) {
   return 0;
 }
 
+/* Cuantos valores tiene cada catalogo y cuales faltan: es lo primero que hay
+   que mirar cuando un formulario "no muestra" algo. */
+function _resumenCatalogos_() {
+  var c = _leerCatalogos_();
+  var obligatorios = ['MAQUINA', 'PROCESO', 'MATERIAL', 'UNIDAD', 'ORIGEN'];
+  var todos = obligatorios.concat(['OPERADOR', 'TURNO', 'REIMPRESION', 'MOTIVO_PARO',
+    'VENDEDOR', 'METODO_PAGO', 'ESTATUS_COBRO', 'TIPO_PROYECTO']);
+  var partes = [], faltan = [];
+  for (var i = 0; i < todos.length; i++) {
+    var n = (c[todos[i]] || []).length;
+    partes.push(todos[i] + ' ' + n);
+    if (!n && obligatorios.indexOf(todos[i]) >= 0) { faltan.push(todos[i]); }
+  }
+  return 'Catalogos leidos: ' + partes.join(', ') + '.' +
+    (faltan.length ? ' FALTAN O ESTAN VACIOS: ' + faltan.join(', ') + '.' : '');
+}
+
+/* Menu: fuerza a releer CATALOGOS y TARIFAS y dice que encontro. */
+function refrescarCatalogos() {
+  _limpiaCacheCatalogos_();
+  var msg = _resumenCatalogos_();
+  try { SpreadsheetApp.getUi().alert('Catalogos', msg + '\n\nRecarga la pagina del tablero para ver los cambios.', SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) {}
+  return msg;
+}
+
+/* Disparador simple: al editar a mano CATALOGOS o TARIFAS se vacia la memoria,
+   asi que un vendedor, maquina u operador nuevo aparece en los formularios sin
+   esperar. (Los disparadores simples no corren cuando edita un script.) */
+function onEdit(e) {
+  try {
+    var n = (e && e.range) ? e.range.getSheet().getName() : '';
+    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS) { _limpiaCacheCatalogos_(); }
+  } catch (err) { /* nunca estorba la edicion */ }
+}
+
 function _aseguraColumnas_(hoja, n) {
   var max = hoja.getMaxColumns();
   if (max < n) { hoja.insertColumnsAfter(max, n - max); }
@@ -1759,7 +1825,7 @@ function _validaVendedor_(ven, cat) {
     var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
     var col = 0;
     for (var i = 0; i < encab.length; i++) {
-      if (String(encab[i] || '').trim().toUpperCase() === 'VENDEDOR') { col = i + 1; break; }
+      if (_normCat_(encab[i]) === 'VENDEDOR') { col = i + 1; break; }
     }
     if (!col) { return 'No hay columna VENDEDOR en CATALOGOS: lista desplegable sin crear.'; }
     var filas = Math.max(ven.getMaxRows() - 1, 1);
