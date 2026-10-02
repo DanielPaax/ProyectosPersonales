@@ -1,9 +1,9 @@
 var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
-  nombre:   'Dashboard de Produccion Gran Formato',
-  version:  '1.2.0',
+  nombre:   'TABLERO BIG FOOT print',
+  version:  '1.3.0',
   liberada: '2026-10-02',
-  esquema:  3
+  esquema:  4
 };
 
 /* ===================== CONFIGURACION ===================== */
@@ -33,21 +33,24 @@ var ROLES = {
 };
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
-   Esquema 2: se agregan TURNO, OPERADOR y REIMPRESION al final. */
+   Esquema 2: TURNO, OPERADOR y REIMPRESION. Esquema 4: ORDEN (ODC u ODP del
+   pedido), que es la llave para ligar cada renglon de produccion con su
+   venta, su cliente y su vendedor. */
 var COL = {
   ID: 1, FECHA: 2, SEM_INICIO: 3, SEMANA: 4, MAQUINA: 5, PROCESO: 6,
   MATERIAL: 7, UNIDAD: 8, CANTIDAD: 9, ORIGEN: 10, CLIENTE_OT: 11,
   HORAS_MAQ: 12, MERMA_MT2: 13, MOTIVO_PARO: 14, NOTA: 15,
   CELDA_ORIGEN: 16, OBS_MIGRACION: 17,
-  TURNO: 18, OPERADOR: 19, REIMPRESION: 20
+  TURNO: 18, OPERADOR: 19, REIMPRESION: 20,
+  ORDEN: 21
 };
-var COL_N = 20;
+var COL_N = 21;
 
 var ENCABEZADOS_BASE = [
   'ID', 'FECHA', 'SEM_INICIO', 'SEMANA', 'MAQUINA', 'PROCESO', 'MATERIAL',
   'UNIDAD', 'CANTIDAD', 'ORIGEN', 'CLIENTE_OT', 'HORAS_MAQ', 'MERMA_MT2',
   'MOTIVO_PARO', 'NOTA', 'CELDA_ORIGEN', 'OBS_MIGRACION',
-  'TURNO', 'OPERADOR', 'REIMPRESION'
+  'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN'
 ];
 var ENCABEZADOS_BITACORA = ['TIMESTAMP', 'CORREO', 'ACCION', 'DETALLE'];
 
@@ -61,9 +64,10 @@ var CV = {
   COSTO_MATERIAL: 18, COSTO_MERMA: 19, MAQUILA: 20, INSTALACION: 21,
   MANO_OBRA: 22, HORAS_EXTRAS: 23, OTROS: 24, CARGA_ADMIN: 25, COMERCIAL: 26,
   FACTURA: 27, FECHA_FACTURA: 28, METODO_PAGO: 29, ESTATUS_COBRO: 30,
-  ESTATUS_MONTO: 31, CELDA_ORIGEN: 32, OBS_MIGRACION: 33
+  ESTATUS_MONTO: 31, CELDA_ORIGEN: 32, OBS_MIGRACION: 33,
+  VENDEDOR: 34
 };
-var CV_N = 33;
+var CV_N = 34;
 
 var ENCABEZADOS_VENTAS = [
   'ID', 'FECHA_VENTA', 'SEM_INICIO', 'SEMANA', 'FECHA_PROD', 'SEMANA_ORIG',
@@ -72,15 +76,14 @@ var ENCABEZADOS_VENTAS = [
   'COSTO_MERMA', 'MAQUILA', 'INSTALACION', 'MANO_OBRA', 'HORAS_EXTRAS',
   'OTROS', 'CARGA_ADMIN', 'COMERCIAL', 'FACTURA', 'FECHA_FACTURA',
   'METODO_PAGO', 'ESTATUS_COBRO', 'ESTATUS_MONTO', 'CELDA_ORIGEN',
-  'OBS_MIGRACION'
+  'OBS_MIGRACION', 'VENDEDOR'
 ];
 var ENCABEZADOS_TARIFAS = ['MATERIAL', 'COSTO_M2'];
 
 /* Catalogos nuevos que Instalar agrega a CATALOGOS si no existen. */
 var CATALOGOS_VENTA = {
   MODULO:        ['IMJ', 'Bigfoot', 'Ibalma'],
-  COMERCIAL:     ['ADMON', 'CARMEN', 'FERNANDO', 'HUMBERTO', 'JOSE RAMON',
-                  'JUAN CARLOS', 'JACQUELINE', 'ISABEL'],
+  VENDEDOR:      ['DANIEL TORRES', 'CARMEN PONCE', 'E-COMMERCE'],
   METODO_PAGO:   ['Transferencia', 'Efectivo'],
   ESTATUS_COBRO: ['FACTURADO', 'COBRADO'],
   TIPO_PROYECTO: ['Impresión', 'Serigrafia', 'Maquila']
@@ -192,7 +195,10 @@ function _leerBase_() {
     throw new Error('La hoja BASE supera ' + CFG.TOPE_FILAS +
       ' renglones. Hay que archivar por ano.');
   }
-  var vals = h.getRange(2, 1, ultima - 1, COL_N).getValues();
+  /* Se lee hasta donde la hoja tenga columnas: si todavia no corriste
+     Instalar tras una subida de esquema, la columna nueva viene vacia en
+     lugar de tronar la lectura. */
+  var vals = h.getRange(2, 1, ultima - 1, Math.min(COL_N, h.getMaxColumns())).getValues();
   var out = [];
   for (var i = 0; i < vals.length; i++) {
     var r = vals[i];
@@ -217,7 +223,8 @@ function _leerBase_() {
       obs:      String(r[COL.OBS_MIGRACION - 1] || ''),
       turno:    String(r[COL.TURNO - 1] || ''),
       operador: String(r[COL.OPERADOR - 1] || ''),
-      reimp:    String(r[COL.REIMPRESION - 1] || '')
+      reimp:    String(r[COL.REIMPRESION - 1] || ''),
+      orden:    String(r[COL.ORDEN - 1] || '').trim()
     });
   }
   /* cache.put tiene tope de 100 KB por entrada: si no cabe, se relee. */
@@ -352,14 +359,146 @@ function _alertas_(filas) {
   return a;
 }
 
+/* ===================== FILTROS ===================== */
+/* Los filtros viajan al SERVIDOR y se aplican antes de agregar: el tablero
+   nunca recibe renglones que no va a pintar, y las reglas de permiso (quien
+   puede filtrar por vendedor o cliente) no dependen del navegador. */
+
+var SIN_DATO = '__SIN__';
+
+function _fq_(f, ses) {
+  f = f || {};
+  var q = {
+    sem: _texto_(f.sem, 10), mes: _texto_(f.mes, 7), anio: _texto_(f.anio, 4),
+    maq: _texto_(f.maq, 120), ope: _texto_(f.ope, 60), mat: _texto_(f.mat, 150),
+    ven: _texto_(f.ven, 60), cli: _texto_(f.cli, 80)
+  };
+  /* Vendedor y cliente salen de VENTAS: quien no ve ventas no filtra por ellos. */
+  if (!ses.venta) { q.ven = ''; q.cli = ''; }
+  return q;
+}
+
+function _igual_(filtro, valor) {
+  if (!filtro) { return true; }
+  if (filtro === SIN_DATO) { return !valor; }
+  return filtro === valor;
+}
+
+/* ODC u ODP del pedido -> { ven, cli } tomados de VENTAS. Es lo que liga un
+   renglon de produccion con su vendedor y su cliente. */
+function _mapaOrdenes_() {
+  var m = {};
+  var v = _leerVentas_();
+  for (var i = 0; i < v.length; i++) {
+    var claves = [v[i].odc, v[i].odp];
+    for (var k = 0; k < claves.length; k++) {
+      if (!claves[k]) { continue; }
+      var o = m[claves[k]];
+      if (!o) { o = m[claves[k]] = { ven: '', cli: '' }; }
+      if (!o.ven && v[i].vendedor) { o.ven = v[i].vendedor; }
+      if (!o.cli && v[i].cliente)  { o.cli = v[i].cliente; }
+    }
+  }
+  return m;
+}
+
+function _filtraProd_(filas, q) {
+  var hayJoin = !!(q.ven || q.cli);
+  var mapa = hayJoin ? _mapaOrdenes_() : null;
+  var out = [];
+  for (var i = 0; i < filas.length; i++) {
+    var r = filas[i];
+    if (q.sem && r.semIni !== q.sem) { continue; }
+    if (q.mes && r.fecha.slice(0, 7) !== q.mes) { continue; }
+    if (q.anio && r.fecha.slice(0, 4) !== q.anio) { continue; }
+    if (q.maq && r.maquina !== q.maq) { continue; }
+    if (!_igual_(q.ope, r.operador)) { continue; }
+    if (q.mat && r.material !== q.mat) { continue; }
+    if (hayJoin) {
+      var j = (r.orden && mapa[r.orden]) || { ven: '', cli: '' };
+      if (!_igual_(q.ven, j.ven)) { continue; }
+      if (q.cli && j.cli !== q.cli) { continue; }
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+function _filtraCom_(filas, q) {
+  var out = [];
+  for (var i = 0; i < filas.length; i++) {
+    var r = filas[i];
+    if (q.sem && r.semIni !== q.sem) { continue; }
+    if (q.mes && r.fecha.slice(0, 7) !== q.mes) { continue; }
+    if (q.anio && r.fecha.slice(0, 4) !== q.anio) { continue; }
+    if (q.maq && r.maquina !== q.maq) { continue; }
+    if (q.mat && r.material !== q.mat) { continue; }
+    if (!_igual_(q.ven, r.vendedor)) { continue; }
+    if (q.cli && r.cliente !== q.cli) { continue; }
+    out.push(r);
+  }
+  return out;
+}
+
+function _claves_(mapa, desc) {
+  var arr = [];
+  for (var k in mapa) { if (mapa.hasOwnProperty(k)) { arr.push(k); } }
+  arr.sort();
+  if (desc) { arr.reverse(); }
+  return arr;
+}
+
+/* Todas las opciones de los selectores, de una sola vez, sobre los datos SIN
+   filtrar. Los selectores no se encogen al filtrar: se limpian con un clic. */
+function opcionesFiltros() {
+  var ses = _ses_();
+  _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
+  var base = _leerBase_();
+  var ven = ses.venta ? _leerVentas_() : [];
+  var sem = {}, mes = {}, anio = {}, maq = {}, ope = {}, mat = {}, cli = {}, vend = {};
+
+  function fechas(r) {
+    if (r.semIni && !sem[r.semIni]) { sem[r.semIni] = r.semana || r.semIni; }
+    if (r.fecha) { mes[r.fecha.slice(0, 7)] = true; anio[r.fecha.slice(0, 4)] = true; }
+  }
+  for (var i = 0; i < base.length; i++) {
+    var b = base[i];
+    fechas(b);
+    if (b.maquina)  { maq[b.maquina] = true; }
+    if (b.operador) { ope[b.operador] = true; }
+    if (b.material) { mat[b.material] = true; }
+  }
+  for (var j = 0; j < ven.length; j++) {
+    var v = ven[j];
+    fechas(v);
+    if (v.maquina)  { maq[v.maquina] = true; }
+    if (v.material) { mat[v.material] = true; }
+    if (v.cliente)  { cli[v.cliente] = true; }
+    if (v.vendedor) { vend[v.vendedor] = true; }
+  }
+  if (ses.venta) {
+    /* El catalogo manda: un vendedor dado de alta aparece aunque aun no tenga ventas. */
+    var cv = _leerCatalogos_().VENDEDOR || [];
+    for (var c = 0; c < cv.length; c++) { vend[cv[c]] = true; }
+  }
+  var semanas = [];
+  var ks = _claves_(sem, true);
+  for (var s = 0; s < ks.length; s++) { semanas.push({ v: ks[s], t: sem[ks[s]] }); }
+  return {
+    ses: ses, semanas: semanas, meses: _claves_(mes, true), anios: _claves_(anio, true),
+    maquinas: _claves_(maq), operadores: _claves_(ope), materiales: _claves_(mat),
+    vendedores: _claves_(vend), clientes: _claves_(cli)
+  };
+}
+
 /* ===================== API PUBLICA ===================== */
 
-function cargarTablero() {
+function cargarTablero(filtros) {
   var ses = _ses_();
   _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
   var t0 = new Date().getTime();
 
-  var filas = _leerBase_();
+  var filas = _filtraProd_(_leerBase_(), _fq_(filtros, ses));
   var semanas = _ordenSemanas_(filas);
 
   var porSem = {};
@@ -449,11 +588,13 @@ function cargarCatalogos() {
   return _leerCatalogos_();
 }
 
-function detalleSemana(semana) {
+function detalleSemana(semana, filtros) {
   var ses = _ses_();
   _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
   var s = String(semana || '');
-  var filas = _leerBase_();
+  var q = _fq_(filtros, ses);
+  q.sem = '';   /* la semana ya viene explicita */
+  var filas = _filtraProd_(_leerBase_(), q);
   var out = [];
   for (var i = 0; i < filas.length; i++) {
     if (filas[i].semana === s) { out.push(filas[i]); }
@@ -530,9 +671,11 @@ function guardarTrabajo(d) {
 
   var cats = _leerCatalogos_();
   var fecha    = _texto_(d.fecha, 10);
-  var maquina  = _enCatalogo_(cats, 'MAQUINA',  _texto_(d.maquina, 40),  true);
-  var proceso  = _enCatalogo_(cats, 'PROCESO',  _texto_(d.proceso, 40),  true);
-  var material = _enCatalogo_(cats, 'MATERIAL', _texto_(d.material, 40), true);
+  /* Los nombres de catalogo pueden ser largos (materiales de mas de 80
+     caracteres): recortarlos aqui impedia que empataran con CATALOGOS. */
+  var maquina  = _enCatalogo_(cats, 'MAQUINA',  _texto_(d.maquina, 80),  true);
+  var proceso  = _enCatalogo_(cats, 'PROCESO',  _texto_(d.proceso, 80),  true);
+  var material = _enCatalogo_(cats, 'MATERIAL', _texto_(d.material, 150), true);
   var unidad   = _enCatalogo_(cats, 'UNIDAD',   _texto_(d.unidad, 12),   true);
   var origen   = _enCatalogo_(cats, 'ORIGEN',   _texto_(d.origen, 12),   true);
   var paro     = _enCatalogo_(cats, 'MOTIVO_PARO', _texto_(d.paro, 40),  false);
@@ -544,6 +687,7 @@ function guardarTrabajo(d) {
   var merma    = _num_(d.merma);
   var cliente  = _texto_(d.cliente, 120);
   var nota     = _texto_(d.nota, 500);
+  var orden    = _texto_(d.orden, 30);
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     throw new Error('La fecha es obligatoria y va en formato yyyy-mm-dd.');
@@ -588,6 +732,7 @@ function guardarTrabajo(d) {
     reng[COL.NOTA - 1] = nota;
     reng[COL.CELDA_ORIGEN - 1] = 'CAPTURA EN APP';
     reng[COL.OBS_MIGRACION - 1] = '';
+    reng[COL.ORDEN - 1] = orden;
     reng[COL.TURNO - 1] = turno;
     reng[COL.OPERADOR - 1] = operador;
     reng[COL.REIMPRESION - 1] = reimp;
@@ -638,7 +783,7 @@ function _leerVentas_() {
     throw new Error('La hoja VENTAS supera ' + CFG.TOPE_FILAS +
       ' renglones. Hay que archivar por ano.');
   }
-  var vals = h.getRange(2, 1, ultima - 1, CV_N).getValues();
+  var vals = h.getRange(2, 1, ultima - 1, Math.min(CV_N, h.getMaxColumns())).getValues();
   var out = [];
   for (var i = 0; i < vals.length; i++) {
     var r = vals[i];
@@ -669,13 +814,13 @@ function _leerVentas_() {
       hext:     _num_(r[CV.HORAS_EXTRAS - 1]),
       otros:    _num_(r[CV.OTROS - 1]),
       carga:    _num_(r[CV.CARGA_ADMIN - 1]),
-      comercial: String(r[CV.COMERCIAL - 1] || ''),
       factura:  String(r[CV.FACTURA - 1] || ''),
       fFactura: _fecha_(r[CV.FECHA_FACTURA - 1]),
       metodo:   String(r[CV.METODO_PAGO - 1] || ''),
       cobro:    String(r[CV.ESTATUS_COBRO - 1] || ''),
       estatus:  String(r[CV.ESTATUS_MONTO - 1] || ''),
-      obs:      String(r[CV.OBS_MIGRACION - 1] || '')
+      obs:      String(r[CV.OBS_MIGRACION - 1] || ''),
+      vendedor: String(r[CV.VENDEDOR - 1] || '').trim()
     });
   }
   /* cache.put tiene tope de 100 KB por entrada: si no cabe, se relee. */
@@ -715,11 +860,6 @@ function _leerTarifas_() {
 
 function _clavePed_(f) { return f.odc || f.odp || ('F' + f.fila); }
 
-function _costoCC_(f) {
-  return _cc_(f.cMat) + _cc_(f.cMerma) + _cc_(f.maq) + _cc_(f.inst) +
-         _cc_(f.mo) + _cc_(f.hext) + _cc_(f.otros) + _cc_(f.carga);
-}
-
 function _hoyIso_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
@@ -728,171 +868,169 @@ function _diasEntre_(a, b) {
   return Math.round(Math.abs(_aDate_(a).getTime() - _aDate_(b).getTime()) / 86400000);
 }
 
-/* Acumula en un mapa {nombre: {venta, costo, m2, peds}} en centavos. El costo
-   de un renglon solo entra al margen si su PEDIDO tiene monto en alguna linea:
-   el costo de un pedido sin venta asignada distorsionaria el margen. */
-function _acumula_(mapa, nombre, f, vc, costo, entra, pedKey) {
-  var a = mapa[nombre];
-  if (!a) { a = mapa[nombre] = { venta: 0, costo: 0, m2: 0, peds: {} }; }
-  a.venta += vc;
-  if (entra) { a.costo += costo; }
-  a.m2 += _cc_(f.m2p);
-  a.peds[pedKey] = true;
+/* Filtro efectivo del area comercial: lo que elijas en la barra de COMERCIAL
+   manda sobre la barra general en esa misma dimension; si la local esta en
+   "Todas", se hereda la general. Operador no existe en VENTAS y se ignora. */
+function _filtroEfectivoCom_(fg, fl, ses) {
+  var g = _fq_(fg, ses), l = _fq_(fl, ses);
+  return {
+    sem: l.sem || g.sem, mes: l.mes || g.mes, anio: l.anio,
+    maq: g.maq, mat: g.mat, ven: l.ven || g.ven, cli: l.cli || g.cli,
+    ignorados: g.ope ? ['Operador'] : []
+  };
 }
 
-function _listaAgg_(mapa, tope, ordenPorClave) {
-  var arr = [];
-  for (var k in mapa) {
-    if (!mapa.hasOwnProperty(k)) { continue; }
-    var a = mapa[k];
-    var n = 0;
-    for (var p in a.peds) { if (a.peds.hasOwnProperty(p)) { n++; } }
-    var margen = a.venta - a.costo;
-    arr.push({ k: k, nombre: k, venta: a.venta, costo: a.costo, margen: margen,
-      m2: a.m2, pedidos: n, etiqueta: a.etiqueta });
-  }
-  if (ordenPorClave) {
-    arr.sort(function (x, y) { return x.k < y.k ? -1 : 1; });
-  } else {
-    arr.sort(function (x, y) { return y.venta - x.venta; });
-    if (tope && arr.length > tope) {
-      var resto = { k: '(OTROS ' + (arr.length - tope) + ')', venta: 0, costo: 0,
-        margen: 0, m2: 0, pedidos: 0 };
-      for (var i = tope; i < arr.length; i++) {
-        resto.venta += arr[i].venta; resto.costo += arr[i].costo;
-        resto.margen += arr[i].margen; resto.m2 += arr[i].m2; resto.pedidos += arr[i].pedidos;
-      }
-      resto.nombre = resto.k;
-      arr = arr.slice(0, tope);
-      arr.push(resto);
-    }
-  }
-  var out = [];
-  for (var j = 0; j < arr.length; j++) {
-    var r = arr[j];
-    out.push({
-      nombre: r.nombre, etiqueta: r.etiqueta || r.nombre,
-      venta: _dc_(r.venta), costo: _dc_(r.costo), margen: _dc_(r.margen),
-      margenPct: r.venta > 0 ? _r2_(r.margen / r.venta * 100) : null,
-      m2: _dc_(r.m2), pedidos: r.pedidos
-    });
-  }
-  return out;
+function _semanasEntre_(a, b) {
+  return Math.round((_aDate_(b).getTime() - _aDate_(a).getTime()) / (7 * 86400000)) + 1;
 }
 
-function cargarVentas() {
+function cargarComercial(filtrosGlobal, filtrosLocal) {
   var ses = _ses_();
   _exigeVenta_(ses, false);
   var t0 = new Date().getTime();
-  var filas = _leerVentas_();
+  var todas = _leerVentas_();
+  var q = _filtroEfectivoCom_(filtrosGlobal, filtrosLocal, ses);
+  var filas = _filtraCom_(todas, q);
   var hoy = _hoyIso_();
 
-  /* venta y costo por pedido, para decidir quien entra al margen */
+  /* venta por pedido sobre TODAS las lineas: un filtro no debe hacer creer
+     que un pedido no tiene monto cuando otra linea suya si lo trae. */
   var ventaPed = {};
-  for (var i = 0; i < filas.length; i++) {
-    var kp = _clavePed_(filas[i]);
-    ventaPed[kp] = (ventaPed[kp] || 0) + _cc_(filas[i].venta);
+  for (var i = 0; i < todas.length; i++) {
+    var kp = _clavePed_(todas[i]);
+    ventaPed[kp] = (ventaPed[kp] || 0) + _cc_(todas[i].venta);
   }
 
-  var mMes = {}, mSem = {}, mCli = {}, mMod = {}, mCom = {}, mMaq = {}, mMat = {};
-  var costoPed = {};
-  var tot = { venta: 0, costo: 0, m2: 0, costoSinVenta: 0, pendientes: 0,
-    pendConPista: 0, pendSinPista: 0, ventaFact: 0, conFactura: 0 };
-  var pedidos = {}, pedidosConMonto = {};
-  var cal = { sinFecha: 0, fechaFutura: 0, fechasDistantes: 0, sinMaterial: 0,
-    sinComercial: 0, margenNegativo: 0 };
-  var ejemplos = [], ejemplosLeves = [];
+  var tot = 0, hastaHoy = 0;
+  var peds = {}, clis = {};
+  var semV = {}, semEt = {};
+  var mMes = {}, mVen = {}, mCli = {}, venMes = {}, mesesSet = {};
+  var cal = { pendConPista: 0, pendSinPista: 0, sinVendedor: 0, fechaFutura: 0,
+    fechasDistantes: 0, sinMaterial: 0 };
+  var graves = [], leves = [];
+
+  function agg(mapa, k, vc, pk, cli) {
+    var a = mapa[k];
+    if (!a) { a = mapa[k] = { venta: 0, peds: {}, clis: {} }; }
+    a.venta += vc;
+    if (vc > 0) { a.peds[pk] = true; if (cli) { a.clis[cli] = true; } }
+  }
+  function cuenta(o) { var n = 0; for (var x in o) { if (o.hasOwnProperty(x)) { n++; } } return n; }
 
   for (var j = 0; j < filas.length; j++) {
     var f = filas[j];
     var vc = _cc_(f.venta);
-    var costo = _costoCC_(f);
     var pk = _clavePed_(f);
-    var entra = ventaPed[pk] > 0;
-    pedidos[pk] = true;
-    if (entra) { pedidosConMonto[pk] = true; costoPed[pk] = (costoPed[pk] || 0) + costo; }
-
-    tot.venta += vc;
-    tot.m2 += _cc_(f.m2p);
-    if (entra) { tot.costo += costo; } else { tot.costoSinVenta += costo; }
-    if (f.factura) { tot.conFactura++; tot.ventaFact += vc; }
-
     var motivos = [];
-    if (vc <= 0) {
-      tot.pendientes++;
-      if (ventaPed[pk] > 0) {
-        tot.pendConPista++; motivos.push('sin monto (otra linea del pedido si trae)');
-      } else {
-        tot.pendSinPista++; motivos.push('pedido sin monto');
+
+    if (vc > 0) {
+      tot += vc;
+      peds[pk] = true;
+      if (f.cliente) { clis[f.cliente] = true; }
+      if (f.fecha && f.fecha <= hoy) { hastaHoy += vc; }
+      var sk = f.semIni || f.fecha;
+      if (sk) { semV[sk] = (semV[sk] || 0) + vc; semEt[sk] = f.semana || sk; }
+      var nomVen = f.vendedor || '(SIN VENDEDOR)';
+      agg(mVen, nomVen, vc, pk, f.cliente);
+      if (!f.vendedor) { cal.sinVendedor++; motivos.push('sin vendedor'); }
+      if (f.fecha) {
+        var mk = f.fecha.slice(0, 7);
+        mesesSet[mk] = true;
+        agg(mMes, mk, vc, pk, f.cliente);
+        if (!venMes[nomVen]) { venMes[nomVen] = {}; }
+        venMes[nomVen][mk] = (venMes[nomVen][mk] || 0) + vc;
       }
+      agg(mCli, f.cliente || '(SIN DATO)', vc, pk, f.cliente);
+    } else {
+      if (ventaPed[pk] > 0) { cal.pendConPista++; motivos.push('sin monto (otra linea del pedido si trae)'); }
+      else { cal.pendSinPista++; motivos.push('pedido sin monto'); }
     }
-    if (!f.fecha) { cal.sinFecha++; motivos.push('sin fecha de venta'); }
-    else if (f.fecha > hoy) { cal.fechaFutura++; motivos.push('fecha de venta futura'); }
+    if (f.fecha > hoy) { cal.fechaFutura++; motivos.push('fecha de venta futura'); }
     if (f.fecha && f.fprod && _diasEntre_(f.fecha, f.fprod) > 90) {
       cal.fechasDistantes++; motivos.push('venta y produccion a >90 dias');
     }
-    if (f.material === '(NO REPORTADO)' || !f.material) {
-      cal.sinMaterial++; motivos.push('sin material');
-    }
-    if (!f.comercial) { cal.sinComercial++; }
+    if (f.material === '(NO REPORTADO)' || !f.material) { cal.sinMaterial++; motivos.push('sin material'); }
     if (motivos.length) {
-      /* Lo grave va primero: un renglon cuyo UNICO motivo es "sin monto pero
-         otra linea del pedido si trae" es leve y no debe enterrar al resto. */
       var leve = motivos.length === 1 && motivos[0].indexOf('otra linea') >= 0;
-      var lista = leve ? ejemplosLeves : ejemplos;
-      if (lista.length < 60) {
-        lista.push({ fila: f.fila, id: f.id, fecha: f.fecha, cliente: f.cliente,
-          proyecto: f.proyecto, venta: f.venta, motivo: motivos.join(', ') });
+      var dest = leve ? leves : graves;
+      if (dest.length < 60) {
+        dest.push({ id: f.id, fecha: f.fecha, cliente: f.cliente, proyecto: f.proyecto,
+          vendedor: f.vendedor, venta: f.venta, motivo: motivos.join(', ') });
       }
     }
-
-    if (f.fecha) {
-      _acumula_(mMes, f.fecha.slice(0, 7), f, vc, costo, entra, pk);
-      var s = f.semIni || f.fecha;
-      _acumula_(mSem, s, f, vc, costo, entra, pk);
-      if (!mSem[s].etiqueta) { mSem[s].etiqueta = f.semana || s; }
-    }
-    _acumula_(mCli, f.cliente || '(SIN DATO)', f, vc, costo, entra, pk);
-    _acumula_(mMod, f.modulo || '(SIN DATO)', f, vc, costo, entra, pk);
-    _acumula_(mCom, f.comercial || '(SIN COMERCIAL)', f, vc, costo, entra, pk);
-    _acumula_(mMaq, f.maquina || '(SIN DATO)', f, vc, costo, entra, pk);
-    _acumula_(mMat, f.material || '(SIN DATO)', f, vc, costo, entra, pk);
   }
 
-  for (var p in pedidosConMonto) {
-    if (pedidosConMonto.hasOwnProperty(p) && ventaPed[p] - (costoPed[p] || 0) < 0) {
-      cal.margenNegativo++;
-    }
+  /* ---- semana mas reciente (no futura) y promedio semanal ---- */
+  var sks = _claves_(semV, false), pasadas = [];
+  for (var s = 0; s < sks.length; s++) { if (sks[s] <= hoy) { pasadas.push(sks[s]); } }
+  var semUlt = null, promSem = null, nSem = 0;
+  if (pasadas.length) {
+    var ult = pasadas[pasadas.length - 1];
+    var prevD = new Date(_aDate_(ult).getTime() - 7 * 86400000);
+    var prevK = Utilities.formatDate(prevD, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    var vUlt = semV[ult], vPrev = semV[prevK] || 0;
+    semUlt = { etiqueta: semEt[ult], venta: _dc_(vUlt),
+      vsAnterior: vPrev > 0 ? _r2_((vUlt / vPrev - 1) * 100) : null };
+    nSem = _semanasEntre_(pasadas[0], ult);
+    promSem = _r2_(_dc_(hastaHoy) / nSem);
   }
-  var nPed = 0, nPedMonto = 0;
-  for (var a in pedidos) { if (pedidos.hasOwnProperty(a)) { nPed++; } }
-  for (var b in pedidosConMonto) { if (pedidosConMonto.hasOwnProperty(b)) { nPedMonto++; } }
+  var nPed = cuenta(peds);
 
-  var margen = tot.venta - tot.costo;
-  var total = {
-    venta: _dc_(tot.venta), costo: _dc_(tot.costo), margen: _dc_(margen),
-    margenPct: tot.venta > 0 ? _r2_(margen / tot.venta * 100) : null,
-    pedidos: nPed, pedidosConMonto: nPedMonto, lineas: filas.length,
-    ticket: nPedMonto > 0 ? _r2_(_dc_(tot.venta) / nPedMonto) : null,
-    m2: _dc_(tot.m2), costoSinVenta: _dc_(tot.costoSinVenta),
-    pendientes: tot.pendientes, pendConPista: tot.pendConPista,
-    pendSinPista: tot.pendSinPista,
-    ventaFacturada: _dc_(tot.ventaFact), porFacturar: _dc_(tot.venta - tot.ventaFact),
-    conFactura: tot.conFactura
-  };
+  function lista(mapa, ordenarPor) {
+    var arr = [];
+    for (var k in mapa) {
+      if (!mapa.hasOwnProperty(k)) { continue; }
+      var a = mapa[k], np = cuenta(a.peds);
+      arr.push({ nombre: k, venta: _dc_(a.venta), pct: tot > 0 ? _r2_(a.venta / tot * 100) : 0,
+        pedidos: np, clientes: cuenta(a.clis), ticket: np > 0 ? _r2_(_dc_(a.venta) / np) : null });
+    }
+    arr.sort(ordenarPor === 'clave'
+      ? function (x, y) { return x.nombre < y.nombre ? -1 : 1; }
+      : function (x, y) { return y.venta - x.venta; });
+    return arr;
+  }
 
-  /* semanas ordenadas por fecha de inicio (la clave ES la fecha) */
+  var historico = lista(mMes, 'clave');
+  for (var h = 0; h < historico.length; h++) {
+    var antes = h > 0 ? historico[h - 1].venta : 0;
+    historico[h].varPct = antes > 0 ? _r2_((historico[h].venta / antes - 1) * 100) : null;
+  }
+  var meses = _claves_(mesesSet, false);
+  var vendedores = lista(mVen, 'venta');
+  var matriz = [];
+  for (var v = 0; v < vendedores.length; v++) {
+    var nm = vendedores[v].nombre, val = [], tt = 0;
+    for (var m = 0; m < meses.length; m++) {
+      var c = (venMes[nm] && venMes[nm][meses[m]]) || 0;
+      val.push(_dc_(c)); tt += c;
+    }
+    matriz.push({ nombre: nm, val: val, total: _dc_(tt) });
+  }
+  var clientes = lista(mCli, 'venta');
+  if (clientes.length > 12) {
+    var resto = { nombre: '(OTROS ' + (clientes.length - 12) + ')', venta: 0, pct: 0, pedidos: 0, clientes: 0, ticket: null };
+    for (var r = 12; r < clientes.length; r++) {
+      resto.venta += clientes[r].venta; resto.pct += clientes[r].pct; resto.pedidos += clientes[r].pedidos;
+    }
+    resto.venta = _r2_(resto.venta); resto.pct = _r2_(resto.pct);
+    clientes = clientes.slice(0, 12); clientes.push(resto);
+  }
+
   return {
     ses: ses,
-    total: total,
-    porMes: _listaAgg_(mMes, 0, true),
-    porSemana: _listaAgg_(mSem, 0, true),
-    porCliente: _listaAgg_(mCli, 12, false),
-    porModulo: _listaAgg_(mMod, 0, false),
-    porComercial: _listaAgg_(mCom, 0, false),
-    porMaquina: _listaAgg_(mMaq, 0, false),
-    porMaterial: _listaAgg_(mMat, 12, false),
-    calidad: { c: cal, ejemplos: ejemplos.concat(ejemplosLeves).slice(0, 80) },
+    ignorados: q.ignorados,
+    kpi: {
+      venta: _dc_(tot), pedidos: nPed, clientes: cuenta(clis),
+      ticket: nPed > 0 ? _r2_(_dc_(tot) / nPed) : null,
+      semUltima: semUlt, promSemanal: promSem, nSemanas: nSem
+    },
+    porVendedor: vendedores,
+    meses: meses,
+    comparativo: matriz,
+    historico: historico,
+    porCliente: clientes,
+    calidad: { c: cal, ejemplos: graves.concat(leves).slice(0, 80) },
+    lineas: filas.length,
     ms: new Date().getTime() - t0
   };
 }
@@ -909,7 +1047,7 @@ function cargarCatalogosVenta() {
     if (filas[i].maquina && filas[i].maquina !== '(NO REPORTADA)') { maq[filas[i].maquina] = true; }
   }
   return {
-    MODULO: cats.MODULO || [], COMERCIAL: cats.COMERCIAL || [],
+    MODULO: cats.MODULO || [], VENDEDOR: cats.VENDEDOR || [],
     METODO_PAGO: cats.METODO_PAGO || [], ESTATUS_COBRO: cats.ESTATUS_COBRO || [],
     TIPO_PROYECTO: cats.TIPO_PROYECTO || [],
     MATERIAL: tar.nombres, CARGA_M2: tar.carga,
@@ -948,8 +1086,8 @@ function listarVentas(filtro) {
     res.push({
       id: o.id, fecha: o.fecha, odc: o.odc, odp: o.odp, cliente: o.cliente,
       modulo: o.modulo, proyecto: o.proyecto, venta: o.venta,
-      costo: _dc_(_costoCC_(o)), factura: o.factura, fFactura: o.fFactura,
-      metodo: o.metodo, cobro: o.cobro, comercial: o.comercial,
+      factura: o.factura, fFactura: o.fFactura,
+      metodo: o.metodo, cobro: o.cobro, vendedor: o.vendedor,
       pendiente: !(o.venta > 0), obs: o.obs
     });
   }
@@ -972,7 +1110,7 @@ function guardarVenta(d) {
   var maquina  = _texto_(d.maquina, 80);
   var modulo   = _enCatalogo_(cats, 'MODULO',        _texto_(d.modulo, 30),   true);
   var tipo     = _enCatalogo_(cats, 'TIPO_PROYECTO', _texto_(d.tipo, 30),     false);
-  var comercial = _enCatalogo_(cats, 'COMERCIAL',    _texto_(d.comercial, 40), false);
+  var vendedor = _enCatalogo_(cats, 'VENDEDOR',      _texto_(d.vendedor, 60),  false);
   var metodo   = _enCatalogo_(cats, 'METODO_PAGO',   _texto_(d.metodo, 30),   false);
   var cobro    = _enCatalogo_(cats, 'ESTATUS_COBRO', _texto_(d.cobro, 30),    false);
   var factura  = _texto_(d.factura, 30);
@@ -1051,7 +1189,7 @@ function guardarVenta(d) {
     reng[CV.HORAS_EXTRAS - 1] = hext;
     reng[CV.OTROS - 1] = otros;
     reng[CV.CARGA_ADMIN - 1] = carga;
-    reng[CV.COMERCIAL - 1] = comercial;
+    reng[CV.VENDEDOR - 1] = vendedor;
     reng[CV.FACTURA - 1] = factura;
     reng[CV.METODO_PAGO - 1] = metodo;
     reng[CV.ESTATUS_COBRO - 1] = cobro || (factura ? 'FACTURADO' : '');
@@ -1140,10 +1278,10 @@ function actualizarVenta(d) {
       h.getRange(fila, CV.ESTATUS_COBRO).setValue(co);
       cambios.push('cobro=' + co);
     }
-    if (d.comercial !== undefined) {
-      var cm = _enCatalogo_(cats, 'COMERCIAL', _texto_(d.comercial, 40), false);
-      h.getRange(fila, CV.COMERCIAL).setValue(cm);
-      cambios.push('comercial=' + cm);
+    if (d.vendedor !== undefined) {
+      var vd = _enCatalogo_(cats, 'VENDEDOR', _texto_(d.vendedor, 60), false);
+      h.getRange(fila, CV.VENDEDOR).setValue(vd);
+      cambios.push('vendedor=' + vd);
     }
     if (!cambios.length) { throw new Error('No hay nada que actualizar.'); }
 
@@ -1165,6 +1303,7 @@ function onOpen() {
       .addItem('Abrir tablero', 'abrirTablero')
       .addSeparator()
       .addItem('Instalar / verificar hojas', 'instalar')
+      .addItem('Vincular produccion con ventas (ORDEN)', 'vincularOrdenes')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
@@ -1193,28 +1332,40 @@ function instalar() {
 
   var base = ss.getSheetByName(CFG.HOJA_BASE);
   if (!base) {
-    throw new Error('No encuentro la hoja BASE. Este script va dentro\n' +
-      'del Sheet de la plantilla.');
+    /* Una instalacion nueva no tiene BASE todavia: se crea vacia con sus
+       encabezados. Si el script esta pegado en el Sheet equivocado, aqui se
+       nota porque faltaran tambien CATALOGOS y las demas hojas. */
+    base = ss.insertSheet(CFG.HOJA_BASE);
+    base.setFrozenRows(1);
+    hechos.push('Hoja BASE creada vacia.');
   }
-  /* La migracion de esquema va ANTES de verificar encabezados: una hoja v1
-     con datos tiene 17 encabezados y la verificacion de 20 la rechazaria. */
-  migrarEsquema(base);
+  var ven = ss.getSheetByName(CFG.HOJA_VENTAS);
+  if (!ven) { ven = ss.insertSheet(CFG.HOJA_VENTAS); hechos.push('Hoja VENTAS creada.'); }
+
+  /* Una hoja importada trae solo las columnas del esquema con que se migro:
+     se agregan las que falten ANTES de tocar encabezados. */
+  _aseguraColumnas_(base, COL_N);
+  _aseguraColumnas_(ven, CV_N);
+  /* La migracion de esquema va ANTES de verificar encabezados: una hoja vieja
+     con datos tiene menos encabezados y la verificacion la rechazaria. */
+  migrarEsquema(base, ven);
   hechos.push(migrarEncabezados(base, ENCABEZADOS_BASE));
 
   var cat = ss.getSheetByName(CFG.HOJA_CATALOGOS);
   if (!cat) { throw new Error('No encuentro la hoja CATALOGOS.'); }
   hechos.push(asegurarCatalogosVenta(cat));
+  hechos.push(fusionarCatalogosProduccion(ss, cat));
 
-  /* Esquema 3: VENTAS y TARIFAS. Si ya importaste la migracion, solo se
-     verifican los encabezados; si no existen, se crean vacias. */
-  var ven = ss.getSheetByName(CFG.HOJA_VENTAS);
-  if (!ven) { ven = ss.insertSheet(CFG.HOJA_VENTAS); hechos.push('Hoja VENTAS creada.'); }
+  /* VENTAS y TARIFAS. Si ya importaste la migracion, solo se verifican los
+     encabezados; si no existen, se crean vacias. */
   hechos.push(migrarEncabezados(ven, ENCABEZADOS_VENTAS));
   ven.setFrozenRows(1);
+  hechos.push(_validaVendedor_(ven, cat));
   var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
   if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
   hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
   tar.setFrozenRows(1);
+  hechos.push(_vincularOrdenes_());
 
   var bit = ss.getSheetByName(CFG.HOJA_BITACORA);
   if (!bit) {
@@ -1263,6 +1414,120 @@ function asegurarCatalogosVenta(cat) {
     : 'Catalogos de venta ya existian.';
 }
 
+function fusionarCatalogosProduccion(ss, cat) {
+  /* Si importaste la hoja CATALOGOS_PRODUCCION (la trae BASE_migracion.xlsx),
+     sus valores se AGREGAN a CATALOGOS: columnas que falten y valores que no
+     existan. Nunca se borra ni se cambia nada de lo que ya hay. */
+  var src = ss.getSheetByName('CATALOGOS_PRODUCCION');
+  if (!src) { return 'Sin hoja CATALOGOS_PRODUCCION: catalogos de produccion sin cambios.'; }
+  var ult = src.getLastRow(), anc = src.getLastColumn();
+  if (ult < 2 || anc < 1) { return 'CATALOGOS_PRODUCCION esta vacia.'; }
+  var datos = src.getRange(1, 1, ult, anc).getValues();
+  var agregados = [];
+  for (var c = 0; c < anc; c++) {
+    var nombre = String(datos[0][c] || '').trim().toUpperCase();
+    if (!nombre) { continue; }
+    var ancho = Math.max(cat.getLastColumn(), 1);
+    var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
+    var col = 0;
+    for (var k = 0; k < encab.length; k++) {
+      if (String(encab[k] || '').trim().toUpperCase() === nombre) { col = k + 1; break; }
+    }
+    if (!col) {
+      col = encab.join('') === '' ? 1 : ancho + 1;
+      cat.getRange(1, col).setValue(nombre);
+    }
+    var alto = Math.max(cat.getLastRow(), 1);
+    var actuales = cat.getRange(1, col, alto, 1).getValues();
+    var existen = {};
+    var ultima = 1;
+    for (var r = 1; r < actuales.length; r++) {
+      var v = String(actuales[r][0] || '').trim();
+      if (v) { existen[v.toUpperCase()] = true; ultima = r + 1; }
+    }
+    var nuevos = [];
+    for (var f = 1; f < datos.length; f++) {
+      var x = String(datos[f][c] || '').trim();
+      if (x && !existen[x.toUpperCase()]) { existen[x.toUpperCase()] = true; nuevos.push([x]); }
+    }
+    if (nuevos.length) {
+      cat.getRange(ultima + 1, col, nuevos.length, 1).setValues(nuevos);
+      agregados.push(nombre + ' (+' + nuevos.length + ')');
+    }
+  }
+  return agregados.length
+    ? 'Catalogos de produccion fusionados: ' + agregados.join(', ') + '.'
+    : 'Catalogos de produccion ya estaban completos.';
+}
+
+function _aseguraColumnas_(hoja, n) {
+  var max = hoja.getMaxColumns();
+  if (max < n) { hoja.insertColumnsAfter(max, n - max); }
+}
+
+/* La columna VENDEDOR de VENTAS se captura a mano en el Sheet: se le pone una
+   lista desplegable que lee del catalogo, asi no se escriben nombres
+   distintos para la misma persona y un vendedor nuevo (alta en CATALOGOS,
+   columna VENDEDOR) aparece solo en la lista. */
+function _validaVendedor_(ven, cat) {
+  try {
+    var ancho = Math.max(cat.getLastColumn(), 1);
+    var encab = cat.getRange(1, 1, 1, ancho).getValues()[0];
+    var col = 0;
+    for (var i = 0; i < encab.length; i++) {
+      if (String(encab[i] || '').trim().toUpperCase() === 'VENDEDOR') { col = i + 1; break; }
+    }
+    if (!col) { return 'No hay columna VENDEDOR en CATALOGOS: lista desplegable sin crear.'; }
+    var filas = Math.max(ven.getMaxRows() - 1, 1);
+    var regla = SpreadsheetApp.newDataValidation()
+      .requireValueInRange(cat.getRange(2, col, 300, 1), true)
+      .setAllowInvalid(false)
+      .setHelpText('Elige un vendedor de la lista. Para agregar uno nuevo, anadelo en CATALOGOS, columna VENDEDOR.')
+      .build();
+    ven.getRange(2, CV.VENDEDOR, filas, 1).setDataValidation(regla);
+    return 'Lista desplegable de VENDEDOR lista en VENTAS.';
+  } catch (e) {
+    return 'No se pudo crear la lista desplegable de VENDEDOR: ' + e.message;
+  }
+}
+
+/* Rellena ORDEN en BASE a partir de VENTAS: ambos renglones nacieron de la
+   misma celda del Excel original (CELDA_ORIGEN), asi que empatan sin
+   adivinar. Solo escribe donde ORDEN esta vacio. Se puede correr las veces
+   que sea necesario. */
+function _vincularOrdenes_() {
+  var base = _hoja_(CFG.HOJA_BASE), ven = _hoja_(CFG.HOJA_VENTAS);
+  var ub = base.getLastRow(), uv = ven.getLastRow();
+  if (ub < 2 || uv < 2) { return 'Vinculo ORDEN: sin datos en BASE o VENTAS todavia.'; }
+  var vv = ven.getRange(2, 1, uv - 1, Math.min(CV_N, ven.getMaxColumns())).getValues();
+  var porCelda = {};
+  for (var i = 0; i < vv.length; i++) {
+    var celda = String(vv[i][CV.CELDA_ORIGEN - 1] || '').trim();
+    var orden = String(vv[i][CV.ODC - 1] || vv[i][CV.ODP - 1] || '').trim();
+    if (celda && orden) { porCelda[celda] = orden; }
+  }
+  var bv = base.getRange(2, 1, ub - 1, Math.min(COL_N, base.getMaxColumns())).getValues();
+  var out = [], nuevos = 0;
+  for (var j = 0; j < bv.length; j++) {
+    var actual = String(bv[j][COL.ORDEN - 1] || '').trim();
+    var cb = String(bv[j][COL.CELDA_ORIGEN - 1] || '').trim();
+    if (!actual && cb && porCelda[cb]) { out.push([porCelda[cb]]); nuevos++; }
+    else { out.push([bv[j][COL.ORDEN - 1] === undefined ? '' : bv[j][COL.ORDEN - 1]]); }
+  }
+  if (nuevos) {
+    base.getRange(2, COL.ORDEN, out.length, 1).setValues(out);
+    CacheService.getScriptCache().removeAll(['base_v' + JG_SELLO.esquema + '_' + ub]);
+  }
+  return 'Vinculo ORDEN: ' + nuevos + ' renglones de produccion ligados a su venta.';
+}
+
+function vincularOrdenes() {
+  var msg = _vincularOrdenes_();
+  _bitacora_(_correoSeguro_(), 'VINCULO_ORDENES', msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) {}
+  return msg;
+}
+
 function migrarEncabezados(hoja, esperados) {
   /* Migracion EXPLICITA. "Crear la hoja si no existe" miente: una hoja que
      ya existe con encabezados viejos pasa la prueba y luego el codigo nuevo
@@ -1286,7 +1551,7 @@ function migrarEncabezados(hoja, esperados) {
   return 'Encabezados de "' + hoja.getName() + '" escritos.';
 }
 
-function migrarEsquema(base) {
+function migrarEsquema(base, ven) {
   var props = PropertiesService.getScriptProperties();
   var actual = Number(props.getProperty('esquema') || 0);
   if (actual === 0) { props.setProperty('esquema', '1'); actual = 1; }
@@ -1309,6 +1574,21 @@ function migrarEsquema(base) {
        solo se registra el peldano. */
     props.setProperty('esquema', '3');
     actual = 3;
+  }
+  if (actual < 4) {
+    /* v3 -> v4: ORDEN al final de BASE y VENDEDOR al final de VENTAS. Solo se
+       escribe el encabezado si la celda esta vacia. Los renglones viejos
+       quedan en blanco; ORDEN se rellena con vincularOrdenes(). */
+    if (base) {
+      var cb = base.getRange(1, COL.ORDEN);
+      if (!cb.getValue()) { cb.setValue('ORDEN'); }
+    }
+    if (ven) {
+      var cv = ven.getRange(1, CV.VENDEDOR);
+      if (!cv.getValue()) { cv.setValue('VENDEDOR'); }
+    }
+    props.setProperty('esquema', '4');
+    actual = 4;
   }
   /* Peldanos futuros van aqui, siempre con if (actual < n), nunca de un salto:
      una instalacion puede estar dos o tres versiones atras. */
