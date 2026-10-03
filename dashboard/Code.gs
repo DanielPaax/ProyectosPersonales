@@ -1743,6 +1743,11 @@ function corregirViniEd271() {
 
 var PROP_SOCIOS = 'socios_v1';
 
+/* URL de la implementacion VIGENTE (la que termina en /exec). Si la dejas
+   vacia, el script intenta adivinarla y puede devolver la de una implementacion
+   vieja. Fijala aqui para que los enlaces de socio siempre salgan bien. */
+var URL_APP = 'https://script.google.com/macros/s/AKfycbzco9rPCdSozk7YZfJ13qBjGx8_bZ_39rc3Q73LoB-Hn0mh7yKMsiToZyqlQXM5wXjU_A/exec';
+
 function _hash_(t) {
   var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(t), Utilities.Charset.UTF_8);
   var s = '';
@@ -1803,6 +1808,7 @@ function _crearAccesoSocio_(nombre, dias) {
    Quitando "/a/macros/DOMINIO" queda https://script.google.com/macros/s/ID/exec,
    que abre para cualquier persona si la implementacion lo permite. */
 function _urlPublica_() {
+  if (URL_APP) { return URL_APP; }
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
   return url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
