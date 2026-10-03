@@ -241,6 +241,8 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 .hmenu a{display:block; padding:10px 14px; font-weight:700; border-radius:7px; cursor:pointer; color:var(--navy); font-size:12.5px; letter-spacing:.1em}
 .hmenu a:hover{background:var(--teal-l); color:var(--teal-d)}
 .area{scroll-margin-top:150px}
+/* Solo lectura (socios y lectores): nada que edite se muestra. El servidor ademas lo rechaza. */
+body.sololectura .edit{display:none !important}
 .av{display:inline-flex; width:28px; height:28px; border-radius:50%; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:700; margin-right:10px; vertical-align:middle}
 #tVenV td{padding:12px 14px}
 #tVenV td:first-child{white-space:nowrap}
@@ -606,6 +608,9 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 </div>
 
 <script>
+/* Clave del enlace personal de un socio (?k=...); vacia para quien entra con su cuenta. Solo se
+   reenvia en las consultas de LECTURA: ninguna operacion que escriba la acepta. */
+var CLAVE = <?!= clave ?>;
 var D = null;        /* ultimo tablero recibido */
 var CATS = null;     /* catalogos de captura de trabajo */
 var CATSt = 0;       /* cuando se pidieron: se vuelven a pedir pasado 1 minuto */
@@ -837,6 +842,7 @@ function limpiaG(){
 }
 function areas(){
   var v = OP.ses.venta;
+  document.body.className = (OP.ses.rol === 'CAPTURA' || OP.ses.rol === 'MASTER') ? '' : 'sololectura';
   document.getElementById('comBody').style.display = v ? '' : 'none';
   /* Sin permiso NO se oculta en silencio: se explica por que y como arreglarlo. */
   document.getElementById('comAviso').innerHTML = v ? '' :
@@ -916,7 +922,7 @@ function init(){
       if (o.ses.venta) { pedirCom(true); }
     })
     .withFailureHandler(fallaInicial)
-    .opcionesFiltros();
+    .opcionesFiltros(CLAVE);
 }
 /* Tras guardar algo: opciones nuevas (un cliente nuevo, un mes nuevo) y ambas areas. */
 function recarga(){
@@ -927,7 +933,7 @@ function recarga(){
       if (o.ses.venta) { pedirCom(true); }
     })
     .withFailureHandler(fallaInicial)
-    .opcionesFiltros();
+    .opcionesFiltros(CLAVE);
 }
 function refrescar(){
   if (!OP) { return init(); }
@@ -945,7 +951,7 @@ function pedir(primera, silencioso){
       if (!primera && !silencioso) { toast('Tablero actualizado en ' + res.ms + ' ms', 'ok'); }
     })
     .withFailureHandler(fallaInicial)
-    .cargarTablero(FG, SUB);
+    .cargarTablero(FG, SUB, CLAVE);
 }
 
 /* =====================================================================
@@ -1451,7 +1457,7 @@ function verSemana(sem){
         '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
       toast(m, 'err');
     })
-    .detalleSemana(sem, FG, SUB);
+    .detalleSemana(sem, FG, SUB, CLAVE);
 }
 
 /* ---------- captura ---------- */
@@ -1615,7 +1621,7 @@ function pedirCom(primera, silencioso){
         '<div class="aviso err"><span><b>No se pudo cargar el area comercial.</b><br>' + esc(m) + '</span></div>';
       toast(m, 'err');
     })
-    .cargarComercial(FG);
+    .cargarComercial(FG, CLAVE);
 }
 
 function pintarCom(){
@@ -1756,7 +1762,7 @@ function pintarCom(){
       var e = ej[i];
       h += '<tr><td>' + e.id + '</td><td>' + esc(e.fecha || 'sin fecha') + '</td><td class="izq">' + esc(e.cliente) +
            '</td><td class="izq">' + esc(e.proyecto) + '</td><td class="izq">' + esc(e.vendedor) + '</td>' + cm(e.venta) +
-           '<td class="ancho">' + esc(e.motivo) + '</td><td><button class="link" onclick="editarVenta(' + e.id + ')">editar</button></td></tr>';
+           '<td class="ancho">' + esc(e.motivo) + '</td><td><button class="link edit" onclick="editarVenta(' + e.id + ')">editar</button></td></tr>';
     }
     document.getElementById('tAleV').innerHTML = h + '</tbody>';
   }
@@ -1922,7 +1928,7 @@ function buscarV(){
              '<td class="izq">' + esc(r.odc || r.odp) + '</td><td class="izq">' + esc(r.vendedor) + '</td>' +
              (r.pendiente ? '<td><span class="chip dn">pendiente</span></td>' : cm(r.venta)) +
              '<td>' + esc(r.factura) + '</td><td>' + esc(r.cobro) + '</td>' +
-             '<td><button class="link" onclick="editarVenta(' + r.id + ')">editar</button></td></tr>';
+             '<td><button class="link edit" onclick="editarVenta(' + r.id + ')">editar</button></td></tr>';
       }
       if (res.total > res.filas.length) {
         h += '<tr><td class="vacio" colspan="10">Se muestran ' + res.filas.length + ' de ' + res.total +
@@ -1935,7 +1941,7 @@ function buscarV(){
       document.getElementById('tProyV').innerHTML = '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
       toast(m, 'err');
     })
-    .listarVentas({ q: val('qV'), soloPendientes: document.getElementById('soloPendV').checked });
+    .listarVentas({ q: val('qV'), soloPendientes: document.getElementById('soloPendV').checked }, CLAVE);
 }
 function editarVenta(id){
   if (LV[id]) { return conCatalogosV(function(){ mostrarEdit(LV[id]); }); }
@@ -1953,7 +1959,7 @@ function editarVenta(id){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudo buscar', 'err');
     })
-    .listarVentas({ id: id });
+    .listarVentas({ id: id }, CLAVE);
 }
 function mostrarEdit(r){
   editId = r.id;

@@ -1,7 +1,7 @@
 var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
-  version:  '1.5.0',
+  version:  '1.6.0',
   liberada: '2026-10-02',
   esquema:  6
 };
@@ -29,7 +29,12 @@ var ROLES = {
   /* Venta, costos y margen son sensibles: NO los ve todo el dominio.
      Solo MASTER y los correos de esta lista abren la seccion de Venta.
      Para capturar venta ademas se necesita rol CAPTURA o MASTER. */
-  VENTAS:  ['eduardo.gongora@gpowib.com', 'danielpaax@gmail.com']
+  VENTAS:  ['eduardo.gongora@gpowib.com', 'danielpaax@gmail.com'],
+  /* SOCIOS: ven TODO (produccion, comercial y costos) pero NO modifican nada.
+     Aqui solo sirve el correo de quien Google SI logra identificar (mismo
+     Workspace que el dueño). Para socios con Gmail u otro dominio se usan los
+     enlaces personales: menu Produccion > Socios (solo lectura). */
+  SOCIOS:  []
 };
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
@@ -95,9 +100,21 @@ var PROCESOS_IMPRESION = ['IMPRESION GRAN FORMATO', 'IMPRESION HD', 'IMPRESION U
 
 /* ===================== ENTRADA ===================== */
 
-function doGet() {
+function doGet(e) {
+  var k = (e && e.parameter && e.parameter.k) ? String(e.parameter.k) : '';
+  /* Un enlace de socio invalido, revocado o vencido no abre el tablero (salvo
+     que quien lo abre ya tenga un rol propio por correo). */
+  if (k && !_socioPorClave_(k) && !_rolPorCorreo_(_correoActual_())) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:Arial;max-width:480px;margin:12vh auto;padding:0 18px;color:#18303C">' +
+      '<h2>Enlace no válido</h2><p>Este enlace es incorrecto, fue revocado o ya venció. ' +
+      'Pide uno nuevo a quien administra el tablero.</p></div>')
+      .setTitle(JG_SELLO.nombre).addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   var t = HtmlService.createTemplateFromFile('index');
   t.sello = JG_SELLO;
+  /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
+  t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
   return t.evaluate()
     .setTitle(JG_SELLO.nombre)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -113,21 +130,37 @@ function incluir(nombre) {
    Ocultar un boton en el HTML no es control de acceso: google.script.run
    expone toda funcion global y se puede llamar desde la consola. */
 
-function _ses_() {
-  var correo = '';
-  try { correo = String(Session.getActiveUser().getEmail() || ''); } catch (e) { correo = ''; }
-  correo = correo.toLowerCase().trim();
-  if (!correo) {
-    /* Pasa cuando el despliegue no exige dominio, o el usuario esta fuera
-       del Workspace del propietario. Sin correo no hay sesion. */
-    throw new Error('No se pudo identificar tu cuenta. Abre la aplicacion\n' +
-      'con tu cuenta del dominio.');
+/* Rol que le toca a un correo; null si no esta en ninguna lista. */
+function _rolPorCorreo_(correo) {
+  if (!correo) { return null; }
+  if (_enLista_(ROLES.MASTER, correo))  { return 'MASTER'; }
+  if (_enLista_(ROLES.CAPTURA, correo)) { return 'CAPTURA'; }
+  if (_enLista_(ROLES.SOCIOS, correo))  { return 'SOCIO'; }
+  if (_enLista_(ROLES.VENTAS, correo))  { return 'LECTOR'; }
+  return null;
+}
+
+/* Identidad y rol, SIEMPRE en el servidor. `clave` es el enlace personal de un
+   socio; solo la reciben las consultas de LECTURA: nada que escriba la acepta,
+   asi que una clave jamas permite modificar datos. */
+function _ses_(clave) {
+  var correo = _correoActual_();
+  var rolCorreo = _rolPorCorreo_(correo);
+  if (rolCorreo) {
+    var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo);
+    return { correo: correo, rol: rolCorreo, venta: venta };
   }
-  var rol = 'LECTOR';
-  if (_enLista_(ROLES.CAPTURA, correo)) { rol = 'CAPTURA'; }
-  if (_enLista_(ROLES.MASTER, correo))  { rol = 'MASTER'; }
-  var venta = (rol === 'MASTER') || _enLista_(ROLES.VENTAS, correo);
-  return { correo: correo, rol: rol, venta: venta };
+  if (clave) {
+    var socio = _socioPorClave_(clave);
+    if (socio) { return { correo: socio.n + ' (socio)', rol: 'SOCIO', venta: true, porClave: true }; }
+  }
+  if (!correo) {
+    /* Pasa cuando Google no entrega el correo: el usuario esta fuera del
+       Workspace del dueño. Sin correo ni enlace personal no hay sesion. */
+    throw new Error('No se pudo identificar tu cuenta. Si eres socio, abre el enlace personal que te enviaron ' +
+      '(termina en ?k=...). Si trabajas en la empresa, abre la aplicacion con tu cuenta del dominio.');
+  }
+  return { correo: correo, rol: 'LECTOR', venta: false };
 }
 
 function _enLista_(lista, correo) {
@@ -551,9 +584,10 @@ function _claves_(mapa, desc) {
 
 /* Todas las opciones de los selectores, de una sola vez, sobre los datos SIN
    filtrar. Los selectores no se encogen al filtrar: se limpian con un clic. */
-function opcionesFiltros() {
-  var ses = _ses_();
-  _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
+function opcionesFiltros(clave) {
+  var ses = _ses_(clave);
+  _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
+  if (ses.porClave) { _bitacora_(ses.correo, 'ACCESO_SOCIO', 'consulta por enlace personal'); }
   var base = _leerBase_();
   var ven = ses.venta ? _leerVentas_() : [];
   var sem = {}, mes = {}, anio = {}, maq = {}, ope = {}, mat = {}, cli = {}, vend = {};
@@ -833,9 +867,9 @@ function _costosProd_(q, prod) {
 
 /* ===================== API PUBLICA ===================== */
 
-function cargarTablero(filtros, sub) {
-  var ses = _ses_();
-  _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
+function cargarTablero(filtros, sub, clave) {
+  var ses = _ses_(clave);
+  _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var t0 = new Date().getTime();
   var q = _fq_(filtros, ses);
   var base = _filtraProd_(_leerBase_(), q);
@@ -870,9 +904,9 @@ function cargarCatalogos() {
   return _leerCatalogos_();
 }
 
-function detalleSemana(semana, filtros, sub) {
-  var ses = _ses_();
-  _exigeRol_(ses, ['LECTOR', 'CAPTURA', 'MASTER']);
+function detalleSemana(semana, filtros, sub, clave) {
+  var ses = _ses_(clave);
+  _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var s = String(semana || '');
   var q = _fq_(filtros, ses);
   q.sem = [];   /* la semana ya viene explicita */
@@ -1189,8 +1223,8 @@ function _semanasEntre_(a, b) {
   return Math.round((_aDate_(b).getTime() - _aDate_(a).getTime()) / (7 * 86400000)) + 1;
 }
 
-function cargarComercial(filtrosGlobal) {
-  var ses = _ses_();
+function cargarComercial(filtrosGlobal, clave) {
+  var ses = _ses_(clave);
   _exigeVenta_(ses, false);
   var t0 = new Date().getTime();
   var todas = _leerVentas_();
@@ -1366,8 +1400,8 @@ function cargarCatalogosVenta() {
 }
 
 /* Lista de proyectos para buscar y editar. Maximo 300, los mas recientes. */
-function listarVentas(filtro) {
-  var ses = _ses_();
+function listarVentas(filtro, clave) {
+  var ses = _ses_(clave);
   _exigeVenta_(ses, false);
   var q = String((filtro && filtro.q) || '').toUpperCase().trim();
   var soloPend = !!(filtro && filtro.soloPendientes);
@@ -1695,6 +1729,136 @@ function corregirViniEd271() {
   }
 }
 
+/* ===================== SOCIOS: SOLO LECTURA, POR ENLACE PERSONAL ===================== */
+/* Un socio ve TODO el tablero (produccion, comercial y costos) pero no puede
+   modificar nada ni toca jamas la hoja de calculo: abre la app con su enlace
+   personal, que termina en ?k=<clave>.
+   Por que una clave y no el correo: Google solo le entrega al script el correo
+   de quien abre una app web "ejecutada como yo" si esa persona es el dueño o
+   esta en su mismo Google Workspace. Un socio con Gmail u otro dominio llegaria
+   con el correo VACIO y no se le podria reconocer.
+   Las claves viven en las propiedades del script (no en la hoja) y se guarda
+   solo su huella SHA-256: ni leyendo el script se pueden recuperar. Cada
+   enlace se puede revocar y puede vencer. */
+
+var PROP_SOCIOS = 'socios_v1';
+
+function _hash_(t) {
+  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(t), Utilities.Charset.UTF_8);
+  var s = '';
+  for (var i = 0; i < b.length; i++) {
+    var x = (b[i] < 0 ? b[i] + 256 : b[i]).toString(16);
+    s += (x.length < 2 ? '0' : '') + x;
+  }
+  return s;
+}
+
+function _leerSocios_() {
+  var r = PropertiesService.getScriptProperties().getProperty(PROP_SOCIOS);
+  try { return r ? JSON.parse(r) : {}; } catch (e) { return {}; }
+}
+
+function _guardaSocios_(o) {
+  PropertiesService.getScriptProperties().setProperty(PROP_SOCIOS, JSON.stringify(o));
+}
+
+/* Devuelve el socio dueño de la clave, o null si no existe, esta revocada o vencio. */
+function _socioPorClave_(clave) {
+  clave = String(clave || '');
+  if (clave.length < 40 || clave.length > 200) { return null; }
+  var s = _leerSocios_()[_hash_(clave)];
+  if (!s) { return null; }
+  if (s.v && s.v < _hoyIso_()) { return null; }
+  return s;
+}
+
+function _correoActual_() {
+  var c = '';
+  try { c = String(Session.getActiveUser().getEmail() || ''); } catch (e) { c = ''; }
+  return c.toLowerCase().trim();
+}
+
+function _crearAccesoSocio_(nombre, dias) {
+  nombre = _texto_(nombre, 60);
+  if (!nombre) { throw new Error('Falta el nombre del socio.'); }
+  var clave = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  var vence = '';
+  if (dias > 0) {
+    var d = new Date();
+    d.setDate(d.getDate() + Math.floor(dias));
+    vence = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  var socios = _leerSocios_();
+  socios[_hash_(clave)] = { n: nombre, c: _hoyIso_(), v: vence };
+  _guardaSocios_(socios);
+  var url = '';
+  try { url = ScriptApp.getService().getUrl(); } catch (e) { url = ''; }
+  return { nombre: nombre, vence: vence, clave: clave,
+           enlace: (url || '(URL de la implementacion)') + (url.indexOf('?') < 0 ? '?' : '&') + 'k=' + clave };
+}
+
+function _revocarSocios_(nombre) {
+  var socios = _leerSocios_(), n = 0, q = String(nombre || '').trim().toLowerCase();
+  for (var h in socios) {
+    if (socios.hasOwnProperty(h) && String(socios[h].n).trim().toLowerCase() === q) { delete socios[h]; n++; }
+  }
+  if (n) { _guardaSocios_(socios); }
+  return n;
+}
+
+function _exigeMasterMenu_() {
+  var ses = _ses_();
+  _exigeRol_(ses, ['MASTER']);
+  return ses;
+}
+
+/* Menu Produccion > Socios: solo MASTER. */
+function crearAccesoSocio() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Nuevo acceso de socio', 'Nombre del socio (sirve para reconocerlo y revocarlo despues):', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) { return; }
+  var v = ui.prompt('Vigencia', 'Dias de vigencia del enlace (deja vacio para que no venza):', ui.ButtonSet.OK_CANCEL);
+  if (v.getSelectedButton() !== ui.Button.OK) { return; }
+  var a = _crearAccesoSocio_(r.getResponseText(), Number(v.getResponseText()) || 0);
+  _bitacora_(ses.correo, 'ALTA_SOCIO', a.nombre + ' vence=' + (a.vence || 'nunca'));
+  var html = HtmlService.createHtmlOutput(
+    '<div style="font-family:Arial;font-size:13px;line-height:1.45">' +
+    '<p><b>Enlace personal de ' + _escHtml_(a.nombre) + '</b>' + (a.vence ? ' (vence el ' + a.vence + ')' : ' (no vence)') + '</p>' +
+    '<textarea readonly onclick="this.select()" style="width:100%;height:96px;font-size:12px">' + _escHtml_(a.enlace) + '</textarea>' +
+    '<p style="color:#7A5200;background:#FFF4DC;padding:8px;border-radius:6px">Trata este enlace como una contraseña: quien lo tenga ve todo el tablero (solo lectura). ' +
+    'Se muestra <b>una sola vez</b>; si se pierde, revoca el acceso y crea otro. No compartas la hoja de calculo.</p></div>')
+    .setWidth(520).setHeight(300);
+  ui.showModalDialog(html, 'Acceso de socio creado');
+}
+
+function verAccesosSocios() {
+  _exigeMasterMenu_();
+  var socios = _leerSocios_(), filas = [], hoy = _hoyIso_();
+  for (var h in socios) {
+    if (!socios.hasOwnProperty(h)) { continue; }
+    var s = socios[h];
+    filas.push('• ' + s.n + ' — creado ' + s.c + (s.v ? ', vence ' + s.v + (s.v < hoy ? ' (VENCIDO)' : '') : ', sin vencimiento'));
+  }
+  SpreadsheetApp.getUi().alert('Accesos de socios (solo lectura)',
+    filas.length ? filas.join('\n') : 'No hay accesos creados todavia.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function revocarAccesoSocio() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Revocar acceso', 'Nombre del socio cuyo enlace quieres cancelar (tal como lo creaste):', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) { return; }
+  var n = _revocarSocios_(r.getResponseText());
+  _bitacora_(ses.correo, 'REVOCA_SOCIO', r.getResponseText() + ' (' + n + ')');
+  ui.alert('Revocar acceso', n ? 'Listo: ' + n + ' enlace(s) cancelado(s). Dejan de funcionar de inmediato.'
+    : 'No encontre un socio con ese nombre. Usa "Ver accesos" para ver los nombres.', ui.ButtonSet.OK);
+}
+
+function _escHtml_(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 /* ===================== INSTALACION Y MIGRACION ===================== */
 /* Sin guion bajo: tienen que poder llamarse desde el editor y desde el menu. */
 
@@ -1709,6 +1873,12 @@ function onOpen() {
       .addSeparator()
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
+      .addSeparator()
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('Socios (solo lectura)')
+        .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
+        .addItem('Ver accesos', 'verAccesosSocios')
+        .addItem('Revocar acceso', 'revocarAccesoSocio'))
+      .addSeparator()
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
