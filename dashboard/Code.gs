@@ -1883,6 +1883,8 @@ function _formulaMerma_(fila) {
 }
 
 function _rellenaMermaPct_(ven) {
+  /* Repara hojas donde la columna ya heredo la validacion de VENDEDOR. */
+  _sinValidacion_(ven, CV.MERMA_PCT, 1);
   var ult = ven.getLastRow();
   if (ult < 2) { return 'MERMA_PCT: sin renglones todavia.'; }
   var rng = ven.getRange(2, CV.MERMA_PCT, ult - 1, 1);
@@ -1966,7 +1968,18 @@ function onEdit(e) {
 
 function _aseguraColumnas_(hoja, n) {
   var max = hoja.getMaxColumns();
-  if (max < n) { hoja.insertColumnsAfter(max, n - max); }
+  if (max < n) {
+    hoja.insertColumnsAfter(max, n - max);
+    _sinValidacion_(hoja, max + 1, n - max);
+  }
+}
+
+/* Una columna insertada HEREDA el formato y la validacion de la de su
+   izquierda (por ejemplo, la lista desplegable de VENDEDOR). Si no se limpia,
+   escribir ahi un porcentaje o una formula falla con "Elige un vendedor de la
+   lista". Se limpia en toda la columna, encabezado incluido. */
+function _sinValidacion_(hoja, col, cuantas) {
+  hoja.getRange(1, col, hoja.getMaxRows(), cuantas).clearDataValidations();
 }
 
 /* La columna VENDEDOR de VENTAS se captura a mano en el Sheet: se le pone una
@@ -2092,6 +2105,7 @@ function migrarEsquema(base, ven) {
     if (ven && ven.getLastRow() >= 1 && !_colPorNombre_(ven, 'VENDEDOR')) {
       var ult = ven.getLastColumn();
       if (ven.getMaxColumns() <= ult) { ven.insertColumnsAfter(ven.getMaxColumns(), 1); }
+      _sinValidacion_(ven, ult + 1, 1);
       ven.getRange(1, ult + 1).setValue('VENDEDOR');
     }
     props.setProperty('esquema', '4');
@@ -2120,6 +2134,7 @@ function migrarEsquema(base, ven) {
     if (ven && ven.getLastRow() >= 1 && !_colPorNombre_(ven, 'MERMA_PCT')) {
       var ultV = ven.getLastColumn();
       if (ven.getMaxColumns() <= ultV) { ven.insertColumnsAfter(ven.getMaxColumns(), 1); }
+      _sinValidacion_(ven, ultV + 1, 1);
       ven.getRange(1, ultV + 1).setValue('MERMA_PCT');
     }
     props.setProperty('esquema', '6');
