@@ -34,7 +34,7 @@ var ROLES = {
      Aqui solo sirve el correo de quien Google SI logra identificar (mismo
      Workspace que el dueño). Para socios con Gmail u otro dominio se usan los
      enlaces personales: menu Produccion > Socios (solo lectura). */
-  SOCIOS:  []
+  SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx']
 };
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
