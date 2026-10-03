@@ -1791,10 +1791,21 @@ function _crearAccesoSocio_(nombre, dias) {
   var socios = _leerSocios_();
   socios[_hash_(clave)] = { n: nombre, c: _hoyIso_(), v: vence };
   _guardaSocios_(socios);
-  var url = '';
-  try { url = ScriptApp.getService().getUrl(); } catch (e) { url = ''; }
+  var url = _urlPublica_();
   return { nombre: nombre, vence: vence, clave: clave,
+           aviso: (/\/dev($|\?)/.test(url) ? 'Esta es la URL de PRUEBA (/dev): solo funciona para editores del script. Usa la URL de la implementacion (termina en /exec).' : ''),
            enlace: (url || '(URL de la implementacion)') + (url.indexOf('?') < 0 ? '?' : '&') + 'k=' + clave };
+}
+
+/* URL de la app web en formato PUBLICO. Si el dueño usa Google Workspace,
+   getUrl() devuelve https://script.google.com/a/macros/DOMINIO/s/ID/exec, que
+   obliga a entrar con una cuenta de ese dominio: un socio externo queda fuera.
+   Quitando "/a/macros/DOMINIO" queda https://script.google.com/macros/s/ID/exec,
+   que abre para cualquier persona si la implementacion lo permite. */
+function _urlPublica_() {
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
+  return url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
 }
 
 function _revocarSocios_(nombre) {
@@ -1826,6 +1837,7 @@ function crearAccesoSocio() {
     '<div style="font-family:Arial;font-size:13px;line-height:1.45">' +
     '<p><b>Enlace personal de ' + _escHtml_(a.nombre) + '</b>' + (a.vence ? ' (vence el ' + a.vence + ')' : ' (no vence)') + '</p>' +
     '<textarea readonly onclick="this.select()" style="width:100%;height:96px;font-size:12px">' + _escHtml_(a.enlace) + '</textarea>' +
+    (a.aviso ? '<p style="color:#8A1C1C;background:#FDE8E8;padding:8px;border-radius:6px">' + _escHtml_(a.aviso) + '</p>' : '') +
     '<p style="color:#7A5200;background:#FFF4DC;padding:8px;border-radius:6px">Trata este enlace como una contraseña: quien lo tenga ve todo el tablero (solo lectura). ' +
     'Se muestra <b>una sola vez</b>; si se pierde, revoca el acceso y crea otro. No compartas la hoja de calculo.</p></div>')
     .setWidth(520).setHeight(300);
