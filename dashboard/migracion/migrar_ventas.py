@@ -18,7 +18,7 @@ ENCABEZADOS_VENTAS = [
     'COSTO_MERMA', 'MAQUILA', 'INSTALACION', 'MANO_OBRA', 'HORAS_EXTRAS',
     'OTROS', 'CARGA_ADMIN', 'COMERCIAL', 'FACTURA', 'FECHA_FACTURA',
     'METODO_PAGO', 'ESTATUS_COBRO', 'ESTATUS_MONTO', 'CELDA_ORIGEN',
-    'OBS_MIGRACION', 'VENDEDOR'
+    'OBS_MIGRACION', 'VENDEDOR', 'MERMA_PCT'
 ]
 COLS = {n: i for i, n in enumerate(ENCABEZADOS_VENTAS)}
 
@@ -153,7 +153,9 @@ def main():
             txt(r[32]).upper(), factura, r[35] if r[35] else None,
             txt(r[33]), 'FACTURADO' if factura else '',
             'PENDIENTE' if pendiente else 'CON MONTO',
-            "BASE DE DATOS!B%d" % xl, ' '.join(obs), ''
+            "BASE DE DATOS!B%d" % xl, ' '.join(obs), '',
+            # % de merma = 1 - M2_PROYECTO / M2_REALES (columnas N y O): FORMULA, se recalcula sola
+            '=IF(AND(N%d>0,O%d>0),1-N%d/O%d,"")' % ((n + 1,) * 4)
         ])
 
     # ---- conciliacion contra el archivo original ----------------------------
@@ -174,6 +176,7 @@ def main():
     for fila in v.iter_rows(min_row=2):
         for idx in (COLS['FECHA_VENTA'], COLS['SEM_INICIO'], COLS['FECHA_PROD'], COLS['FECHA_FACTURA']):
             fila[idx].number_format = 'dd/mm/yyyy'
+        fila[COLS['MERMA_PCT']].number_format = '0.00%'
     v.freeze_panes = 'A2'
 
     t = nuevo.create_sheet('TARIFAS')
