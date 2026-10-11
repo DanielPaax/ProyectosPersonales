@@ -635,7 +635,7 @@ function _agregaTablero_(filas) {
     porSem[semanas[s]] = {
       semana: semanas[s], propios: 0, maquila: 0, planta: 0, delta: null,
       corte: 0, laminado: 0, laminas: 0, piezas: 0,
-      inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, reimp: 0
+      inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, reimp: 0, ent: 0
     };
   }
   for (var i = 0; i < filas.length; i++) {
@@ -657,6 +657,8 @@ function _agregaTablero_(filas) {
     if (f.proceso === 'ROTULACION')            { d.rotul += cc; }
     d.horas += _cc_(f.horas);
     d.merma += _cc_(f.merma);
+    /* MT2 entregados (CANTIDAD) de todo renglon en MT2: con MERMA_MT2 da el material usado. */
+    if (f.unidad === 'MT2') { d.ent += _cc_(f.cant); }
     /* Las reimpresiones se cuentan como renglones enteros, no en centesimas. */
     if (f.reimp === 'SI') { d.reimp += 1; }
   }
@@ -666,7 +668,7 @@ function _agregaTablero_(filas) {
   var totReimp = 0;
   var tot = {
     propios: 0, maquila: 0, planta: 0, laminas: 0, piezas: 0,
-    inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0
+    inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, ent: 0
   };
   for (var j = 0; j < semanas.length; j++) {
     var d2 = porSem[semanas[j]];
@@ -674,14 +676,14 @@ function _agregaTablero_(filas) {
     tot.propios += d2.propios; tot.maquila += d2.maquila; tot.planta += plantaCC;
     tot.laminas += d2.laminas; tot.piezas += d2.piezas;
     tot.inst += d2.inst; tot.entregas += d2.entregas; tot.rotul += d2.rotul;
-    tot.horas += d2.horas; tot.merma += d2.merma;
+    tot.horas += d2.horas; tot.merma += d2.merma; tot.ent += d2.ent;
     totReimp += d2.reimp;
     d2.planta = _dc_(plantaCC);
     d2.propios = _dc_(d2.propios); d2.maquila = _dc_(d2.maquila);
     d2.corte = _dc_(d2.corte); d2.laminado = _dc_(d2.laminado);
     d2.laminas = _dc_(d2.laminas); d2.piezas = _dc_(d2.piezas);
     d2.inst = _dc_(d2.inst); d2.entregas = _dc_(d2.entregas); d2.rotul = _dc_(d2.rotul);
-    d2.horas = _dc_(d2.horas); d2.merma = _dc_(d2.merma);
+    d2.horas = _dc_(d2.horas); d2.merma = _dc_(d2.merma); d2.ent = _dc_(d2.ent);
     /* delta null en la primera semana y cuando la anterior fue cero:
        dividir entre cero daria Infinity y eso no sobrevive el viaje. */
     d2.delta = (prev === null || prev === 0) ? null : _r2_((d2.planta / prev - 1) * 100);

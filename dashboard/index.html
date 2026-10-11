@@ -1104,15 +1104,15 @@ function pesos0(v){ return money(v); }
 /* ---- cuadros informativos de PRODUCCION (salen de las columnas de VENTAS) ---- */
 function pintaInfo(){
   var el = document.getElementById('kpisI');
-  var C = D.costos;
-  if (!C) { el.innerHTML = ''; return; }
-  var k = C.kpi;
-  var cards = [
-    ['Costo de producción', money(k.costoProd), 'Sin merma · costo de la merma: ' + money(k.costoMerma), ''],
-    ['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes · ' + (k.costoPorProyecto === null ? '—' : money(k.costoPorProyecto)) + ' de costo por proyecto', ''],
-    ['Material usado real', n1(k.m2r) + ' m²', 'Planeado (proyecto): ' + n1(k.m2p) + ' m² · diferencia ' + n1(k.m2r - k.m2p) + ' m²', ''],
-    ['Merma', k.mermaPct === null ? '—' : n2(k.mermaPct) + '%', '1 − M2 proyecto ÷ M2 reales · costo de la merma: ' + money(k.costoMerma), k.mermaPct !== null && k.mermaPct >= 10 ? 'al' : '']
-  ];
+  var C = D.costos, kp = D.kpi, cards = [];
+  if (C) {
+    var k = C.kpi;
+    cards.push(['Costo de producción', money(k.costoProd), 'Sin merma · costo de la merma: ' + money(k.costoMerma), '']);
+    cards.push(['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes · ' + (k.costoPorProyecto === null ? '—' : money(k.costoPorProyecto)) + ' de costo por proyecto', '']);
+  }
+  /* Merma de la hoja BASE: MERMA_MT2 son m2 ADICIONALES a lo entregado (CANTIDAD); se suman, no se dividen. */
+  cards.push(['Merma en producción', n2(kp.merma) + ' m²',
+    'm² adicionales · entregado ' + n2(kp.ent) + ' m² + merma = ' + n2(kp.ent + kp.merma) + ' m² usados', '']);
   var h = '';
   for (var i = 0; i < cards.length; i++) {
     h += '<div class="kpi ' + cards[i][3] + '"><div class="et">' + cards[i][0] + '</div><div class="vl">' + cards[i][1] +
