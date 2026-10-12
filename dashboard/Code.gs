@@ -696,7 +696,10 @@ function _agregaTablero_(filas) {
   tot.reimp = totReimp;
   tot.pctMaquila = tot.planta > 0 ? _r2_(tot.maquila / tot.planta * 100) : 0;
   tot.eventos = _r2_(tot.inst + tot.entregas + tot.rotul);
-  tot.mermaPct = tot.propios > 0 ? _r2_(tot.merma / tot.propios * 100) : 0;
+  /* % de merma = MERMA_MT2 / (CANTIDAD + MERMA_MT2): la merma es m2 ADICIONAL a lo
+     entregado, asi que el material usado es la suma de las dos columnas. */
+  tot.usado = _r2_(tot.ent + tot.merma);
+  tot.mermaPct = tot.usado > 0 ? _r2_(tot.merma / tot.usado * 100) : 0;
   tot.mt2Hora = tot.horas > 0 ? _r2_(tot.propios / tot.horas) : null;
 
   /* Tipo de impresion: MT2 por proceso (comparativo para la dona). */
@@ -811,7 +814,8 @@ function _costosProd_(q, prod) {
   var mCli = {}, mMat = {}, mMaq = {}, peds = {}, clis = {}, mermaCosto = 0;
   function suma(a, c, cp, m2p, m2r) {
     for (var i = 0; i < COSTOS_CAMPOS.length; i++) { a[COSTOS_CAMPOS[i][0]] += c[i]; }
-    var t = 0; for (var k = 0; k < c.length; k++) { t += c[k]; }
+    /* El total del bloque de costos NO incluye la carga administrativa. */
+    var t = 0; for (var k = 0; k < c.length; k++) { if (COSTOS_CAMPOS[k][0] !== 'carga') { t += c[k]; } }
     a.total += t; a.cp += cp; a.m2p += m2p; a.m2r += m2r;
   }
   function rank(mapa, nombre, cp, cmerma, m2p, m2r) {

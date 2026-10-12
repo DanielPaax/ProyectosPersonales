@@ -71,6 +71,12 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 /* ---------- tablas ---------- */
 .tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+.pager{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 16px; font-size:12px; color:var(--tinta-2)}
+.pager:empty{display:none}
+.pager button{border:1px solid var(--linea); background:#fff; color:var(--tinta); border-radius:6px; padding:5px 11px; font:inherit; font-weight:600; cursor:pointer}
+.pager button:hover:not(:disabled){background:var(--teal-l); border-color:var(--teal)}
+.pager button:disabled{opacity:.4; cursor:default}
+th[title], td[title]{cursor:help}
 table{border-collapse:collapse; width:100%; font-size:13px}
 th,td{padding:8px 11px; text-align:right; border-bottom:1px solid var(--linea); white-space:nowrap}
 th{background:var(--navy); color:#fff; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; position:sticky; top:0}
@@ -347,14 +353,11 @@ body.sololectura .edit{display:none !important}
   </section>
 
   <section class="card">
-    <header><h2>MT2 por máquina</h2>    </div>
-  </section>
-
-  <section class="card">
     <header><h2>MT2 por máquina</h2>
       <span class="sub">Solo unidad MT2. El router (láminas), los marcos (piezas) y los servicios de campo (eventos) no aparecen aquí.</span>
     </header>
     <div class="gc"><canvas id="cvMaq"></canvas></div>
+    <div class="pager" id="pg_tMaq"></div>
     <div class="tscroll"><table id="tMaq"></table></div>
   </section>
 
@@ -396,6 +399,7 @@ body.sololectura .edit{display:none !important}
   <section class="card">
     <header><h2>MT2 por material</h2></header>
     <div class="gc"><canvas id="cvMat"></canvas></div>
+    <div class="pager" id="pg_tMat"></div>
     <div class="tscroll"><table id="tMat"></table></div>
   </section>
 
@@ -404,6 +408,7 @@ body.sololectura .edit{display:none !important}
       <span class="sub">Solo unidad MT2. Los renglones sin operador aparecen como (SIN DATO).</span>
     </header>
     <div class="gc bajo"><canvas id="cvOpe"></canvas></div>
+    <div class="pager" id="pg_tOpe"></div>
     <div class="tscroll"><table id="tOpe"></table></div>
   </section>
 
@@ -869,8 +874,8 @@ function irA(id){
 }
 
 /* ---- tarjetas de PRODUCCION como sub-filtros ----------------------------- */
-var SUBNOM = { propios: 'MT2 propios', maquila: 'MT2 maquilados', planta: 'MT2 total planta',
-               eventos: 'Eventos de campo', horas: 'Horas máquina', merma: 'Merma MT2', reimp: 'Reimpresiones' };
+var SUBNOM = { propios: 'MT2 propios', maquila: 'MT2 maquilados', planta: 'MT2 total + merma',
+               eventos: 'Eventos de campo', horas: 'Horas máquina', merma: '% de merma', reimp: 'Reimpresiones' };
 var SUBORIGEN = ['propios','maquila','planta'];   /* excluyentes entre si */
 function toggleSub(k){
   var i = SUB.indexOf(k);
@@ -984,6 +989,43 @@ function lineas(t, ancho, max){
 function nomMaq(n){ return String(n).replace(/_GRAN FORMATO_YASELAN /, ' GF ').replace(/_/g, ' '); }
 function corta(sem){ return String(sem).replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1'); }
 
+/* ---- semana del año + rango de fechas (DD-Mes3-AA) ---- */
+var MES3 = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function f2(n){ return (n < 10 ? '0' : '') + n; }
+function fmtF(d){ return f2(d.getDate()) + '-' + MES3[d.getMonth()] + '-' + f2(d.getFullYear() % 100); }
+/* numero de semana ISO (la semana empieza en lunes) */
+function isoSem(d){
+  var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7));
+  var w1 = new Date(t.getFullYear(), 0, 4);
+  return 1 + Math.round(((t - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+}
+/* etq = 'SEM 29/12-03/01/26' (lunes a sabado, como en la hoja) o iso = lunes 'yyyy-MM-dd' */
+function semInfo(etq, iso){
+  var ini = null;
+  if (iso && /^\d{4}-\d\d-\d\d$/.test(iso)) { ini = new Date(+iso.slice(0,4), +iso.slice(5,7) - 1, +iso.slice(8,10)); }
+  else {
+    var m = /^SEM\s*(\d\d)\/(\d\d)-(\d\d)\/(\d\d)\/(\d\d)$/.exec(String(etq).trim());
+    if (m) { ini = new Date(2000 + (+m[5]), (+m[4]) - 1, +m[3]); ini.setDate(ini.getDate() - 5); }
+  }
+  if (!ini) { return null; }
+  var fin = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + 5);
+  var n = isoSem(ini);
+  return { num: n, corta: 'S' + n, rango: fmtF(ini) + ' al ' + fmtF(fin) };
+}
+function semTxt(etq, iso){ var i = semInfo(etq, iso); return i ? i.corta : corta(etq); }
+/* titulo de tooltip de grafica: dos lineas */
+function semTit(etq, iso){ var i = semInfo(etq, iso); return i ? ['Semana ' + i.num, i.rango] : [String(etq)]; }
+/* celda/encabezado de tabla: numero de semana y, al pasar el mouse, las fechas */
+function semTh(etq, iso){
+  var i = semInfo(etq, iso);
+  return i ? '<th title="Semana ' + i.num + ': ' + i.rango + '">' + i.corta + '</th>' : '<th>' + esc(etq) + '</th>';
+}
+function semTd(etq, iso){
+  var i = semInfo(etq, iso);
+  return i ? '<td title="Semana ' + i.num + ': ' + i.rango + '">' + i.corta + '</td>' : '<td>' + esc(etq) + '</td>';
+}
+
 /* Total sobre cada barra apilada (exacto). o = {pos: [...], vals: [...], fmt, rot} */
 var plugTot = { id: 'tot', afterDatasetsDraw: function(chart, args, o){
   if (!o || !o.vals) { return; }
@@ -1005,7 +1047,7 @@ var plugTot = { id: 'tot', afterDatasetsDraw: function(chart, args, o){
 
 /* Valor junto a cada barra o punto. o = {modo: 'h'|'v'|'p', ds: [indices], fmt, size, colores} */
 var plugEtiq = { id: 'etiq', afterDatasetsDraw: function(chart, args, o){
-  if (!o || !o.modo) { return; }
+  if (!o || (!o.modo && !o.modos)) { return; }
   var ctx = chart.ctx, ds = o.ds || [0];
   ctx.save();
   ctx.font = '600 ' + (o.size || 10) + 'px ' + Chart.defaults.font.family;
@@ -1015,14 +1057,30 @@ var plugEtiq = { id: 'etiq', afterDatasetsDraw: function(chart, args, o){
     if (!meta || meta.hidden) { continue; }
     var data = chart.data.datasets[ds[k]].data;
     ctx.fillStyle = o.colores ? o.colores[k] : NAVY;
+    var modo = (o.modos && o.modos[k]) || o.modo;
     for (var i = 0; i < meta.data.length; i++) {
       var el = meta.data[i], v = data[i];
       if (v === null || v === undefined || el.skip) { continue; }
       var txt = o.fmt(v, i, ds[k]);
       if (!txt) { continue; }
       var tx = el.x, ty = el.y;
-      if (o.modo === 'h') { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; tx = el.x + 6; }
-      else if (o.modo === 'v') { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ty = el.y - 4; }
+      if (modo === 'vb') {
+        /* dentro de la barra, pegado a su base; con rot el texto va vertical */
+        if (Math.abs(el.base - el.y) < 1) { continue; }
+        var by = el.base + (el.y > el.base ? 6 : -6);
+        if (o.rot) {
+          ctx.save(); ctx.translate(el.x, by); ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = el.y > el.base ? 'right' : 'left'; ctx.textBaseline = 'middle';
+          ctx.strokeText(txt, 0, 0); ctx.fillText(txt, 0, 0); ctx.restore();
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = el.y > el.base ? 'top' : 'bottom';
+          ctx.strokeText(txt, el.x, by); ctx.fillText(txt, el.x, by);
+        }
+        continue;
+      }
+      if (modo === 'h') { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; tx = el.x + 6; }
+      else if (modo === 'v') { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ty = el.y - 4; }
+      else if (modo === 'pa') { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ty = el.y - 8; }
       else { ctx.textAlign = 'center'; ctx.textBaseline = (k % 2 ? 'top' : 'bottom'); ty = el.y + (k % 2 ? 8 : -8); }
       ctx.strokeText(txt, tx, ty); ctx.fillText(txt, tx, ty);
     }
@@ -1073,10 +1131,10 @@ function graf(id, cfg){
 }
 
 /* Barras horizontales (nombre a la izquierda, monto al final). */
-function cfgHBar(labels, data, color, fmt, nombre, fmtEje, fmtNom){
+function cfgHBar(labels, data, color, fmt, nombre, fmtEje, fmtNom, pad){
   return { type: 'bar',
     data: { labels: labels, datasets: [{ label: nombre, data: data, backgroundColor: color, borderRadius: 3, maxBarThickness: 22 }] },
-    options: { indexAxis: 'y', layout: { padding: { right: 78 } },
+    options: { indexAxis: 'y', layout: { padding: { right: pad || 78 } },
       plugins: { legend: { display: false }, etiq: { modo: 'h', fmt: fmt },
         tooltip: { callbacks: { label: function(c){ return ' ' + nombre + ': ' + fmt(c.parsed.x); } } } },
       scales: { x: { beginAtZero: true, grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return (fmtEje || fmt)(v); } } },
@@ -1104,15 +1162,13 @@ function pesos0(v){ return money(v); }
 /* ---- cuadros informativos de PRODUCCION (salen de las columnas de VENTAS) ---- */
 function pintaInfo(){
   var el = document.getElementById('kpisI');
-  var C = D.costos, kp = D.kpi, cards = [];
+  var C = D.costos, cards = [];
   if (C) {
     var k = C.kpi;
-    cards.push(['Costo de producción', money(k.costoProd), 'Sin merma · costo de la merma: ' + money(k.costoMerma), '']);
+    cards.push(['Costo de producción', money(k.costoProd), 'Sin merma', '']);
+    cards.push(['Costo de merma', money(k.costoMerma), 'Costo de los m² de merma (hoja VENTAS)', '']);
     cards.push(['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes · ' + (k.costoPorProyecto === null ? '—' : money(k.costoPorProyecto)) + ' de costo por proyecto', '']);
   }
-  /* Merma de la hoja BASE: MERMA_MT2 son m2 ADICIONALES a lo entregado (CANTIDAD); se suman, no se dividen. */
-  cards.push(['Merma en producción', n2(kp.merma) + ' m²',
-    'm² adicionales · entregado ' + n2(kp.ent) + ' m² + merma = ' + n2(kp.ent + kp.merma) + ' m² usados', '']);
   var h = '';
   for (var i = 0; i < cards.length; i++) {
     h += '<div class="kpi ' + cards[i][3] + '"><div class="et">' + cards[i][0] + '</div><div class="vl">' + cards[i][1] +
@@ -1127,14 +1183,14 @@ function pintaGrafProd(){
   /* tendencia semanal: MT2 propios + maquila apilados, total exacto arriba */
   var rot = s.length > 14;
   graf('cvTend', { type: 'bar',
-    data: { labels: s.map(function(w){ return corta(w.semana); }),
+    data: { labels: s.map(function(w){ return semTxt(w.semana); }),
       datasets: [
         { label: 'MT2 propios', data: s.map(function(w){ return w.propios; }), backgroundColor: AZUL, stack: 't', borderRadius: 2 },
         { label: 'MT2 maquilados', data: s.map(function(w){ return w.maquila; }), backgroundColor: AMBAR, stack: 't', borderRadius: 2 }] },
     options: { layout: { padding: { top: 4 } },
       plugins: { legend: { position: 'top' },
         tot: { pos: s.map(function(w){ return w.planta; }), vals: s.map(function(w){ return w.planta; }), fmt: n0, rot: rot },
-        tooltip: { callbacks: { title: function(c){ return s[c[0].dataIndex].semana; },
+        tooltip: { callbacks: { title: function(c){ return semTit(s[c[0].dataIndex].semana); },
           label: function(c){ return ' ' + c.dataset.label + ': ' + n2(c.parsed.y) + ' MT2'; },
           footer: function(c){ return 'Total planta: ' + n2(s[c[0].dataIndex].planta) + ' MT2'; } } } },
       scales: { x: { stacked: true, grid: { display: false } },
@@ -1159,35 +1215,44 @@ function pintaGrafProd(){
   var C = D.costos;
   document.getElementById('gridCostos').style.display = C ? '' : 'none';
   if (!C) { return; }
-  var sw = C.semanal;
+  var sw = C.semanal, totCP = C.kpi.costoProd;
+  var pctTot = function(v){ return totCP ? n1(v / totCP * 100) + '%' : '—'; };
+  var rotS = sw.length > 14;
   graf('cvCosSem', { type: 'bar',
-    data: { labels: sw.map(function(w){ return corta(w.etiqueta); }),
+    data: { labels: sw.map(function(w){ return semTxt(w.etiqueta, w.k); }),
       datasets: [
         { type: 'bar', label: 'Costo', data: sw.map(function(w){ return w.costoProd; }), backgroundColor: AZUL, borderRadius: 2, yAxisID: 'y', order: 2 },
         { type: 'line', label: 'Merma %', data: sw.map(function(w){ return w.mermaPct; }), borderColor: ROJO, backgroundColor: ROJO,
           cubicInterpolationMode: 'monotone', pointRadius: 2.5, borderWidth: 2.5, yAxisID: 'y1', order: 1 }] },
-    options: { plugins: { legend: { position: 'top' },
-        tooltip: { callbacks: { title: function(c){ return sw[c[0].dataIndex].etiqueta; },
-          label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y); } } } },
+    options: { layout: { padding: { top: 18 } },
+      plugins: { legend: { position: 'top' },
+        etiq: { modos: ['vb', 'pa'], ds: [0, 1], rot: rotS, size: 9, colores: [NAVY, ROJO],
+                fmt: function(v, i, d){ return d === 0 ? pctTot(v) : n1(v) + '%'; } },
+        tooltip: { callbacks: { title: function(c){ var w = sw[c[0].dataIndex]; return semTit(w.etiqueta, w.k); },
+          label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
       scales: { x: { grid: { display: false } },
-                y: { beginAtZero: true, grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
-                y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
+                y: { beginAtZero: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
+                y1: { position: 'right', beginAtZero: true, grace: '25%', grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
   var cc = C.porCliente;
   graf('cvCosCli', cfgHBar(cc.map(function(r){ return r.nombre; }), cc.map(function(r){ return r.costo; }), AZUL, pesos0, 'Costo', corto));
   var cm = C.porMaterial;
-  graf('cvCosMat', cfgHBar(cm.map(function(r){ return r.nombre; }), cm.map(function(r){ return r.costo; }), MORADO, pesos0, 'Costo', corto));
+  graf('cvCosMat', cfgHBar(cm.map(function(r){ return r.nombre; }), cm.map(function(r){ return r.costo; }), MORADO,
+    function(v){ return pesos0(v) + ' · ' + pctTot(v); }, 'Costo', corto, null, 150));
   var cq = C.porMaquina;
   graf('cvCosMaq', { type: 'bar',
     data: { labels: cq.map(function(r){ return r.nombre; }),
       datasets: [
         { type: 'bar', label: 'Costo', data: cq.map(function(r){ return r.costo; }), backgroundColor: AZUL, borderRadius: 3, yAxisID: 'y', order: 2, maxBarThickness: 46 },
-        { type: 'line', label: 'Merma %', data: cq.map(function(r){ return r.mermaPct; }), showLine: false, backgroundColor: ROJO, borderColor: ROJO,
-          pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y1', order: 1 }] },
-    options: { plugins: { legend: { position: 'top' },
-        tooltip: { callbacks: { label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y); } } } },
+        { type: 'line', label: 'Merma %', data: cq.map(function(r){ return r.mermaPct; }), borderColor: ROJO, backgroundColor: ROJO,
+          cubicInterpolationMode: 'monotone', pointRadius: 3.5, pointHoverRadius: 6, borderWidth: 2.5, yAxisID: 'y1', order: 1 }] },
+    options: { layout: { padding: { top: 18 } },
+      plugins: { legend: { position: 'top' },
+        etiq: { modos: ['vb', 'pa'], ds: [0, 1], size: 9.5, colores: [NAVY, ROJO],
+                fmt: function(v, i, d){ return d === 0 ? pctTot(v) : n1(v) + '%'; } },
+        tooltip: { callbacks: { label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
       scales: { x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 10 }, callback: function(v){ return lineas(nomMaq(this.getLabelForValue(v)), 13, 3); } } },
-                y: { beginAtZero: true, grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
-                y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
+                y: { beginAtZero: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
+                y1: { position: 'right', beginAtZero: true, grace: '25%', grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
 }
 
 /* ---------- costos de produccion (tendencia e historico, montos exactos) ---------- */
@@ -1197,7 +1262,7 @@ var perC = 'mes';
 var COSCOLS = [
   ['mat','Material',AZUL], ['merma','Merma',ROJO], ['maq','Maquila',AMBAR],
   ['inst','Instalación',MORADO], ['mo','Mano de obra',VERDE], ['hext','Horas extras',NARANJA],
-  ['otros','Otros',GRIS], ['carga','Carga administrativa',NAVY]
+  ['otros','Otros',GRIS]
 ];
 /* Monto EXACTO, con centavos. */
 function peso(v){
@@ -1225,7 +1290,7 @@ function pintaCostos(){
   var mayor = null;
   for (i = 0; i < COSCOLS.length; i++) { if (mayor === null || t[COSCOLS[i][0]] > t[mayor[0]]) { mayor = COSCOLS[i]; } }
   var kc = [
-    ['Costo total (con merma)', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras, otros y carga', ''],
+    ['Costo total (con merma)', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras y otros · sin carga administrativa', ''],
     ['Costo por MT2 de planta', t.costoMt2 === null ? '—' : peso(t.costoMt2), 'costo total ÷ ' + n2(t.mt2) + ' MT2 de planta', 'mq'],
     ['Mayor componente', mayor && t.total ? esc(mayor[1]) : '—', mayor && t.total ? peso(t[mayor[0]]) + ' · ' + n2(t[mayor[0]] / t.total * 100) + '% del total' : '', '']
   ];
@@ -1240,14 +1305,14 @@ function pintaCostos(){
   var rot = ult.length > 8;
   var pos = ult.map(function(d){ var s = 0; for (var q = 0; q < COSCOLS.length; q++) { if (d[COSCOLS[q][0]] > 0) { s += d[COSCOLS[q][0]]; } } return s; });
   graf('cvCosto', { type: 'bar',
-    data: { labels: ult.map(function(d){ return perC === 'mes' ? mesTxt(d.k) : corta(d.etiqueta); }),
+    data: { labels: ult.map(function(d){ return perC === 'mes' ? mesTxt(d.k) : semTxt(d.etiqueta, d.k); }),
       datasets: COSCOLS.map(function(cc){
         return { label: cc[1], data: ult.map(function(d){ return d[cc[0]]; }), backgroundColor: cc[2], stack: 'c', borderRadius: 2 };
       }) },
     options: { layout: { padding: { top: 4 } },
       plugins: { legend: { position: 'top' },
         tot: { pos: pos, vals: ult.map(function(d){ return d.total; }), fmt: peso, rot: rot },
-        tooltip: { callbacks: { title: function(cx){ var d = ult[cx[0].dataIndex]; return perC === 'mes' ? mesLargo(d.k) : d.etiqueta; },
+        tooltip: { callbacks: { title: function(cx){ var d = ult[cx[0].dataIndex]; return perC === 'mes' ? mesLargo(d.k) : semTit(d.etiqueta, d.k); },
           label: function(cx){ return ' ' + cx.dataset.label + ': ' + peso(cx.parsed.y); },
           footer: function(cx){ return 'Total: ' + peso(ult[cx[0].dataIndex].total); } } } },
       scales: { x: { stacked: true, grid: { display: false } },
@@ -1260,12 +1325,12 @@ function pintaCostos(){
 
   /* historico con montos exactos */
   if (!serie.length) { document.getElementById('tCos').innerHTML = '<tbody><tr><td class="vacio">Sin costos en el periodo.</td></tr></tbody>'; return; }
-  h = '<thead><tr><th>Periodo</th><th>MT2 planta</th>';
+  h = '<thead><tr><th>' + (perC === 'mes' ? 'Periodo' : 'Semana') + '</th><th>MT2 planta</th>';
   for (c = 0; c < COSCOLS.length; c++) { h += '<th>' + COSCOLS[c][1] + '</th>'; }
   h += '<th>Total</th><th>Costo / MT2</th></tr></thead><tbody>';
   for (i = 0; i < serie.length; i++) {
     var r = serie[i];
-    h += '<tr><td>' + esc(perC === 'mes' ? mesLargo(r.k) : r.etiqueta) + '</td>' + celda(r.mt2);
+    h += '<tr>' + (perC === 'mes' ? '<td>' + esc(mesLargo(r.k)) + '</td>' : semTd(r.etiqueta, r.k)) + celda(r.mt2);
     for (c = 0; c < COSCOLS.length; c++) { h += cp2(r[COSCOLS[c][0]]); }
     h += '<td class="num"><b>' + peso(r.total) + '</b></td>' + (r.costoMt2 === null ? '<td class="num cero">—</td>' : cp2(r.costoMt2)) + '</tr>';
   }
@@ -1278,6 +1343,7 @@ function pintaCostos(){
 /* ---------- pintado ---------- */
 function pintar(){
   var t = D.total, s = D.serie, a = D.alertas;
+  PG = {};
 
   document.getElementById('quien').innerHTML =
     '<b>' + esc(D.ses.correo) + '</b>Rol: ' + esc(D.ses.rol);
@@ -1298,15 +1364,14 @@ function pintar(){
   var k = [
     ['MT2 propios', n2(kp.propios), 'impresion en planta', '', 'propios'],
     ['MT2 maquilados', n2(kp.maquila), kp.pctMaquila + '% del total', 'mq', 'maquila'],
-    ['MT2 total planta', n2(kp.planta), 'propios + maquila', '', 'planta'],
+    ['MT2 total + merma', n2(kp.usado), 'CANTIDAD + MERMA_MT2 · base del % de merma', '', 'planta'],
     ['Eventos de campo', n0(kp.eventos), 'instalaciones, entregas, rotulaciones', '', 'eventos'],
     ['Horas maquina', kp.horas > 0 ? n2(kp.horas) : 'sin capturar',
       kp.mt2Hora !== null ? n2(kp.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
       kp.horas > 0 ? '' : 'al', 'horas'],
-    ['Merma MT2', kp.merma > 0 ? n2(kp.merma) : 'sin capturar',
-      kp.merma > 0 ? kp.mermaPct + '% de lo impreso' : 'sin este dato no se sabe que se reimprimio',
-      kp.merma > 0 ? '' : 'al', 'merma'],
-    ['Reimpresiones', n0(kp.reimp), 'renglones marcados como reimpresion', kp.reimp > 0 ? 'mq' : '', 'reimp']
+    ['% de merma', n2(kp.mermaPct) + '%',
+      kp.merma > 0 ? n2(kp.merma) + ' m² de MERMA_MT2 (adicionales)' : 'sin merma capturada en MERMA_MT2',
+      kp.merma > 0 ? '' : 'al', 'merma']
   ];
   var h = '';
   for (var i = 0; i < k.length; i++) {
@@ -1330,7 +1395,7 @@ function pintar(){
       ? '<span class="chip na">primera</span>'
       : '<span class="chip ' + (r.delta >= 0 ? 'up' : 'dn') + '">' +
         (r.delta >= 0 ? '+' : '') + n0(r.delta) + '%</span>';
-    h += '<tr><td>' + esc(r.semana) + '</td>' +
+    h += '<tr>' + semTd(r.semana) +
          celda(r.propios) + celda(r.maquila) + celda(r.planta) +
          '<td>' + ch + '</td>' +
          celda(r.corte) + celda(r.laminado) + celda(r.laminas,0) + celda(r.piezas,0) +
@@ -1353,9 +1418,7 @@ function pintar(){
        '<td></td></tr></tbody>';
   document.getElementById('tSem').innerHTML = h;
 
-  matriz('tMaq', D.porMaquina);
-  matriz('tMat', D.porMaterial);
-  matriz('tOpe', D.porOperador);
+  pintaMatrices();
 
   /* calidad del dato */
   var cel = [
@@ -1392,27 +1455,60 @@ function pintar(){
   }
 }
 
+/* Matrices por semana (maquina / material / operador): se ven 8 semanas a la vez
+   y un boton avanza o retrocede de 8 en 8, solo dentro de lo que dejan los
+   filtros maestros (D.semanas ya viene filtrado). */
+var PG = {}, VENT = 8;
+function pgIni(id, n){
+  if (n <= VENT) { return 0; }
+  if (PG[id] === undefined) { PG[id] = n - VENT; }          /* arranca en las 8 mas recientes */
+  PG[id] = Math.max(0, Math.min(n - VENT, PG[id]));
+  return PG[id];
+}
+function pgMover(id, d){
+  var n = D.semanas.length;
+  PG[id] = pgIni(id, n) + d * VENT;
+  pintaMatrices();
+}
+function pintaMatrices(){
+  matriz('tMaq', D.porMaquina);
+  matriz('tMat', D.porMaterial);
+  matriz('tOpe', D.porOperador);
+}
 function matriz(id, filas){
+  var pg = document.getElementById('pg_' + id);
+  var n = D.semanas.length, ini = pgIni(id, n), fin = Math.min(n, ini + VENT);
   if (!filas.length) {
     document.getElementById(id).innerHTML =
       '<tbody><tr><td class="vacio">Sin datos en MT2.</td></tr></tbody>';
+    if (pg) { pg.innerHTML = ''; }
     return;
+  }
+  if (pg) {
+    if (n <= VENT) { pg.innerHTML = ''; }
+    else {
+      var a = semInfo(D.semanas[ini]), b = semInfo(D.semanas[fin - 1]);
+      pg.innerHTML =
+        '<button type="button" onclick="pgMover(\'' + id + '\',-1)"' + (ini <= 0 ? ' disabled' : '') + '>◀ 8 anteriores</button>' +
+        '<span>Semanas <b>' + (a ? a.corta : (ini + 1)) + ' a ' + (b ? b.corta : fin) + '</b> · ' + (fin - ini) + ' de ' + n + '</span>' +
+        '<button type="button" onclick="pgMover(\'' + id + '\',1)"' + (fin >= n ? ' disabled' : '') + '>8 siguientes ▶</button>';
+    }
   }
   var max = filas[0].total || 1;
   var h = '<thead><tr><th>Nombre</th>';
-  for (var i = 0; i < D.semanas.length; i++) { h += '<th>' + esc(D.semanas[i]) + '</th>'; }
-  h += '<th>Total MT2</th><th>Peso</th></tr></thead><tbody>';
+  for (var i = ini; i < fin; i++) { h += semTh(D.semanas[i]); }
+  h += '<th title="Suma de todas las semanas que dejan los filtros, no solo las visibles">Total MT2</th><th>Peso</th></tr></thead><tbody>';
   var gt = 0;
   for (var f = 0; f < filas.length; f++) {
     var r = filas[f];
     gt += r.total;
     h += '<tr><td>' + esc(r.nombre) + '</td>';
-    for (var v = 0; v < r.val.length; v++) { h += celda(r.val[v]); }
+    for (var v = ini; v < fin; v++) { h += celda(r.val[v]); }
     h += celda(r.total) + '<td><div class="mini"><span style="width:' +
          Math.max(2, Math.round(r.total / max * 100)) + '%"></span></div></td></tr>';
   }
   h += '<tr class="tot"><td>TOTAL</td>';
-  for (var s2 = 0; s2 < D.semanas.length; s2++) {
+  for (var s2 = ini; s2 < fin; s2++) {
     var cs = 0;
     for (var g = 0; g < filas.length; g++) { cs += filas[g].val[s2]; }
     h += celda(cs);
