@@ -1434,6 +1434,31 @@ function cargarComercial(filtrosGlobal, clave) {
   };
 }
 
+/* Materiales que se pueden elegir al capturar una venta: los de TARIFAS (con costo) mas
+   los del catalogo MATERIAL (los que no tengan tarifa llevan costo de material en cero). */
+function _materialesVenta_(cats, tar) {
+  var out = [], vistos = {}, fuentes = [tar.nombres || [], cats.MATERIAL || []];
+  for (var f = 0; f < fuentes.length; f++) {
+    for (var i = 0; i < fuentes[f].length; i++) {
+      var n = String(fuentes[f][i] || '').trim(), k = n.toUpperCase();
+      if (n && !vistos[k]) { vistos[k] = true; out.push(n); }
+    }
+  }
+  return out.sort();
+}
+
+/* Tarifa de un material: la de TARIFAS; si no tiene, pero esta en el catalogo MATERIAL
+   (por ejemplo SOLO IMPRESION, donde el material lo pone el cliente), costo cero. */
+function _tarifaMat_(material, tar, cats) {
+  var k = String(material || '').toUpperCase();
+  if (tar.mat[k]) { return tar.mat[k]; }
+  var lista = cats.MATERIAL || [];
+  for (var i = 0; i < lista.length; i++) {
+    if (String(lista[i]).toUpperCase() === k) { return { nombre: lista[i], c: 0, sinTarifa: true }; }
+  }
+  return null;
+}
+
 function cargarCatalogosVenta() {
   var ses = _ses_();
   _exigeVenta_(ses, true);
@@ -1449,7 +1474,7 @@ function cargarCatalogosVenta() {
     VENDEDOR: cats.VENDEDOR || [],
     METODO_PAGO: cats.METODO_PAGO || [], ESTATUS_COBRO: cats.ESTATUS_COBRO || [],
     TIPO_PROYECTO: cats.TIPO_PROYECTO || [],
-    MATERIAL: tar.nombres, CARGA_M2: tar.carga,
+    MATERIAL: _materialesVenta_(cats, tar), CARGA_M2: tar.carga,
     CLIENTE: Object.keys(cli).sort(), MAQUINA: Object.keys(maq).sort()
   };
 }
@@ -1535,8 +1560,9 @@ function guardarVenta(d) {
   var cMat = 0, cMerma = 0;
   var material = _texto_(d.material, 120);
   if (material) {
-    var t = tar.mat[material.toUpperCase()];
-    if (!t) { throw new Error('El material "' + material + '" no esta en la hoja TARIFAS.'); }
+    var t = _tarifaMat_(material, tar, cats);
+    if (!t) { throw new Error('El material "' + material + '" no esta en el catalogo MATERIAL ni en la hoja TARIFAS.'); }
+    if (t.sinTarifa) { obs.push('Material sin tarifa en TARIFAS: costo de material y merma en cero.'); }
     material = t.nombre;
     cMat = _r2_(t.c * m2p);
     cMerma = _r2_(t.c * Math.max(m2r - m2p, 0));

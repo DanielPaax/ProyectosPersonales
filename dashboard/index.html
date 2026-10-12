@@ -571,7 +571,7 @@ body.sololectura .edit{display:none !important}
         <div class="campo"><label>Vendedor</label><select id="v_vendedor"></select></div>
         <div class="campo"><label>Tipo de proyecto</label><select id="v_tipo"></select></div>
         <div class="campo"><label>Máquina</label><input type="text" id="v_maquina" list="dlMaq" maxlength="80"><datalist id="dlMaq"></datalist></div>
-        <div class="campo"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Debe existir en TARIFAS: de ahí sale el costo.</span></div>
+        <div class="campo"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Lista del catálogo MATERIAL. El costo sale de TARIFAS; si el material no tiene tarifa (p. ej. SOLO IMPRESIÓN), su costo de material queda en cero.</span></div>
         <div class="campo"><label>M2 del proyecto</label><input type="number" id="v_m2p" step="0.01" min="0"></div>
         <div class="campo"><label>M2 reales utilizados</label><input type="number" id="v_m2r" step="0.01" min="0"><span class="pista">La diferencia contra el proyecto es la merma.</span></div>
         <div class="campo"><label>Monto de venta (subtotal)</label><input type="number" id="v_venta" step="0.01" min="0" placeholder="vacío = pendiente"></div>
