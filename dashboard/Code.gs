@@ -635,7 +635,7 @@ function _agregaTablero_(filas) {
     porSem[semanas[s]] = {
       semana: semanas[s], propios: 0, maquila: 0, planta: 0, delta: null,
       corte: 0, laminado: 0, laminas: 0, piezas: 0,
-      inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, reimp: 0, ent: 0
+      inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, reimp: 0, ent: 0, mermaP: 0
     };
   }
   for (var i = 0; i < filas.length; i++) {
@@ -658,7 +658,12 @@ function _agregaTablero_(filas) {
     d.horas += _cc_(f.horas);
     d.merma += _cc_(f.merma);
     /* MT2 entregados (CANTIDAD) de todo renglon en MT2: con MERMA_MT2 da el material usado. */
-    if (f.unidad === 'MT2') { d.ent += _cc_(f.cant); }
+    /* Para el % de merma solo cuenta la produccion PROPIA: lo de ORIGEN = MAQUILA se omite
+       (tanto su CANTIDAD como su MERMA_MT2). */
+    if (f.origen !== 'MAQUILA') {
+      if (f.unidad === 'MT2') { d.ent += _cc_(f.cant); }
+      d.mermaP += _cc_(f.merma);
+    }
     /* Las reimpresiones se cuentan como renglones enteros, no en centesimas. */
     if (f.reimp === 'SI') { d.reimp += 1; }
   }
@@ -668,7 +673,7 @@ function _agregaTablero_(filas) {
   var totReimp = 0;
   var tot = {
     propios: 0, maquila: 0, planta: 0, laminas: 0, piezas: 0,
-    inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, ent: 0
+    inst: 0, entregas: 0, rotul: 0, horas: 0, merma: 0, ent: 0, mermaP: 0
   };
   for (var j = 0; j < semanas.length; j++) {
     var d2 = porSem[semanas[j]];
@@ -676,14 +681,14 @@ function _agregaTablero_(filas) {
     tot.propios += d2.propios; tot.maquila += d2.maquila; tot.planta += plantaCC;
     tot.laminas += d2.laminas; tot.piezas += d2.piezas;
     tot.inst += d2.inst; tot.entregas += d2.entregas; tot.rotul += d2.rotul;
-    tot.horas += d2.horas; tot.merma += d2.merma; tot.ent += d2.ent;
+    tot.horas += d2.horas; tot.merma += d2.merma; tot.ent += d2.ent; tot.mermaP += d2.mermaP;
     totReimp += d2.reimp;
     d2.planta = _dc_(plantaCC);
     d2.propios = _dc_(d2.propios); d2.maquila = _dc_(d2.maquila);
     d2.corte = _dc_(d2.corte); d2.laminado = _dc_(d2.laminado);
     d2.laminas = _dc_(d2.laminas); d2.piezas = _dc_(d2.piezas);
     d2.inst = _dc_(d2.inst); d2.entregas = _dc_(d2.entregas); d2.rotul = _dc_(d2.rotul);
-    d2.horas = _dc_(d2.horas); d2.merma = _dc_(d2.merma); d2.ent = _dc_(d2.ent);
+    d2.horas = _dc_(d2.horas); d2.merma = _dc_(d2.merma); d2.ent = _dc_(d2.ent); d2.mermaP = _dc_(d2.mermaP);
     /* delta null en la primera semana y cuando la anterior fue cero:
        dividir entre cero daria Infinity y eso no sobrevive el viaje. */
     d2.delta = (prev === null || prev === 0) ? null : _r2_((d2.planta / prev - 1) * 100);
@@ -697,9 +702,9 @@ function _agregaTablero_(filas) {
   tot.pctMaquila = tot.planta > 0 ? _r2_(tot.maquila / tot.planta * 100) : 0;
   tot.eventos = _r2_(tot.inst + tot.entregas + tot.rotul);
   /* % de merma = MERMA_MT2 / (CANTIDAD + MERMA_MT2): la merma es m2 ADICIONAL a lo
-     entregado, asi que el material usado es la suma de las dos columnas. */
-  tot.usado = _r2_(tot.ent + tot.merma);
-  tot.mermaPct = tot.usado > 0 ? _r2_(tot.merma / tot.usado * 100) : 0;
+     entregado, asi que el material usado es la suma de las dos columnas. Sin MAQUILA. */
+  tot.usado = _r2_(tot.ent + tot.mermaP);
+  tot.mermaPct = tot.usado > 0 ? _r2_(tot.mermaP / tot.usado * 100) : 0;
   tot.mt2Hora = tot.horas > 0 ? _r2_(tot.propios / tot.horas) : null;
 
   /* Tipo de impresion: MT2 por proceso (comparativo para la dona). */
@@ -811,7 +816,7 @@ function _topCosto_(mapa, n) {
 function _costosProd_(q, prod) {
   var filas = _leerVentas_();
   var sem = {}, mes = {}, tot = _cerosCosto_(), semEt = {};
-  var mCli = {}, mMat = {}, mMaq = {}, peds = {}, clis = {}, mermaCosto = 0;
+  var mCli = {}, mMat = {}, mMaq = {}, peds = {}, clis = {}, mermaCosto = 0, pj = {};
   function suma(a, c, cp, m2p, m2r) {
     for (var i = 0; i < COSTOS_CAMPOS.length; i++) { a[COSTOS_CAMPOS[i][0]] += c[i]; }
     /* El total del bloque de costos NO incluye la carga administrativa. */
@@ -841,6 +846,9 @@ function _costosProd_(q, prod) {
     rank(mMat, r.material || '(SIN DATO)', cp, cm, m2p, m2r);
     rank(mMaq, r.maquina || '(SIN DATO)', cp, cm, m2p, m2r);
     peds[_clavePed_(r)] = true;
+    var kp = _clavePed_(r);
+    if (!pj[kp]) { pj[kp] = { nombre: r.proyecto || kp, cliente: r.cliente || '', cp: 0 }; }
+    pj[kp].cp += cp;
     if (r.cliente) { clis[r.cliente] = true; }
     mermaCosto += cm;
   }
@@ -860,7 +868,19 @@ function _costosProd_(q, prod) {
   for (var b = 0; b < km.length; b++) { mensual.push(_filaCosto_(km[b], km[b], mes[km[b]])); }
   function n(o) { var x = 0; for (var q2 in o) { if (o.hasOwnProperty(q2)) { x++; } } return x; }
   var nPed = n(peds);
+  /* Proyecto (pedido) mas caro y mas barato por costo de produccion. El mas barato
+     se busca entre los que SI tienen costo: uno en cero es un dato faltante. */
+  var masCaro = null, masBarato = null;
+  for (var kj in pj) {
+    if (!pj.hasOwnProperty(kj)) { continue; }
+    var pr = pj[kj];
+    if (pr.cp <= 0) { continue; }
+    if (!masCaro || pr.cp > masCaro.cp) { masCaro = pr; }
+    if (!masBarato || pr.cp < masBarato.cp) { masBarato = pr; }
+  }
+  function infoPj(x) { return x ? { nombre: x.nombre, cliente: x.cliente, costo: _dc_(x.cp) } : null; }
   var kpi = {
+    masCaro: infoPj(masCaro), masBarato: infoPj(masBarato),
     costoProd: _dc_(tot.cp), costoMerma: _dc_(mermaCosto), m2p: _dc_(tot.m2p), m2r: _dc_(tot.m2r),
     mermaPct: _mermaPct_(tot.m2p, tot.m2r), proyectos: nPed, clientes: n(clis),
     costoPorProyecto: nPed > 0 ? _r2_(_dc_(tot.cp) / nPed) : null

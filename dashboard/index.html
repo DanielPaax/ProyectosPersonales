@@ -76,7 +76,9 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .pager button{border:1px solid var(--linea); background:#fff; color:var(--tinta); border-radius:6px; padding:5px 11px; font:inherit; font-weight:600; cursor:pointer}
 .pager button:hover:not(:disabled){background:var(--teal-l); border-color:var(--teal)}
 .pager button:disabled{opacity:.4; cursor:default}
-th[title], td[title]{cursor:help}
+th[data-tip], td[data-tip]{cursor:help}
+#tip{position:fixed; z-index:9999; pointer-events:none; background:rgba(24,48,60,.95); color:#fff; font-size:12px; line-height:1.4;
+  padding:7px 11px; border-radius:6px; white-space:pre; box-shadow:0 4px 14px rgba(0,0,0,.25); display:none}
 table{border-collapse:collapse; width:100%; font-size:13px}
 th,td{padding:8px 11px; text-align:right; border-bottom:1px solid var(--linea); white-space:nowrap}
 th{background:var(--navy); color:#fff; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; position:sticky; top:0}
@@ -1017,14 +1019,38 @@ function semTxt(etq, iso){ var i = semInfo(etq, iso); return i ? i.corta : corta
 /* titulo de tooltip de grafica: dos lineas */
 function semTit(etq, iso){ var i = semInfo(etq, iso); return i ? ['Semana ' + i.num, i.rango] : [String(etq)]; }
 /* celda/encabezado de tabla: numero de semana y, al pasar el mouse, las fechas */
+function semTip(etq, iso){ var i = semInfo(etq, iso); return i ? 'Semana ' + i.num + '|' + i.rango : ''; }
 function semTh(etq, iso){
   var i = semInfo(etq, iso);
-  return i ? '<th title="Semana ' + i.num + ': ' + i.rango + '">' + i.corta + '</th>' : '<th>' + esc(etq) + '</th>';
+  return i ? '<th data-tip="' + esc(semTip(etq, iso)) + '">' + i.corta + '</th>' : '<th>' + esc(etq) + '</th>';
 }
 function semTd(etq, iso){
   var i = semInfo(etq, iso);
-  return i ? '<td title="Semana ' + i.num + ': ' + i.rango + '">' + i.corta + '</td>' : '<td>' + esc(etq) + '</td>';
+  return i ? '<td data-tip="' + esc(semTip(etq, iso)) + '">' + i.corta + '</td>' : '<td>' + esc(etq) + '</td>';
 }
+/* Globo inmediato para todo lo que lleve data-tip (el title nativo tarda y a veces no sale). */
+(function(){
+  var el = null;
+  function mover(e){
+    if (!el) { return; }
+    var x = e.clientX + 14, y = e.clientY + 16, w = el.offsetWidth, h = el.offsetHeight;
+    if (x + w > window.innerWidth - 6) { x = e.clientX - w - 12; }
+    if (y + h > window.innerHeight - 6) { y = e.clientY - h - 12; }
+    el.style.left = Math.max(4, x) + 'px'; el.style.top = Math.max(4, y) + 'px';
+  }
+  document.addEventListener('mouseover', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (!t) { return; }
+    if (!el) { el = document.createElement('div'); el.id = 'tip'; document.body.appendChild(el); }
+    el.textContent = t.getAttribute('data-tip').replace('|', '\n');
+    el.style.display = 'block'; mover(e);
+  });
+  document.addEventListener('mousemove', mover);
+  document.addEventListener('mouseout', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (t && el) { el.style.display = 'none'; }
+  });
+})();
 
 /* Total sobre cada barra apilada (exacto). o = {pos: [...], vals: [...], fmt, rot} */
 var plugTot = { id: 'tot', afterDatasetsDraw: function(chart, args, o){
@@ -1166,8 +1192,12 @@ function pintaInfo(){
   if (C) {
     var k = C.kpi;
     cards.push(['Costo de producción', money(k.costoProd), 'Sin merma', '']);
-    cards.push(['Costo de merma', money(k.costoMerma), 'Costo de los m² de merma (hoja VENTAS)', '']);
-    cards.push(['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes · ' + (k.costoPorProyecto === null ? '—' : money(k.costoPorProyecto)) + ' de costo por proyecto', '']);
+    cards.push(['Costo de merma', money(k.costoMerma), 'Costo de los m² de merma', '']);
+    var pj = function(et, x){
+      return x ? '<span title="' + esc(x.nombre + (x.cliente ? ' · ' + x.cliente : '')) + '">' + et + ': <b>' + money(x.costo) + '</b> · ' + esc(acorta(x.nombre, 26)) + '</span>'
+               : et + ': —';
+    };
+    cards.push(['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes<br>' + pj('Más caro', k.masCaro) + '<br>' + pj('Menos caro', k.masBarato), '']);
   }
   var h = '';
   for (var i = 0; i < cards.length; i++) {
@@ -1330,7 +1360,7 @@ function pintaCostos(){
   h += '<th>Total</th><th>Costo / MT2</th></tr></thead><tbody>';
   for (i = 0; i < serie.length; i++) {
     var r = serie[i];
-    h += '<tr>' + (perC === 'mes' ? '<td>' + esc(mesLargo(r.k)) + '</td>' : semTd(r.etiqueta, r.k)) + celda(r.mt2);
+    h += '<tr' + (perC === 'mes' ? '' : ' data-tip="' + esc(semTip(r.etiqueta, r.k)) + '"') + '>' + (perC === 'mes' ? '<td>' + esc(mesLargo(r.k)) + '</td>' : semTd(r.etiqueta, r.k)) + celda(r.mt2);
     for (c = 0; c < COSCOLS.length; c++) { h += cp2(r[COSCOLS[c][0]]); }
     h += '<td class="num"><b>' + peso(r.total) + '</b></td>' + (r.costoMt2 === null ? '<td class="num cero">—</td>' : cp2(r.costoMt2)) + '</tr>';
   }
@@ -1364,14 +1394,14 @@ function pintar(){
   var k = [
     ['MT2 propios', n2(kp.propios), 'impresion en planta', '', 'propios'],
     ['MT2 maquilados', n2(kp.maquila), kp.pctMaquila + '% del total', 'mq', 'maquila'],
-    ['MT2 total + merma', n2(kp.usado), 'CANTIDAD + MERMA_MT2 · base del % de merma', '', 'planta'],
+    ['MT2 total + merma', n2(kp.usado), 'CANTIDAD + MERMA_MT2 · sin maquila', '', 'planta'],
     ['Eventos de campo', n0(kp.eventos), 'instalaciones, entregas, rotulaciones', '', 'eventos'],
     ['Horas maquina', kp.horas > 0 ? n2(kp.horas) : 'sin capturar',
       kp.mt2Hora !== null ? n2(kp.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
       kp.horas > 0 ? '' : 'al', 'horas'],
     ['% de merma', n2(kp.mermaPct) + '%',
-      kp.merma > 0 ? n2(kp.merma) + ' m² de MERMA_MT2 (adicionales)' : 'sin merma capturada en MERMA_MT2',
-      kp.merma > 0 ? '' : 'al', 'merma']
+      kp.mermaP > 0 ? n2(kp.mermaP) + ' m² de MERMA_MT2 (adicionales)' : 'sin merma capturada en MERMA_MT2',
+      kp.mermaP > 0 ? '' : 'al', 'merma']
   ];
   var h = '';
   for (var i = 0; i < k.length; i++) {
@@ -1395,7 +1425,7 @@ function pintar(){
       ? '<span class="chip na">primera</span>'
       : '<span class="chip ' + (r.delta >= 0 ? 'up' : 'dn') + '">' +
         (r.delta >= 0 ? '+' : '') + n0(r.delta) + '%</span>';
-    h += '<tr>' + semTd(r.semana) +
+    h += '<tr data-tip="' + esc(semTip(r.semana)) + '">' + semTd(r.semana) +
          celda(r.propios) + celda(r.maquila) + celda(r.planta) +
          '<td>' + ch + '</td>' +
          celda(r.corte) + celda(r.laminado) + celda(r.laminas,0) + celda(r.piezas,0) +
@@ -1497,13 +1527,13 @@ function matriz(id, filas){
   var max = filas[0].total || 1;
   var h = '<thead><tr><th>Nombre</th>';
   for (var i = ini; i < fin; i++) { h += semTh(D.semanas[i]); }
-  h += '<th title="Suma de todas las semanas que dejan los filtros, no solo las visibles">Total MT2</th><th>Peso</th></tr></thead><tbody>';
+  h += '<th data-tip="Total del periodo|todas las semanas que dejan los filtros">Total MT2</th><th>Peso</th></tr></thead><tbody>';
   var gt = 0;
   for (var f = 0; f < filas.length; f++) {
     var r = filas[f];
     gt += r.total;
     h += '<tr><td>' + esc(r.nombre) + '</td>';
-    for (var v = ini; v < fin; v++) { h += celda(r.val[v]); }
+    for (var v = ini; v < fin; v++) { h += celda(r.val[v]).replace('<td ', '<td data-tip="' + esc(semTip(D.semanas[v])) + '" '); }
     h += celda(r.total) + '<td><div class="mini"><span style="width:' +
          Math.max(2, Math.round(r.total / max * 100)) + '%"></span></div></td></tr>';
   }
