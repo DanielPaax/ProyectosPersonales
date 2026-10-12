@@ -383,7 +383,7 @@ body.sololectura .edit{display:none !important}
     <section class="card span2"><header><h2>Costo de producción y merma por semana</h2></header><div class="gc"><canvas id="cvCosSem"></canvas></div></section>
     <section class="card"><header><h2>Costo por cliente (top 10)</h2></header><div class="gc"><canvas id="cvCosCli"></canvas></div></section>
     <section class="card"><header><h2>Costo por material (top 10)</h2></header><div class="gc"><canvas id="cvCosMat"></canvas></div></section>
-    <section class="card span2"><header><h2>Costo y merma por máquina (top 10)</h2></header><div class="gc"><canvas id="cvCosMaq"></canvas></div></section>
+    <section class="card span2"><header><h2>Costo y merma por máquina (top 10)</h2><span class="sub">Barras: costo de producción por máquina, sin maquila ni carga administrativa (hoja VENTAS). Línea: % de merma = MERMA_MT2 ÷ (CANTIDAD + MERMA_MT2) de la hoja BASE por máquina, sin material MAQUILA.</span></header><div class="gc"><canvas id="cvCosMaq"></canvas></div></section>
   </div>
 
   <div class="ggrid" id="gridProd">
@@ -924,7 +924,7 @@ function init(){
   overlay(true, 'Cargando el tablero...');
   google.script.run
     .withSuccessHandler(function(o){
-      OP = o; llenaFiltros(); areas();
+      OP = o; OP.semanas = (o.semanas || []).map(function(w){ return { v: w.v, t: semLbl(w.t) }; }); llenaFiltros(); areas();
       pedir(true);
       if (o.ses.venta) { pedirCom(true); }
     })
@@ -935,7 +935,7 @@ function init(){
 function recarga(){
   google.script.run
     .withSuccessHandler(function(o){
-      OP = o; llenaFiltros(); areas();
+      OP = o; OP.semanas = (o.semanas || []).map(function(w){ return { v: w.v, t: semLbl(w.t) }; }); llenaFiltros(); areas();
       pedir(false);
       if (o.ses.venta) { pedirCom(true); }
     })
@@ -1002,18 +1002,28 @@ function isoSem(d){
   var w1 = new Date(t.getFullYear(), 0, 4);
   return 1 + Math.round(((t - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
 }
-/* etq = 'SEM 29/12-03/01/26' (lunes a sabado, como en la hoja) o iso = lunes 'yyyy-MM-dd' */
+/* etq = 'SEM 29/12-03/01/26' (el inicio es siempre lunes; el final de la etiqueta puede ser
+   sabado, de datos viejos, o domingo) o iso = lunes 'yyyy-MM-dd'. Toda semana es de LUNES a DOMINGO. */
 function semInfo(etq, iso){
   var ini = null;
   if (iso && /^\d{4}-\d\d-\d\d$/.test(iso)) { ini = new Date(+iso.slice(0,4), +iso.slice(5,7) - 1, +iso.slice(8,10)); }
   else {
     var m = /^SEM\s*(\d\d)\/(\d\d)-(\d\d)\/(\d\d)\/(\d\d)$/.exec(String(etq).trim());
-    if (m) { ini = new Date(2000 + (+m[5]), (+m[4]) - 1, +m[3]); ini.setDate(ini.getDate() - 5); }
+    if (m) {
+      var sd = +m[1], sm = +m[2], em = +m[4], ey = 2000 + (+m[5]);
+      ini = new Date(sm > em ? ey - 1 : ey, sm - 1, sd);
+    }
   }
   if (!ini) { return null; }
-  var fin = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + 5);
+  var fin = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + 6);
   var n = isoSem(ini);
-  return { num: n, corta: 'S' + n, rango: fmtF(ini) + ' al ' + fmtF(fin) };
+  return { num: n, corta: 'S' + n, rango: fmtF(ini) + ' al ' + fmtF(fin), ini: ini, fin: fin };
+}
+/* Etiqueta de semana con final en DOMINGO, sin importar como se guardo en la hoja. */
+function semLbl(etq){
+  var i = semInfo(etq);
+  if (!i) { return String(etq); }
+  return 'SEM ' + f2(i.ini.getDate()) + '/' + f2(i.ini.getMonth() + 1) + '-' + f2(i.fin.getDate()) + '/' + f2(i.fin.getMonth() + 1) + '/' + f2(i.fin.getFullYear() % 100);
 }
 function semTxt(etq, iso){ var i = semInfo(etq, iso); return i ? i.corta : corta(etq); }
 /* titulo de tooltip de grafica: dos lineas */
@@ -1191,7 +1201,7 @@ function pintaInfo(){
   var C = D.costos, cards = [];
   if (C) {
     var k = C.kpi;
-    cards.push(['Costo de producción', money(k.costoProd), 'Sin merma', '']);
+    cards.push(['Costo de producción', money(k.costoProd), C.inclCarga ? 'Sin merma' : 'Sin merma ni carga administrativa', '']);
     cards.push(['Costo de merma', money(k.costoMerma), 'Costo de los m² de merma', '']);
     var pj = function(et, x){
       return x ? '<span title="' + esc(x.nombre + (x.cliente ? ' · ' + x.cliente : '')) + '">' + et + ': <b>' + money(x.costo) + '</b> · ' + esc(acorta(x.nombre, 26)) + '</span>'
@@ -1279,7 +1289,12 @@ function pintaGrafProd(){
       plugins: { legend: { position: 'top' },
         etiq: { modos: ['vb', 'pa'], ds: [0, 1], size: 9.5, colores: [NAVY, ROJO],
                 fmt: function(v, i, d){ return d === 0 ? pctTot(v) : n1(v) + '%'; } },
-        tooltip: { callbacks: { label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
+        tooltip: { callbacks: { label: function(c){
+          if (c.dataset.yAxisID === 'y1') {
+            var m = cq[c.dataIndex];
+            return ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '% (' + n2(m.mermaM2) + ' m² adicionales de ' + n2(m.usadoM2) + ' m² usados)');
+          }
+          return ' Costo (sin maquila): ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
       scales: { x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 10 }, callback: function(v){ return lineas(nomMaq(this.getLabelForValue(v)), 13, 3); } } },
                 y: { beginAtZero: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
                 y1: { position: 'right', beginAtZero: true, grace: '25%', grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
@@ -1294,6 +1309,7 @@ var COSCOLS = [
   ['inst','Instalación',MORADO], ['mo','Mano de obra',VERDE], ['hext','Horas extras',NARANJA],
   ['otros','Otros',GRIS]
 ];
+var COL_CARGA = ['carga','Carga administrativa',NAVY];
 /* Monto EXACTO, con centavos. */
 function peso(v){
   var n = Number(v);
@@ -1316,11 +1332,13 @@ function pintaCostos(){
   if (!D || !D.costos) { card.style.display = 'none'; return; }
   card.style.display = '';
   var C = D.costos, serie = perC === 'mes' ? C.mensual : C.semanal, t = C.total, i, c, h;
+  if (C.inclCarga && COSCOLS.indexOf(COL_CARGA) < 0) { COSCOLS.push(COL_CARGA); }
+  if (!C.inclCarga && COSCOLS.indexOf(COL_CARGA) >= 0) { COSCOLS.splice(COSCOLS.indexOf(COL_CARGA), 1); }
 
   var mayor = null;
   for (i = 0; i < COSCOLS.length; i++) { if (mayor === null || t[COSCOLS[i][0]] > t[mayor[0]]) { mayor = COSCOLS[i]; } }
   var kc = [
-    ['Costo total (con merma)', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras y otros · sin carga administrativa', ''],
+    ['Costo total (con merma)', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras y otros' + (C.inclCarga ? ' y carga' : ' · sin carga administrativa'), ''],
     ['Costo por MT2 de planta', t.costoMt2 === null ? '—' : peso(t.costoMt2), 'costo total ÷ ' + n2(t.mt2) + ' MT2 de planta', 'mq'],
     ['Mayor componente', mayor && t.total ? esc(mayor[1]) : '—', mayor && t.total ? peso(t[mayor[0]]) + ' · ' + n2(t[mayor[0]] / t.total * 100) + '% del total' : '', '']
   ];
@@ -1438,7 +1456,7 @@ function pintar(){
   var gl = (s.length > 1 && s[0].planta > 0)
     ? '<span class="chip ' + (s[s.length - 1].planta >= s[0].planta ? 'up' : 'dn') + '" ' +
       'title="Variacion de la ultima semana contra la primera">' +
-      n0((s[s.length - 1].planta / s[0].planta - 1) * 100) + '% vs ' + esc(s[0].semana) + '</span>'
+      n0((s[s.length - 1].planta / s[0].planta - 1) * 100) + '% vs ' + esc(semTxt(s[0].semana)) + '</span>'
     : '';
   h += '<tr class="tot"><td>TOTAL</td>' + celda(t.propios) + celda(t.maquila) + celda(t.planta) +
        '<td>' + gl + '</td>' + celda(tCorte) + celda(tLam) +
@@ -1474,7 +1492,7 @@ function pintar(){
         '<th>Material</th><th>Cant.</th><th>Que falta</th><th>Observacion</th></tr></thead><tbody>';
     for (var e = 0; e < a.ejemplos.length; e++) {
       var x = a.ejemplos[e];
-      h += '<tr><td>' + x.fila + '</td><td>' + esc(x.semana) + '</td><td>' + esc(x.maquina) +
+      h += '<tr><td>' + x.fila + '</td><td>' + esc(semTxt(x.semana)) + '</td><td>' + esc(x.maquina) +
            '</td><td>' + esc(x.proceso) + '</td><td>' + esc(x.material) + '</td>' +
            celda(x.cant) + '<td style="text-align:left">' + esc(x.motivo) + '</td>' +
            '<td style="text-align:left;white-space:normal;max-width:380px;font-size:11.5px;color:var(--tinta-2)">' +
@@ -1549,7 +1567,8 @@ function matriz(id, filas){
 
 /* ---------- detalle de semana ---------- */
 function verSemana(sem){
-  document.getElementById('detTit').textContent = 'Trabajos de ' + sem;
+  var si = semInfo(sem);
+  document.getElementById('detTit').textContent = si ? 'Trabajos de la semana ' + si.num + ' (' + si.rango + ')' : 'Trabajos de ' + sem;
   document.getElementById('tDet').innerHTML =
     '<tbody><tr><td class="vacio">Cargando los trabajos de la semana...</td></tr></tbody>';
   abrir('mDet');
@@ -1684,7 +1703,7 @@ function guardar(){
       document.getElementById('f_cliente').value = '';
       document.getElementById('f_nota').value = '';
       document.getElementById('f_orden').value = '';
-      toast('Trabajo guardado en la fila ' + res.fila + ' (' + res.semana + ')', 'ok');
+      toast('Trabajo guardado en la fila ' + res.fila + ' (' + semLbl(res.semana) + ')', 'ok');
       pill(true, 'Recalculando el tablero...');
       recarga();
     })
@@ -2022,7 +2041,7 @@ function guardarV(){
                  'v_venta','v_maq','v_inst','v_mo','v_hext','v_otros','v_factura','v_ffactura','v_fprod'];
       for (var q = 0; q < ids.length; q++) { document.getElementById(ids[q]).value = ''; }
       CATV = null;   /* el cliente nuevo debe aparecer en la lista la proxima vez */
-      toast('Venta guardada (' + res.semana + ')' + (res.pendiente ? ' como PENDIENTE de monto' : ''), 'ok');
+      toast('Venta guardada (' + semLbl(res.semana) + ')' + (res.pendiente ? ' como PENDIENTE de monto' : ''), 'ok');
       pill(true, 'Recalculando...');
       recarga();
     })

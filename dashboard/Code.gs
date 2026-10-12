@@ -760,6 +760,10 @@ function _agregaTablero_(filas) {
      que se muestra aparte.
    - % MERMA = 1 - N / O  (M2_PROYECTO entre M2_REALES), igual que en la hoja. */
 
+/* Por ahora NINGUN costo del tablero suma la CARGA ADMINISTRATIVA. Para volver a
+   incluirla basta con poner true aqui (tablas, graficas y tarjetas lo siguen). */
+var INCLUIR_CARGA = false;
+
 var COSTOS_CAMPOS = [
   ['mat', 'cMat'], ['merma', 'cMerma'], ['maq', 'maq'], ['inst', 'inst'],
   ['mo', 'mo'], ['hext', 'hext'], ['otros', 'otros'], ['carga', 'carga']
@@ -778,7 +782,7 @@ function _mt2Planta_(f) {
 /* Costo de produccion de un renglon, en centavos (sin la merma). */
 function _costoProdCC_(r) {
   return _cc_(r.cMat) + _cc_(r.maq) + _cc_(r.inst) + _cc_(r.mo) + _cc_(r.hext) +
-         _cc_(r.otros) + _cc_(r.carga);
+         _cc_(r.otros) + (INCLUIR_CARGA ? _cc_(r.carga) : 0);
 }
 
 function _mermaPct_(m2p, m2r) { return m2r > 0 ? _r2_((1 - m2p / m2r) * 100) : null; }
@@ -813,14 +817,26 @@ function _topCosto_(mapa, n) {
   return arr.slice(0, n);
 }
 
+/* Pone en cada maquina el % de merma de BASE (mmq, en centesimas). */
+function _mermaMaq_(lista, mmq) {
+  for (var i = 0; i < lista.length; i++) {
+    var m = mmq[lista[i].nombre], usado = m ? m.ent + m.merma : 0;
+    lista[i].mermaPct = usado > 0 ? _r2_(m.merma / usado * 100) : null;
+    lista[i].mermaM2 = m ? _dc_(m.merma) : 0;
+    lista[i].usadoM2 = _dc_(usado);
+  }
+  return lista;
+}
+
 function _costosProd_(q, prod) {
   var filas = _leerVentas_();
   var sem = {}, mes = {}, tot = _cerosCosto_(), semEt = {};
   var mCli = {}, mMat = {}, mMaq = {}, peds = {}, clis = {}, mermaCosto = 0, pj = {};
+  function esMaq(m) { return /maquila/i.test(String(m || '')); }
   function suma(a, c, cp, m2p, m2r) {
     for (var i = 0; i < COSTOS_CAMPOS.length; i++) { a[COSTOS_CAMPOS[i][0]] += c[i]; }
-    /* El total del bloque de costos NO incluye la carga administrativa. */
-    var t = 0; for (var k = 0; k < c.length; k++) { if (COSTOS_CAMPOS[k][0] !== 'carga') { t += c[k]; } }
+    /* La carga administrativa solo entra al total si INCLUIR_CARGA es true. */
+    var t = 0; for (var k = 0; k < c.length; k++) { if (INCLUIR_CARGA || COSTOS_CAMPOS[k][0] !== 'carga') { t += c[k]; } }
     a.total += t; a.cp += cp; a.m2p += m2p; a.m2r += m2r;
   }
   function rank(mapa, nombre, cp, cmerma, m2p, m2r) {
@@ -844,7 +860,8 @@ function _costosProd_(q, prod) {
     suma(sem[lunes], c, cp, m2p, m2r); suma(mes[mk], c, cp, m2p, m2r); suma(tot, c, cp, m2p, m2r);
     rank(mCli, r.cliente || '(SIN DATO)', cp, cm, m2p, m2r);
     rank(mMat, r.material || '(SIN DATO)', cp, cm, m2p, m2r);
-    rank(mMaq, r.maquina || '(SIN DATO)', cp, cm, m2p, m2r);
+    /* Costo por maquina: SIN el costo de maquila y sin los renglones cuyo MATERIAL es maquila. */
+    if (!esMaq(r.material)) { rank(mMaq, r.maquina || '(SIN DATO)', cp - _cc_(r.maq), cm, m2p, m2r); }
     peds[_clavePed_(r)] = true;
     var kp = _clavePed_(r);
     if (!pj[kp]) { pj[kp] = { nombre: r.proyecto || kp, cliente: r.cliente || '', cp: 0 }; }
@@ -861,6 +878,17 @@ function _costosProd_(q, prod) {
     var pm = prod[p].fecha.slice(0, 7);
     if (mes[pm]) { mes[pm].mt2 += m2; }
     tot.mt2 += m2;
+  }
+  /* Merma por maquina, de BASE: solo la MAQUINA que indica el renglon, sin los renglones cuyo
+     MATERIAL es maquila. MERMA_MT2 es m2 ADICIONAL: % = merma / (CANTIDAD + merma). */
+  var mmq = {};
+  for (var pm2 = 0; pm2 < prod.length; pm2++) {
+    var fb = prod[pm2];
+    if (esMaq(fb.material)) { continue; }
+    var nmq = fb.maquina || '(SIN DATO)';
+    var am = mmq[nmq] || (mmq[nmq] = { ent: 0, merma: 0 });
+    if (fb.unidad === 'MT2') { am.ent += _cc_(fb.cant); }
+    am.merma += _cc_(fb.merma);
   }
   var semanal = [], mensual = [];
   var ks = _claves_(sem, false), km = _claves_(mes, false);
@@ -887,7 +915,8 @@ function _costosProd_(q, prod) {
   };
   return {
     semanal: semanal, mensual: mensual, total: _filaCosto_('TOTAL', 'TOTAL', tot), kpi: kpi,
-    porCliente: _topCosto_(mCli, 10), porMaterial: _topCosto_(mMat, 10), porMaquina: _topCosto_(mMaq, 10)
+    porCliente: _topCosto_(mCli, 10), porMaterial: _topCosto_(mMat, 10), porMaquina: _mermaMaq_(_topCosto_(mMaq, 10), mmq),
+    inclCarga: INCLUIR_CARGA
   };
 }
 
@@ -1002,7 +1031,7 @@ function _etiquetaSemana_(lunesIso, existentes) {
   var p = lunesIso.split('-');
   var f = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
   var fin = new Date(f.getTime());
-  fin.setDate(fin.getDate() + 5);
+  fin.setDate(fin.getDate() + 6);   /* semana de LUNES a DOMINGO */
   var tz = Session.getScriptTimeZone();
   return 'SEM ' + Utilities.formatDate(f, tz, 'dd/MM') + '-' +
     Utilities.formatDate(fin, tz, 'dd/MM/yy');

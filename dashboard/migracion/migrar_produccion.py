@@ -46,7 +46,7 @@ def lunes(d):
 
 
 def etiqueta(l):
-    return 'SEM %s-%s' % (l.strftime('%d/%m'), (l + datetime.timedelta(days=5)).strftime('%d/%m/%y'))
+    return 'SEM %s-%s' % (l.strftime('%d/%m'), (l + datetime.timedelta(days=6)).strftime('%d/%m/%y'))
 
 
 def proceso_y_unidad(maquina, impresor_tipo):

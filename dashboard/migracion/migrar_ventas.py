@@ -50,7 +50,7 @@ def lunes(d):
 
 
 def etiqueta_semana(l):
-    fin = l + datetime.timedelta(days=5)
+    fin = l + datetime.timedelta(days=6)   # lunes a domingo
     return 'SEM %s-%s' % (l.strftime('%d/%m'), fin.strftime('%d/%m/%y'))
 
 
