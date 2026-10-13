@@ -1,10 +1,15 @@
 var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
-  version:  '1.6.0',
-  liberada: '2026-10-02',
+  intranet: 'Intranet BIG FOOT print',
+  version:  '1.7.0',
+  liberada: '2026-10-13',
   esquema:  6
 };
+
+/* Logotipo de la empresa como imagen incrustada (data:image/png;base64,...). Mientras este vacio,
+   el portal muestra el nombre escrito. */
+var LOGO_DATA_URI = '';
 
 /* ===================== CONFIGURACION ===================== */
 /* Regla: lo administrable va al panel; QUIEN administra vive en codigo. */
@@ -34,8 +39,73 @@ var ROLES = {
      Aqui solo sirve el correo de quien Google SI logra identificar (mismo
      Workspace que el dueño). Para socios con Gmail u otro dominio se usan los
      enlaces personales: menu Produccion > Socios (solo lectura). */
-  SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx']
+  SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx'],
+  /* Areas de la intranet: correos con acceso ademas de MASTER. Se llenan "mas adelante". */
+  DIRECCION:   [],
+  COMERCIAL:   [],
+  OPERACIONES: []
 };
+
+/* ===================== AREAS DE LA INTRANET ===================== */
+/* Una sola tabla manda: quien entra a cada area. Reglas de acceso:
+     todos:  cualquier persona identificada (correo o enlace personal)
+     roles:  roles que entran siempre (MASTER entra a todo)
+     lista:  nombre de la lista de ROLES con correos autorizados
+     socios: true = los socios (solo lectura) tambien entran
+     ventas: true = quien tiene permiso de Venta tambien entra
+   Un enlace personal puede traer areas extra (menu Produccion > Accesos por enlace).
+   modulos: tarjetas dentro del area. estado: 'activo' (tiene destino), 'proximamente'.
+   planeados: texto de lo que se va a construir (solo se muestra como pista). */
+var AREAS = [
+  { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
+    desc: 'Producción y comercial: ventas, costos, merma y productividad.',
+    acceso: { todos: true }, pagina: true },
+  { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
+    desc: 'Información estratégica y de gestión. Acceso restringido.',
+    acceso: { roles: [], lista: 'DIRECCION', socios: false }, modulos: [], planeados: [] },
+  { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
+    desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
+    acceso: { todos: true }, modulos: [], planeados: [] },
+  { id: 'operaciones', nombre: 'Operaciones', icono: 'engrane',
+    desc: 'Producción, mantenimiento, inventario, entregas e instalaciones.',
+    acceso: { roles: ['CAPTURA'], lista: 'OPERACIONES', socios: true }, modulos: [],
+    planeados: ['Órdenes de producción', 'Bitácoras de mantenimiento', 'Bitácoras de trabajo diario',
+                'Control de inventario', 'Control de entregas', 'Control de instalaciones'] },
+  { id: 'comercial', nombre: 'Comercial', icono: 'negocio',
+    desc: 'Vendedores, órdenes de venta y órdenes de compra de clientes.',
+    acceso: { roles: ['CAPTURA'], lista: 'COMERCIAL', socios: true, ventas: true },
+    modulos: [
+      { id: 'dash-com', nombre: 'Dashboard comercial', estado: 'activo', destino: 'dashboard',
+        desc: 'Ventas, ticket promedio, comparativos y cobranza en el Dashboard BFp.' },
+      { id: 'competencia', nombre: 'Tablero de competencia', estado: 'proximamente',
+        desc: 'Ranking de vendedores por ventas y actividad.' },
+      { id: 'actividad', nombre: 'Actividad comercial', estado: 'proximamente',
+        desc: 'Registro de llamadas, mensajes y correos en un formulario.' },
+      { id: 'orden-venta', nombre: 'Órdenes de venta', estado: 'proximamente',
+        desc: 'Crea la orden y registra la venta en el Dashboard.' },
+      { id: 'orden-compra', nombre: 'Órdenes de compra de clientes', estado: 'proximamente',
+        desc: 'Almacena y consulta las órdenes de compra de cada cliente.' }
+    ], planeados: [] }
+];
+
+function _areaPorId_(id) {
+  for (var i = 0; i < AREAS.length; i++) { if (AREAS[i].id === id) { return AREAS[i]; } }
+  return null;
+}
+
+/* ¿Esta sesion entra a esta area? MASTER entra a todas. */
+function _accesoArea_(ses, area) {
+  if (!area) { return false; }
+  var a = area.acceso || {};
+  if (ses.rol === 'MASTER') { return true; }
+  if (a.todos) { return true; }
+  if (a.roles && a.roles.indexOf(ses.rol) >= 0) { return true; }
+  if (a.socios && ses.rol === 'SOCIO') { return true; }
+  if (a.ventas && ses.venta) { return true; }
+  if (ses.extra && ses.extra.indexOf(area.id) >= 0) { return true; }
+  if (a.lista && !ses.porClave && ses.correo && _enLista_(ROLES[a.lista] || [], ses.correo)) { return true; }
+  return false;
+}
 
 /* Columnas de BASE. El orden es contrato: no se reordena sin subir esquema.
    Esquema 2: TURNO, OPERADOR y REIMPRESION. Esquema 4: ORDEN (ODC u ODP del
@@ -102,7 +172,8 @@ var PROCESOS_IMPRESION = ['IMPRESION GRAN FORMATO', 'IMPRESION HD', 'IMPRESION U
 
 function doGet(e) {
   var k = (e && e.parameter && e.parameter.k) ? String(e.parameter.k) : '';
-  /* Un enlace de socio invalido, revocado o vencido no abre el tablero (salvo
+  var a = (e && e.parameter && e.parameter.a) ? String(e.parameter.a) : '';
+  /* Un enlace de socio invalido, revocado o vencido no abre nada (salvo
      que quien lo abre ya tenga un rol propio por correo). */
   if (k && !_socioPorClave_(k) && !_rolPorCorreo_(_correoActual_())) {
     return HtmlService.createHtmlOutput(
@@ -111,14 +182,52 @@ function doGet(e) {
       'Pide uno nuevo a quien administra el tablero.</p></div>')
       .setTitle(JG_SELLO.nombre).addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-  var t = HtmlService.createTemplateFromFile('index');
-  t.sello = JG_SELLO;
   /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
-  t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
+  var claveJs = JSON.stringify(k).replace(/</g, '\\u003c');
+  var base = _urlPublica_();
+  var t, titulo;
+  if (a === 'dashboard') {
+    t = HtmlService.createTemplateFromFile('index');
+    t.urlPortal = base ? base + (k ? '?k=' + k : '') : '';
+    titulo = JG_SELLO.nombre;
+  } else {
+    t = HtmlService.createTemplateFromFile('portal');
+    t.urlDashboard = base ? base + '?a=dashboard' + (k ? '&k=' + k : '') : '';
+    t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
+    titulo = JG_SELLO.intranet;
+  }
+  t.sello = JG_SELLO;
+  t.clave = claveJs;
   return t.evaluate()
-    .setTitle(JG_SELLO.nombre)
+    .setTitle(titulo)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/* ---- API del portal ---- */
+
+function portalInicio(clave) {
+  var ses = _ses_(clave);
+  if (ses.porClave) { _bitacora_(ses.correo, 'ACCESO_PORTAL', 'enlace personal'); }
+  var areas = [];
+  for (var i = 0; i < AREAS.length; i++) {
+    var a = AREAS[i];
+    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, pagina: !!a.pagina,
+                 acceso: _accesoArea_(ses, a) });
+  }
+  return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol }, areas: areas };
+}
+
+function portalArea(id, clave) {
+  var ses = _ses_(clave);
+  var a = _areaPorId_(String(id || ''));
+  if (!a || a.pagina) { throw new Error('Area desconocida.'); }
+  if (!_accesoArea_(ses, a)) {
+    _bitacora_(ses.correo, 'ACCESO_NEGADO', 'area=' + a.id + ' rol=' + ses.rol);
+    throw new Error('Esta área tiene acceso restringido.');
+  }
+  return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: a.modulos || [],
+           planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
 
 function incluir(nombre) {
@@ -152,7 +261,12 @@ function _ses_(clave) {
   }
   if (clave) {
     var socio = _socioPorClave_(clave);
-    if (socio) { return { correo: socio.n + ' (socio)', rol: 'SOCIO', venta: true, porClave: true }; }
+    if (socio) {
+      /* perfil SOCIO (ve todo, solo lectura) o LECTOR (empleado: solo produccion); a = areas extra */
+      var perfil = socio.r === 'LECTOR' ? 'LECTOR' : 'SOCIO';
+      return { correo: socio.n + (perfil === 'SOCIO' ? ' (socio)' : ' (enlace)'), rol: perfil,
+               venta: perfil === 'SOCIO', porClave: true, extra: socio.a || [] };
+    }
   }
   if (!correo) {
     /* Pasa cuando Google no entrega el correo: el usuario esta fuera del
@@ -1864,7 +1978,7 @@ function _correoActual_() {
   return c.toLowerCase().trim();
 }
 
-function _crearAccesoSocio_(nombre, dias) {
+function _crearAccesoSocio_(nombre, dias, perfil, areas) {
   nombre = _texto_(nombre, 60);
   if (!nombre) { throw new Error('Falta el nombre del socio.'); }
   var clave = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -1875,12 +1989,16 @@ function _crearAccesoSocio_(nombre, dias) {
     vence = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   }
   var socios = _leerSocios_();
-  socios[_hash_(clave)] = { n: nombre, c: _hoyIso_(), v: vence };
+  var reg = { n: nombre, c: _hoyIso_(), v: vence };
+  if (perfil === 'LECTOR') { reg.r = 'LECTOR'; }
+  if (areas && areas.length) { reg.a = areas; }
+  socios[_hash_(clave)] = reg;
   _guardaSocios_(socios);
   var url = _urlPublica_();
   return { nombre: nombre, vence: vence, clave: clave,
            aviso: (/\/dev($|\?)/.test(url) ? 'Esta es la URL de PRUEBA (/dev): solo funciona para editores del script. Usa la URL de la implementacion (termina en /exec).' : ''),
-           enlace: (url || '(URL de la implementacion)') + (url.indexOf('?') < 0 ? '?' : '&') + 'k=' + clave };
+           enlace: (url || '(URL de la implementacion)') + (url.indexOf('?') < 0 ? '?' : '&') + 'k=' + clave,
+           perfil: perfil === 'LECTOR' ? 'LECTOR' : 'SOCIO', areas: areas || [] };
 }
 
 /* URL de la app web en formato PUBLICO. Si el dueño usa Google Workspace,
@@ -1918,11 +2036,23 @@ function crearAccesoSocio() {
   if (r.getSelectedButton() !== ui.Button.OK) { return; }
   var v = ui.prompt('Vigencia', 'Dias de vigencia del enlace (deja vacio para que no venza):', ui.ButtonSet.OK_CANCEL);
   if (v.getSelectedButton() !== ui.Button.OK) { return; }
-  var a = _crearAccesoSocio_(r.getResponseText(), Number(v.getResponseText()) || 0);
-  _bitacora_(ses.correo, 'ALTA_SOCIO', a.nombre + ' vence=' + (a.vence || 'nunca'));
+  var pf = ui.prompt('Perfil', 'Escribe SOCIO (ve todo, solo lectura) o EMPLEADO (solo producción). Vacío = SOCIO:', ui.ButtonSet.OK_CANCEL);
+  if (pf.getSelectedButton() !== ui.Button.OK) { return; }
+  var perfil = /^\s*EMPLEADO\s*$/i.test(pf.getResponseText()) ? 'LECTOR' : 'SOCIO';
+  var ar = ui.prompt('Áreas extra', 'Áreas de la intranet además de las generales, separadas por coma (' +
+    'direccion, operaciones, comercial). Vacío = ninguna:', ui.ButtonSet.OK_CANCEL);
+  if (ar.getSelectedButton() !== ui.Button.OK) { return; }
+  var extra = [];
+  var pedidas = ar.getResponseText().toLowerCase().split(/[,;\s]+/);
+  for (var q = 0; q < pedidas.length; q++) {
+    if (pedidas[q] && _areaPorId_(pedidas[q]) && extra.indexOf(pedidas[q]) < 0) { extra.push(pedidas[q]); }
+  }
+  var a = _crearAccesoSocio_(r.getResponseText(), Number(v.getResponseText()) || 0, perfil, extra);
+  _bitacora_(ses.correo, 'ALTA_SOCIO', a.nombre + ' perfil=' + perfil + ' areas=' + extra.join('/') + ' vence=' + (a.vence || 'nunca'));
   var html = HtmlService.createHtmlOutput(
     '<div style="font-family:Arial;font-size:13px;line-height:1.45">' +
-    '<p><b>Enlace personal de ' + _escHtml_(a.nombre) + '</b>' + (a.vence ? ' (vence el ' + a.vence + ')' : ' (no vence)') + '</p>' +
+    '<p><b>Enlace personal de ' + _escHtml_(a.nombre) + '</b> · ' + (a.perfil === 'SOCIO' ? 'socio' : 'empleado') +
+    (a.areas.length ? ' · áreas extra: ' + _escHtml_(a.areas.join(', ')) : '') + (a.vence ? ' (vence el ' + a.vence + ')' : ' (no vence)') + '</p>' +
     '<textarea readonly onclick="this.select()" style="width:100%;height:96px;font-size:12px">' + _escHtml_(a.enlace) + '</textarea>' +
     (a.aviso ? '<p style="color:#8A1C1C;background:#FDE8E8;padding:8px;border-radius:6px">' + _escHtml_(a.aviso) + '</p>' : '') +
     '<p style="color:#7A5200;background:#FFF4DC;padding:8px;border-radius:6px">Trata este enlace como una contraseña: quien lo tenga ve todo el tablero (solo lectura). ' +
@@ -1973,7 +2103,7 @@ function onOpen() {
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
       .addSeparator()
-      .addSubMenu(SpreadsheetApp.getUi().createMenu('Socios (solo lectura)')
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('Accesos por enlace (socios / empleados)')
         .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
         .addItem('Ver accesos', 'verAccesosSocios')
         .addItem('Revocar acceso', 'revocarAccesoSocio'))
@@ -2040,6 +2170,7 @@ function instalar() {
   var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
   if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
   hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
+  _instalaIntranet_(hechos);   /* hojas de la intranet (ordenes, actividad, enlaces) */
   tar.setFrozenRows(1);
   hechos.push(_vincularOrdenes_());
 

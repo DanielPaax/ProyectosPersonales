@@ -37,6 +37,9 @@ h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em}
   font-size:10px; color:#A9C4CE; border:1px solid #3B5967; border-radius:999px;
   padding:2px 8px; white-space:nowrap; font-weight:500;
 }
+.volver{display:inline-flex; align-items:center; gap:6px; align-self:center; color:#fff; text-decoration:none; font-size:12px; font-weight:600;
+  padding:6px 12px; border:1px solid #3B5967; border-radius:999px; white-space:nowrap; transition:background .15s,border-color .15s}
+.volver:hover{background:#2B4A5A; border-color:#0093AE}
 .quien{font-size:11.5px; color:#A9C4CE; text-align:right; line-height:1.3; white-space:nowrap}
 .quien b{color:#fff; display:block; font-weight:600}
 .wrap{max-width:1360px; margin:0 auto; padding:20px 20px 64px}
@@ -309,6 +312,7 @@ body.sololectura .edit{display:none !important}
 <div class="cab">
   <div class="top">
     <div class="marca">
+      <? if (urlPortal) { ?><a class="volver" href="<?= urlPortal ?>" target="_top" title="Volver a la intranet">&#8249; Intranet</a><? } ?>
       <h1>TABLERO BIG FOOT print</h1>
       <span class="sello">v<?= sello.version ?> · esquema <?= sello.esquema ?></span>
     </div>
