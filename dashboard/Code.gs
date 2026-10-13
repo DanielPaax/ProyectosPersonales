@@ -2,14 +2,10 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.7.0',
+  version:  '1.8.0',
   liberada: '2026-10-13',
   esquema:  6
 };
-
-/* Logotipo de la empresa como imagen incrustada (data:image/png;base64,...). Mientras este vacio,
-   el portal muestra el nombre escrito. */
-var LOGO_DATA_URI = '';
 
 /* ===================== CONFIGURACION ===================== */
 /* Regla: lo administrable va al panel; QUIEN administra vive en codigo. */
@@ -59,10 +55,10 @@ var ROLES = {
 var AREAS = [
   { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
     desc: 'Producción y comercial: ventas, costos, merma y productividad.',
-    acceso: { todos: true }, pagina: true },
+    acceso: { todos: true }, vista: 'dashboard' },
   { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
     desc: 'Información estratégica y de gestión. Acceso restringido.',
-    acceso: { roles: [], lista: 'DIRECCION', socios: true }, modulos: [], planeados: [] },
+    acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
@@ -182,24 +178,18 @@ function doGet(e) {
       'Pide uno nuevo a quien administra el tablero.</p></div>')
       .setTitle(JG_SELLO.nombre).addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-  /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
-  var claveJs = JSON.stringify(k).replace(/</g, '\\u003c');
-  var base = _urlPublica_();
-  var t, titulo;
-  if (a === 'dashboard') {
-    t = HtmlService.createTemplateFromFile('index');
-    t.urlPortal = base ? base + (k ? '?k=' + k : '') : '';
-    titulo = JG_SELLO.nombre;
-  } else {
-    t = HtmlService.createTemplateFromFile('portal');
-    t.urlDashboard = base ? base + '?a=dashboard' + (k ? '&k=' + k : '') : '';
-    t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
-    titulo = JG_SELLO.intranet;
-  }
+  /* UNA sola pagina con todo: portal, dashboard y direccion. Cambiar de area no
+     navega a otra URL, asi nunca se cae a una implementacion vieja. `a` solo
+     decide con que pantalla abre (enlaces directos). */
+  var t = HtmlService.createTemplateFromFile('index');
   t.sello = JG_SELLO;
-  t.clave = claveJs;
+  /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
+  t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
+  t.vista = JSON.stringify(_areaPorId_(a) ? a : '');
+  t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
+  t.logoBlanco = JSON.stringify(typeof LOGO_BLANCO_DATA_URI === 'string' ? LOGO_BLANCO_DATA_URI : '');
   return t.evaluate()
-    .setTitle(titulo)
+    .setTitle(JG_SELLO.intranet)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -212,7 +202,7 @@ function portalInicio(clave) {
   var areas = [];
   for (var i = 0; i < AREAS.length; i++) {
     var a = AREAS[i];
-    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, pagina: !!a.pagina,
+    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '',
                  acceso: _accesoArea_(ses, a) });
   }
   return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol }, areas: areas };
@@ -221,11 +211,13 @@ function portalInicio(clave) {
 function portalArea(id, clave) {
   var ses = _ses_(clave);
   var a = _areaPorId_(String(id || ''));
-  if (!a || a.pagina) { throw new Error('Area desconocida.'); }
+  if (!a) { throw new Error('Area desconocida.'); }
   if (!_accesoArea_(ses, a)) {
     _bitacora_(ses.correo, 'ACCESO_NEGADO', 'area=' + a.id + ' rol=' + ses.rol);
     throw new Error('Esta área tiene acceso restringido.');
   }
+  /* dashboard y direccion no son paginas de portal: abren el tablero; aqui solo se valida el acceso */
+  if (a.vista) { return { id: a.id, vista: a.vista, nombre: a.nombre }; }
   return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: a.modulos || [],
            planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
@@ -256,7 +248,8 @@ function _ses_(clave) {
   var correo = _correoActual_();
   var rolCorreo = _rolPorCorreo_(correo);
   if (rolCorreo) {
-    var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo);
+    var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo) ||
+                _enLista_(ROLES.DIRECCION, correo);
     return { correo: correo, rol: rolCorreo, venta: venta };
   }
   if (clave) {
@@ -265,7 +258,7 @@ function _ses_(clave) {
       /* perfil SOCIO (ve todo, solo lectura) o LECTOR (empleado: solo produccion); a = areas extra */
       var perfil = socio.r === 'LECTOR' ? 'LECTOR' : 'SOCIO';
       return { correo: socio.n + (perfil === 'SOCIO' ? ' (socio)' : ' (enlace)'), rol: perfil,
-               venta: perfil === 'SOCIO', porClave: true, extra: socio.a || [] };
+               venta: perfil === 'SOCIO' || (socio.a || []).indexOf('direccion') >= 0, porClave: true, extra: socio.a || [] };
     }
   }
   if (!correo) {
@@ -274,7 +267,8 @@ function _ses_(clave) {
     throw new Error('No se pudo identificar tu cuenta. Si eres socio, abre el enlace personal que te enviaron ' +
       '(termina en ?k=...). Si trabajas en la empresa, abre la aplicacion con tu cuenta del dominio.');
   }
-  return { correo: correo, rol: 'LECTOR', venta: false };
+  /* Quien esta en ROLES.DIRECCION ve la informacion de Venta (solo lectura). */
+  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo) };
 }
 
 function _enLista_(lista, correo) {
@@ -481,14 +475,27 @@ function _ordenSemanas_(filas) {
 }
 
 function _matriz_(filas, campo, semanas) {
+  return _matrizPor_(filas, campo, semanas, function (f) { return f.semana; });
+}
+
+/* Misma matriz pero por MES (columnas = yyyy-MM de la FECHA del renglon). */
+function _matrizMes_(filas, campo, meses) {
+  return _matrizPor_(filas, campo, meses, function (f) { return f.fecha ? f.fecha.slice(0, 7) : ''; });
+}
+
+/* Matriz nombre x periodo en MT2, en centesimas enteras. `clavePeriodo` dice a que
+   columna cae cada renglon: asi las tablas por semana y por mes salen del mismo dato. */
+function _matrizPor_(filas, campo, semanas, clavePeriodo) {
   var nombres = {};
   var celdas = {};
   for (var i = 0; i < filas.length; i++) {
     var f = filas[i];
     if (f.unidad !== 'MT2') { continue; }
+    var per = clavePeriodo(f);
+    if (!per) { continue; }
     var n = f[campo] || '(SIN DATO)';
     nombres[n] = true;
-    var k = n + '||' + f.semana;
+    var k = n + '||' + per;
     celdas[k] = _num_(celdas[k]) + _cc_(f.cant);
   }
   var lista = [];
@@ -847,9 +854,29 @@ function _agregaTablero_(filas) {
   for (var an in ac) { if (ac.hasOwnProperty(an)) { acabados.push({ nombre: an, n: ac[an] }); } }
   acabados.sort(function (a, b) { return b.n - a.n; });
 
+  /* Vista MENSUAL (Direccion): mismas reglas que la semanal, agrupando por mes de la fecha. */
+  var porMes = {};
+  for (var im = 0; im < filas.length; im++) {
+    var fm = filas[im];
+    if (!fm.fecha || fm.unidad !== 'MT2') { continue; }
+    var mkm = fm.fecha.slice(0, 7), am = porMes[mkm] || (porMes[mkm] = { propios: 0, maquila: 0 });
+    var cm2 = _cc_(fm.cant);
+    if (fm.origen === 'MAQUILA') { am.maquila += cm2; }
+    else if (_esImpresion_(fm.proceso)) { am.propios += cm2; }
+  }
+  var mesesCols = _claves_(porMes, false), serieMes = [];
+  for (var jm = 0; jm < mesesCols.length; jm++) {
+    var xm = porMes[mesesCols[jm]];
+    serieMes.push({ k: mesesCols[jm], propios: _dc_(xm.propios), maquila: _dc_(xm.maquila), planta: _dc_(xm.propios + xm.maquila) });
+  }
+
   return {
     semanas: semanas,
     serie: serie,
+    mesesCols: mesesCols,
+    serieMes: serieMes,
+    porMaquinaMes: _matrizMes_(filas, 'maquina', mesesCols),
+    porMaterialMes: _matrizMes_(filas, 'material', mesesCols),
     total: tot,
     porMaquina: _matriz_(filas, 'maquina', semanas),
     porMaterial: _matriz_(filas, 'material', semanas),
@@ -910,6 +937,7 @@ function _filaCosto_(k, etiqueta, a) {
   var o = { k: k, etiqueta: etiqueta };
   for (var i = 0; i < COSTOS_CAMPOS.length; i++) { o[COSTOS_CAMPOS[i][0]] = _dc_(a[COSTOS_CAMPOS[i][0]]); }
   o.total = _dc_(a.total);
+  if (!INCLUIR_CARGA) { o.carga = 0; }   /* la carga administrativa no se muestra ni en pantallas viejas */
   o.costoProd = _dc_(a.cp);
   o.m2p = _dc_(a.m2p);
   o.m2r = _dc_(a.m2r);
@@ -1052,6 +1080,10 @@ function cargarTablero(filtros, sub, clave) {
     ses: ses,
     semanas: res.semanas,
     serie: res.serie,
+    mesesCols: res.mesesCols,
+    serieMes: res.serieMes,
+    porMaquinaMes: res.porMaquinaMes,
+    porMaterialMes: res.porMaterialMes,
     total: res.total,
     kpi: subs.length ? _agregaTablero_(base).total : res.total,
     subs: subs,
