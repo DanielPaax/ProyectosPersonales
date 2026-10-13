@@ -62,7 +62,7 @@ var AREAS = [
     acceso: { todos: true }, pagina: true },
   { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
     desc: 'Información estratégica y de gestión. Acceso restringido.',
-    acceso: { roles: [], lista: 'DIRECCION', socios: false }, modulos: [], planeados: [] },
+    acceso: { roles: [], lista: 'DIRECCION', socios: true }, modulos: [], planeados: [] },
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
