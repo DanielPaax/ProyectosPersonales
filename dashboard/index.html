@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TABLERO BIG FOOT print</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Intranet BIG FOOT print</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Khand:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --teal:#0093AE; --teal-d:#00768C; --teal-l:#E6F4F7;
@@ -37,6 +37,9 @@ h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em}
   font-size:10px; color:#A9C4CE; border:1px solid #3B5967; border-radius:999px;
   padding:2px 8px; white-space:nowrap; font-weight:500;
 }
+.volver{display:inline-flex; align-items:center; gap:6px; align-self:center; color:#fff; text-decoration:none; font-size:12px; font-weight:600;
+  padding:6px 12px; border:1px solid #3B5967; border-radius:999px; white-space:nowrap; transition:background .15s,border-color .15s}
+.volver:hover{background:#2B4A5A; border-color:#0093AE}
 .quien{font-size:11.5px; color:#A9C4CE; text-align:right; line-height:1.3; white-space:nowrap}
 .quien b{color:#fff; display:block; font-weight:600}
 .wrap{max-width:1360px; margin:0 auto; padding:20px 20px 64px}
@@ -71,6 +74,14 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 /* ---------- tablas ---------- */
 .tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+.pager{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 16px; font-size:12px; color:var(--tinta-2)}
+.pager:empty{display:none}
+.pager button{border:1px solid var(--linea); background:#fff; color:var(--tinta); border-radius:6px; padding:5px 11px; font:inherit; font-weight:600; cursor:pointer}
+.pager button:hover:not(:disabled){background:var(--teal-l); border-color:var(--teal)}
+.pager button:disabled{opacity:.4; cursor:default}
+th[data-tip], td[data-tip]{cursor:help}
+#tip{position:fixed; z-index:9999; pointer-events:none; background:rgba(24,48,60,.95); color:#fff; font-size:12px; line-height:1.4;
+  padding:7px 11px; border-radius:6px; white-space:pre; box-shadow:0 4px 14px rgba(0,0,0,.25); display:none}
 table{border-collapse:collapse; width:100%; font-size:13px}
 th,td{padding:8px 11px; text-align:right; border-bottom:1px solid var(--linea); white-space:nowrap}
 th{background:var(--navy); color:#fff; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; position:sticky; top:0}
@@ -156,8 +167,8 @@ td.cero{color:var(--tinta-3)}
 
 /* ---------- cabecera fija, filtros y areas ---------- */
 .cab{position:sticky; top:0; z-index:40; box-shadow:0 2px 8px rgba(24,48,60,.18)}
-.filtros{background:#fff; border-bottom:1px solid var(--linea); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end}
-.filtros .fw{display:flex; flex-direction:column; gap:3px; min-width:108px; flex:1 1 108px; max-width:210px}
+.filtros{background:#fff; border-bottom:1px solid var(--linea); padding:10px 14px; display:flex; flex-wrap:wrap; gap:8px 8px; align-items:flex-end}
+.filtros .fw{display:flex; flex-direction:column; gap:3px; min-width:84px; flex:1 1 84px; max-width:190px}
 .filtros label{font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--tinta-3)}
 .filtros select{font-family:inherit; font-size:12.5px; padding:7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%; text-overflow:ellipsis}
 .filtros select.activo{border-color:var(--teal); background:var(--teal-l); font-weight:600}
@@ -189,7 +200,7 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
 
 /* ---------- seleccion multiple, fechas, tarjetas clicables ---------- */
 .ms{position:relative}
-.msb{width:100%; display:flex; align-items:center; justify-content:space-between; gap:6px; font-family:inherit; font-size:12.5px; font-weight:500; padding:7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); text-align:left}
+.msb{width:100%; display:flex; align-items:center; justify-content:space-between; gap:6px; font-family:inherit; font-size:12px; font-weight:500; padding:7px 7px 7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); text-align:left}
 .msb:hover:not(:disabled){border-color:var(--teal)}
 .msb .mst{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .msb i{border:solid var(--tinta-2); border-width:0 2px 2px 0; padding:3px; transform:rotate(45deg); margin-top:-3px; flex:0 0 auto}
@@ -202,9 +213,9 @@ td.ancho{white-space:normal; max-width:320px; font-size:11.5px; color:var(--tint
 .mso input{margin-top:2px; flex:0 0 auto}
 .msf{display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--linea); padding-top:6px}
 .msf .b-sec{padding:5px 12px; font-size:12px}
-.filtros input[type=date]{font-family:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%}
+.filtros input[type=date]{font-family:inherit; font-size:12px; padding:6px 6px; border:1px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); width:100%}
 .filtros input[type=date].activo{border-color:var(--teal); background:var(--teal-l); font-weight:600}
-.filtros .fw.fecha{min-width:116px; flex:0 1 124px}
+.filtros .fw.fecha{min-width:112px; flex:0 1 116px}
 button.kpi{display:block; width:100%; text-align:left; font-family:inherit; font-size:inherit; font-weight:inherit; color:inherit; padding:13px 15px; border-radius:var(--r); cursor:pointer; background:#fff; border:1px solid var(--linea); border-left:3px solid var(--teal); box-shadow:var(--sombra); transition:transform .08s, box-shadow .12s, background .12s}
 button.kpi.mq{border-left-color:var(--ambar)}
 button.kpi.al{border-left-color:var(--rojo)}
@@ -220,11 +231,43 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 .bv.rot{writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; font-size:10.5px}
 .aviso.perm{margin-bottom:0}
 
+/* ---------- graficas, hamburguesa y tablas de ejecutivos ---------- */
+.ggrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:16px; margin-bottom:18px}
+.ggrid.g3 .span2{grid-column:auto}
+@media (min-width:1100px){
+  .ggrid.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ggrid.g3 .span2{grid-column:span 2}
+}
+.ggrid.c4{grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); padding:16px; margin-bottom:0}
+.ggrid .card{margin-bottom:0}
+.ggrid.c4 .card{box-shadow:none; background:var(--fondo)}
+.gc{position:relative; height:330px; padding:8px 14px 14px}
+.ggrid .gc{height:350px}
+.gc.alto{height:440px}
+.gc.bajo{height:260px}
+.card>.gc{border-bottom:1px solid var(--linea)}
+.hamb{position:relative; align-self:flex-end}
+.hamb .hb{font-size:18px; line-height:1; padding:6px 12px; min-height:0}
+.hmenu{position:absolute; left:0; top:calc(100% + 6px); z-index:80; background:#fff; border:1px solid var(--linea); border-radius:10px; box-shadow:0 10px 30px rgba(24,48,60,.22); min-width:210px; padding:6px}
+.hmenu a{display:block; padding:10px 14px; font-weight:700; border-radius:7px; cursor:pointer; color:var(--navy); font-size:12.5px; letter-spacing:.1em}
+.hmenu a:hover{background:var(--teal-l); color:var(--teal-d)}
+.area{scroll-margin-top:150px}
+/* Solo lectura (socios y lectores): nada que edite se muestra. El servidor ademas lo rechaza. */
+body.sololectura .edit{display:none !important}
+.av{display:inline-flex; width:28px; height:28px; border-radius:50%; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:700; margin-right:10px; vertical-align:middle}
+#tVenV td{padding:12px 14px}
+#tVenV td:first-child{white-space:nowrap}
+.pbar{position:relative; height:22px; background:#EEF2F4; border-radius:11px; overflow:hidden; min-width:140px}
+.pbar span{display:block; height:100%; border-radius:11px; opacity:.35}
+.pbar em{position:absolute; left:0; right:0; top:0; line-height:22px; font-style:normal; font-size:11.5px; font-weight:700; text-align:center; color:var(--navy)}
+.cifra{display:inline-block; min-width:34px; padding:2px 9px; border-radius:999px; background:var(--teal-l); color:var(--teal-d); font-weight:700; font-size:12px; text-align:center}
+.filtros .tit{display:none}
+
 /* ---------- impresion ---------- */
 @media print{
   body{background:#fff; font-size:11px}
   .cab{position:static; box-shadow:none}
-  .filtros,.top button,.sep button,#pill,#toast,.buscar,.link,#cProyectos{display:none !important}
+  .filtros,.top button,.sep button,#pill,#toast,.buscar,.link,#cProyectos,.hamb{display:none !important}
   .card,.kpi{box-shadow:none; break-inside:avoid}
   .area{break-before:page}
   .area:first-of-type{break-before:auto}
@@ -261,22 +304,182 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
   th,td{padding:7px 9px; font-size:12px}
   #pill{right:10px; bottom:10px}
 }
+
+/* ===================== MARCA BIG FOOT print ===================== */
+:root{
+  --azul:#173E81; --azul-b:#0D3894; --indigo:#242191; --naranja:#DF4A10; --naranja-d:#C23E0B; --naranja-l:#FF8A3D;
+  --azul-t:#EEF2FB; --naranja-t:#FFF0E8;
+}
+.oculto{display:none !important}
+#appPortal.oculto,#appDash.oculto{display:none !important}
+/* boton de regreso a la intranet: en la barra de filtros, color que resalta */
+.b-inicio{display:inline-flex; align-items:center; gap:8px; background:var(--naranja); color:#fff; border:none; border-radius:999px;
+  padding:9px 18px 9px 14px; font-weight:700; font-size:12.5px; letter-spacing:.01em; box-shadow:0 3px 10px rgba(223,74,16,.35);
+  transition:background .15s, transform .1s, box-shadow .15s; white-space:nowrap}
+.b-inicio:hover{background:var(--naranja-d); box-shadow:0 5px 14px rgba(223,74,16,.45)}
+.b-inicio svg{width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round}
+/* encabezado: nombre a la izquierda, correo a la derecha; en Direccion el logotipo va al centro */
+.top .der{display:flex; align-items:center; gap:16px; margin-left:auto}
+.top .logo-c{display:none}
+.top .logo-c img{display:block; height:40px; width:auto}
+body.modo-dir .top{display:grid; grid-template-columns:1fr auto 1fr; gap:16px; background:var(--azul-b)}
+body.modo-dir .top .logo-c{display:flex; justify-content:center}
+body.modo-dir .top .der{justify-self:end; margin-left:0}
+body.modo-dir .sello{border-color:rgba(255,255,255,.35); color:#D6E0F7}
+body.modo-dir .quien{color:#D6E0F7}
+/* Direccion: solo se muestra lo seleccionado; lo marcado .solo-dash se oculta */
+body.modo-dir .solo-dash{display:none !important}
+body:not(.modo-dir) .solo-dir{display:none !important}
+body.modo-dir #gridProd{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:760px){
+  body.modo-dir .top{grid-template-columns:1fr}
+  body.modo-dir .top .logo-c{justify-content:flex-start; order:-1}
+  body.modo-dir .top .der{justify-self:start}
+  .b-inicio{padding:8px 14px 8px 11px}
+}
+
+/* ===================== PORTAL DE LA INTRANET ===================== */
+#appPortal{min-height:100vh; display:flex; flex-direction:column; background:#fff; font-family:'Poppins','Montserrat',-apple-system,'Segoe UI',Arial,sans-serif; color:var(--indigo)}
+#appPortal button{font-family:inherit}
+.pt-band{position:relative; background:var(--azul-b); height:62px}
+.pt-band::before{content:""; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,var(--naranja) 0 22%,var(--naranja-l) 22% 30%,transparent 30%)}
+.pt-band::after{content:""; position:absolute; left:0; right:0; top:100%; height:26px; z-index:1; pointer-events:none;
+  background:radial-gradient(circle at 30px 0,var(--azul-b) 29px,transparent 30px) 0 0/60px 26px repeat-x}
+.pt-top{position:relative; z-index:2; max-width:1180px; margin:0 auto; height:100%; padding:0 32px; display:flex; align-items:center; justify-content:flex-end}
+.pt-quien{font-size:12px; color:#C9D6F3; text-align:right; line-height:1.3}
+.pt-quien b{display:block; color:#fff; font-weight:600; font-size:12.5px}
+.pt-wrap{position:relative; z-index:2; max-width:1180px; width:100%; margin:0 auto; padding:50px 32px 56px; flex:1}
+.pt-hero{display:flex; align-items:center; gap:34px; flex-wrap:nowrap}
+.pt-logo img{display:block; height:86px; width:auto; max-width:300px}
+.pt-vr{width:3px; align-self:stretch; min-height:82px; border-radius:3px; background:linear-gradient(var(--naranja),var(--naranja-l))}
+.pt-tit{min-width:0}
+.pt-tit h1{margin:0; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:clamp(34px,4.7vw,58px); line-height:.98; letter-spacing:.005em; text-transform:uppercase; color:var(--indigo)}
+.pt-sub{display:flex; align-items:center; gap:12px; margin:14px 0 0; font-weight:600; font-size:17px; color:var(--naranja)}
+.pt-cuadros{display:inline-flex; gap:4px}
+.pt-cuadros i{width:11px; height:11px; border-radius:3px; background:var(--naranja); display:block}
+.pt-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(262px,1fr)); gap:24px; margin-top:44px}
+.pt-tile{position:relative; text-align:left; font:inherit; color:inherit; cursor:pointer; overflow:hidden;
+  background:#fff; border:1.5px solid #E1E7F4; border-radius:26px; padding:28px 26px 24px; min-height:236px;
+  display:flex; flex-direction:column; gap:12px; box-shadow:0 2px 6px rgba(23,62,129,.06);
+  transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease}
+.pt-tile:hover,.pt-tile:focus-visible{transform:translateY(-6px); border-color:var(--naranja); box-shadow:0 18px 38px rgba(23,62,129,.16); outline:none}
+.pt-tile:focus-visible{box-shadow:0 0 0 3px rgba(223,74,16,.35), 0 18px 38px rgba(23,62,129,.16)}
+.pt-ico{width:68px; height:68px; border-radius:20px; display:grid; place-items:center; flex:0 0 auto;
+  background:linear-gradient(145deg,var(--azul-b),var(--azul)); box-shadow:0 8px 18px rgba(13,56,148,.30); transition:background .22s}
+.pt-ico svg{width:44px; height:44px; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.pt-tile:hover .pt-ico{background:linear-gradient(145deg,var(--naranja),var(--naranja-d)); box-shadow:0 8px 18px rgba(223,74,16,.35)}
+.pt-tile h2{margin:8px 0 0; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:30px; line-height:1; text-transform:uppercase; letter-spacing:.01em; color:var(--indigo)}
+.pt-tile p{margin:0; font-size:13.5px; line-height:1.55; color:#5A6285; flex:1}
+.pt-go{align-self:flex-start; display:inline-flex; align-items:center; gap:9px; background:var(--naranja); color:#fff; font-weight:600; font-size:13.5px;
+  padding:9px 18px 9px 20px; border-radius:999px; transition:background .2s, gap .2s}
+.pt-go svg{width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round}
+.pt-tile:hover .pt-go{background:var(--naranja-d); gap:13px}
+.pt-tile.pt-cerrado{cursor:not-allowed; background:#F7F8FC; border-color:#E8EBF3; box-shadow:none}
+.pt-tile.pt-cerrado .pt-ico{background:linear-gradient(145deg,#A9B2CB,#C4CBDD); box-shadow:none}
+.pt-tile.pt-cerrado h2,.pt-tile.pt-cerrado p{color:#9AA2BC}
+.pt-tile.pt-cerrado .pt-go{background:#D5DAE8; color:#76809F}
+.pt-tile.pt-cerrado .pt-go svg{stroke:#76809F}
+.pt-tile.pt-cerrado:hover{transform:none; border-color:#E8EBF3; box-shadow:none}
+.pt-tile.pt-cerrado:hover .pt-ico{background:linear-gradient(145deg,#A9B2CB,#C4CBDD); box-shadow:none}
+.pt-tile.pt-cerrado:hover .pt-go{background:#D5DAE8; gap:9px}
+/* vista de area */
+.pt-migas{display:flex; align-items:center; gap:8px; font-size:13px; color:#5A6285; font-weight:500}
+.pt-migas button{background:none; border:none; color:var(--naranja); font-weight:700; cursor:pointer; padding:4px 2px; font-size:13px; border-radius:0}
+.pt-migas button:hover{text-decoration:underline; background:none}
+.pt-av-cab{display:flex; align-items:center; gap:22px; margin:22px 0 4px}
+.pt-av-cab .pt-ico{width:76px; height:76px; border-radius:22px}
+.pt-av-cab h2{margin:0; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:46px; line-height:1; text-transform:uppercase; color:var(--indigo)}
+.pt-av-cab p{margin:8px 0 0; color:#5A6285; font-size:14.5px}
+.pt-bloque{margin-top:34px}
+.pt-bloque>h3{margin:0 0 16px; display:flex; align-items:center; gap:12px; font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--naranja)}
+.pt-bloque>h3::after{content:""; flex:1; height:2px; background:#E8ECF7; border-radius:2px}
+.pt-cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(262px,1fr)); gap:18px}
+.pt-card{position:relative; background:#fff; border:1.5px solid #E1E7F4; border-radius:20px; padding:20px 20px 18px; display:flex; flex-direction:column; gap:8px;
+  text-decoration:none; color:inherit; box-shadow:0 2px 6px rgba(23,62,129,.05); transition:transform .18s, box-shadow .18s, border-color .18s}
+a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-shadow:0 14px 30px rgba(23,62,129,.14)}
+.pt-card h4{margin:0; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:22px; line-height:1.05; text-transform:uppercase; color:var(--indigo); padding-right:96px}
+.pt-card p{margin:0; font-size:13px; color:#5A6285; line-height:1.55}
+.pt-card.pt-prox{background:#FAFBFE; border-style:dashed}
+.pt-card.pt-prox h4{color:#7A83A6}
+.pt-badge{position:absolute; top:16px; right:16px; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:4px 10px; border-radius:999px; background:var(--naranja-t); color:var(--naranja-d)}
+.pt-badge.ok{background:var(--azul-t); color:var(--azul-b)}
+.pt-enlace svg{position:absolute; top:20px; right:18px; width:18px; height:18px; stroke:var(--naranja); fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round}
+.pt-enlace h4{padding-right:30px}
+.pt-vacio{background:#fff; border:2px dashed #CBD4EC; border-radius:26px; padding:50px 30px; text-align:center; color:#5A6285}
+.pt-vacio .pt-ico{margin:0 auto 18px}
+.pt-vacio h4{margin:0 0 8px; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:28px; text-transform:uppercase; color:var(--indigo)}
+.pt-vacio p{margin:0 auto; max-width:540px; font-size:14px; line-height:1.65}
+.pt-chips{display:flex; flex-wrap:wrap; gap:9px; justify-content:center; margin-top:20px}
+.pt-chip{font-size:12px; font-weight:600; padding:7px 14px; border-radius:999px; background:var(--azul-t); color:var(--azul-b)}
+.pt-estado{padding:70px 20px; text-align:center; color:#5A6285; font-size:14px}
+.pt-spin{width:34px; height:34px; border:4px solid #E1E7F4; border-top-color:var(--naranja); border-radius:50%; margin:0 auto 16px; animation:ptgira .8s linear infinite}
+@keyframes ptgira{to{transform:rotate(360deg)}}
+.pt-err{background:#FDECEA; color:#7A1F14; border:1px solid #F3C6C0; border-radius:16px; padding:18px 22px; font-size:14px; line-height:1.55; margin-top:30px}
+.pt-err b{display:block; margin-bottom:4px; font-size:15px}
+.pt-pie{padding:6px 32px 28px; text-align:center; font-size:12px; color:#8A92B2; position:relative; z-index:2}
+#ptToast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px); background:var(--indigo); color:#fff; padding:13px 22px; border-radius:14px;
+  font-size:13.5px; opacity:0; pointer-events:none; transition:all .25s; z-index:300; max-width:90vw; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,.25)}
+#ptToast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+.pt-oculto{display:none !important}
+@media (max-width:700px){
+  .pt-wrap{padding:34px 18px 40px}
+  .pt-top{padding:0 18px}
+  .pt-hero{flex-direction:column; align-items:flex-start; gap:18px; flex-wrap:wrap}
+  .pt-vr{width:72px; height:4px; min-height:4px; align-self:auto}
+  .pt-logo img{height:68px}
+  .pt-tiles{gap:16px; margin-top:30px}
+  .pt-av-cab h2{font-size:34px}
+}
+@media (prefers-reduced-motion:reduce){.pt-tile,.pt-card,.pt-go{transition:none !important}.pt-spin{animation:none !important}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
 
+<!-- ============================ PORTAL DE LA INTRANET ============================ -->
+<div id="appPortal">
+  <div class="pt-band"><div class="pt-top"><div class="pt-quien" id="ptQuien"></div></div></div>
+  <main class="pt-wrap">
+    <section class="pt-hero" id="ptHero">
+      <div class="pt-logo"><img id="ptLogo" alt="bigfoot print"></div>
+      <div class="pt-vr" aria-hidden="true"></div>
+      <div class="pt-tit">
+        <h1>Bienvenido a la Intranet</h1>
+        <p class="pt-sub"><span class="pt-cuadros" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Selecciona el área</p>
+      </div>
+    </section>
+    <div id="ptInicio">
+      <div class="pt-estado" id="ptCarga"><div class="pt-spin"></div>Cargando tu intranet…</div>
+      <div class="pt-tiles pt-oculto" id="ptTiles"></div>
+    </div>
+    <section class="pt-oculto" id="ptArea" aria-live="polite"></section>
+    <div id="ptFalla"></div>
+  </main>
+  <footer class="pt-pie">Intranet BIG FOOT print · v<?= sello.version ?></footer>
+  <div id="ptToast" role="status"></div>
+</div>
+
+<!-- ============================ DASHBOARD / DIRECCION ============================ -->
+<div id="appDash" class="oculto">
 <div class="cab">
   <div class="top">
     <div class="marca">
-      <h1>TABLERO BIG FOOT print</h1>
+      <h1 id="tituloDoc">TABLERO BIG FOOT print</h1>
       <span class="sello">v<?= sello.version ?> · esquema <?= sello.esquema ?></span>
     </div>
-    <div class="quien" id="quien"><b>Identificando…</b>cargando sesión</div>
-    <button class="b-fan" id="btnRef" onclick="refrescar()">Actualizar</button>
+    <div class="logo-c"><img id="logoC" alt="bigfoot print"></div>
+    <div class="der">
+      <div class="quien" id="quien"><b>Identificando…</b>cargando sesión</div>
+      <button class="b-fan" id="btnRef" onclick="refrescar()">Actualizar</button>
+    </div>
   </div>
   <div class="filtros" id="barraG">
-    <div class="fw"><label>Semana</label><div class="ms" id="g_sem"></div></div>
+    <button type="button" class="b-inicio" onclick="irInicio()" title="Volver al inicio de la intranet" aria-label="Volver al inicio de la intranet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Inicio</button>
+    <div class="hamb"><button type="button" class="b-sec hb" onclick="hambTog(event)" aria-label="Ir a una sección" title="Ir a una sección">&#9776;</button>
+      <div class="hmenu" id="hmenu" style="display:none"><a onclick="irA('areaProd')">PRODUCCIÓN</a><a onclick="irA('areaCom')">COMERCIAL</a></div></div>
+    <div class="fw"><label>Año</label><div class="ms" id="g_anio"></div></div>
     <div class="fw"><label>Mes</label><div class="ms" id="g_mes"></div></div>
+    <div class="fw"><label>Semana</label><div class="ms" id="g_sem"></div></div>
     <div class="fw"><label>Máquina</label><div class="ms" id="g_maq"></div></div>
     <div class="fw"><label>Operador</label><div class="ms" id="g_ope"></div></div>
     <div class="fw fv"><label>Vendedor</label><div class="ms" id="g_ven"></div></div>
@@ -294,31 +497,32 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 <section class="area" id="areaProd">
   <div class="sep">
     <h2>PRODUCCIÓN</h2>
-    <button class="b-pri" id="btnAlta" onclick="abrirAlta()" style="display:none">+ Capturar trabajo</button>
+    <button class="b-pri solo-dash" id="btnAlta" onclick="abrirAlta()" style="display:none">+ Capturar trabajo</button>
   </div>
 
   <div id="banner"></div>
   <div class="kpis" id="kpis"></div>
-  <div id="subBar"></div>
+  <div id="subBar" class="solo-dash"></div>
+  <div class="kpis solo-dash" id="kpisI"></div>
 
   <section class="card">
     <header>
-      <h2>Tendencia semanal</h2>
+      <h2 id="hTend">Tendencia semanal</h2>
+      <div class="seg solo-dir" id="segTend">
+        <button class="on" onclick="tendPer('mes')">Mensual</button>
+        <button onclick="tendPer('sem')">Semanal</button>
+      </div>
       <span class="sub">Metros cuadrados que pasaron por la planta: impresión propia más maquila. La maquila se grafica aparte porque nunca entraba en el total del reporte anterior.</span>
     </header>
-    <div class="cuerpo">
-      <div class="barras" id="barras"></div>
-      <div class="leyenda">
-        <span><i style="background:var(--teal)"></i>MT2 propios</span>
-        <span><i style="background:var(--ambar)"></i>MT2 maquilados</span>
-      </div>
-    </div>
+    <div class="gc"><canvas id="cvTend"></canvas></div>
   </section>
 
   <section class="card">
     <header><h2>MT2 por máquina</h2>
       <span class="sub">Solo unidad MT2. El router (láminas), los marcos (piezas) y los servicios de campo (eventos) no aparecen aquí.</span>
     </header>
+    <div class="gc"><canvas id="cvMaq"></canvas></div>
+    <div class="pager" id="pg_tMaq"></div>
     <div class="tscroll"><table id="tMaq"></table></div>
   </section>
 
@@ -331,15 +535,26 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
       <span class="sub">Tendencia e histórico de costos con montos exactos. Salen de los proyectos (hoja VENTAS) y se reparten por fecha de producción. Respetan los filtros de arriba, salvo Operador y los sub-filtros de tarjeta, porque el costo es del proyecto.</span>
     </header>
     <div class="cuerpo">
-      <div class="kpis s" id="kpisC"></div>
-      <div class="barras" id="barrasC"></div>
-      <div class="leyenda" id="leyC"></div>
-      <div class="nota" id="notaC" style="display:none;margin-top:12px"></div>
+      <div class="kpis s solo-dash" id="kpisC"></div>
+      <div class="gc alto"><canvas id="cvCosto"></canvas></div>
+      <div class="nota solo-dash" id="notaC" style="display:none;margin-top:12px"></div>
     </div>
-    <div class="tscroll"><table id="tCos"></table></div>
+    <div class="tscroll solo-dash"><table id="tCos"></table></div>
   </section>
 
-  <section class="card">
+  <div class="ggrid g3 solo-dash" id="gridCostos">
+    <section class="card span2"><header><h2>Costo de producción y merma por semana</h2></header><div class="gc"><canvas id="cvCosSem"></canvas></div></section>
+    <section class="card"><header><h2>Costo por cliente (top 10)</h2></header><div class="gc"><canvas id="cvCosCli"></canvas></div></section>
+    <section class="card"><header><h2>Costo por material (top 10)</h2></header><div class="gc"><canvas id="cvCosMat"></canvas></div></section>
+    <section class="card span2"><header><h2>Costo y merma por máquina (top 10)</h2><span class="sub">Barras: costo de producción por máquina, sin maquila ni carga administrativa (hoja VENTAS). Línea: % de merma = MERMA_MT2 ÷ (CANTIDAD + MERMA_MT2) de la hoja BASE por máquina, sin material MAQUILA.</span></header><div class="gc"><canvas id="cvCosMaq"></canvas></div></section>
+  </div>
+
+  <div class="ggrid" id="gridProd">
+    <section class="card"><header><h2>Tipo de impresión</h2><span class="sub">MT2 por tipo de proceso, comparativo entre uno y otro.</span></header><div class="gc"><canvas id="cvDona"></canvas></div></section>
+    <section class="card solo-dash"><header><h2>Acabados más usados</h2><span class="sub">Por número de registros (columnas ACABADOS_1 a 3 de BASE).</span></header><div class="gc"><canvas id="cvAcab"></canvas></div></section>
+  </div>
+
+  <section class="card solo-dash">
     <header><h2>Detalle por semana</h2>
       <span class="sub">Cada unidad en su propia columna. Los MT2 no se suman con láminas, piezas ni eventos.</span>
     </header>
@@ -348,17 +563,21 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 
   <section class="card">
     <header><h2>MT2 por material</h2></header>
+    <div class="gc"><canvas id="cvMat"></canvas></div>
+    <div class="pager" id="pg_tMat"></div>
     <div class="tscroll"><table id="tMat"></table></div>
   </section>
 
-  <section class="card">
+  <section class="card solo-dash">
     <header><h2>MT2 por operador</h2>
       <span class="sub">Solo unidad MT2. Los renglones sin operador aparecen como (SIN DATO).</span>
     </header>
+    <div class="gc bajo"><canvas id="cvOpe"></canvas></div>
+    <div class="pager" id="pg_tOpe"></div>
     <div class="tscroll"><table id="tOpe"></table></div>
   </section>
 
-  <section class="card">
+  <section class="card solo-dash">
     <header><h2>Calidad del dato</h2>
       <span class="sub">Renglones incompletos, unidades dudosas y supuestos que quedaron de la migración.</span>
     </header>
@@ -373,20 +592,11 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 <section class="area" id="areaCom">
   <div class="sep com">
     <h2>COMERCIAL</h2>
-    <button class="b-pri" id="btnAltaV" onclick="abrirVenta()" style="display:none">+ Capturar venta</button>
+    <button class="b-pri solo-dash" id="btnAltaV" onclick="abrirVenta()" style="display:none">+ Capturar venta</button>
   </div>
 
   <div id="comAviso"></div>
   <div id="comBody">
-    <div class="filtros local" id="barraL">
-      <div class="tit">Filtros de COMERCIAL · se suman a los de arriba y mandan sobre ellos en la misma opción</div>
-      <div class="fw"><label>Semana</label><div class="ms" id="l_sem"></div></div>
-      <div class="fw"><label>Mes</label><div class="ms" id="l_mes"></div></div>
-      <div class="fw"><label>Año</label><div class="ms" id="l_anio"></div></div>
-      <div class="fw"><label>Vendedor</label><div class="ms" id="l_ven"></div></div>
-      <div class="fw"><label>Cliente</label><div class="ms" id="l_cli"></div></div>
-      <button class="b-sec" onclick="limpiaL()">Limpiar</button>
-    </div>
 
   <div id="bannerV"></div>
   <div id="notaV"></div>
@@ -396,6 +606,12 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
     <header><h2>Venta por ejecutivo</h2>
       <span class="sub">Quién vendió cuánto en el periodo filtrado. Los renglones sin vendedor capturado aparecen como (SIN VENDEDOR).</span>
     </header>
+    <div class="ggrid c4">
+      <section class="card"><header><h2>Venta ($)</h2></header><div class="gc bajo"><canvas id="cvVenV"></canvas></div></section>
+      <section class="card"><header><h2>% del total</h2></header><div class="gc bajo"><canvas id="cvVenPct"></canvas></div></section>
+      <section class="card"><header><h2>Pedidos</h2></header><div class="gc bajo"><canvas id="cvVenPed"></canvas></div></section>
+      <section class="card"><header><h2>Clientes</h2></header><div class="gc bajo"><canvas id="cvVenCli"></canvas></div></section>
+    </div>
     <div class="tscroll"><table id="tVenV"></table></div>
   </section>
 
@@ -403,6 +619,7 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
     <header><h2>Comparativo entre vendedores</h2>
       <span class="sub">Venta mensual de cada ejecutivo, lado a lado.</span>
     </header>
+    <div class="gc alto"><canvas id="cvCmp"></canvas></div>
     <div class="tscroll"><table id="tCmpV"></table></div>
   </section>
 
@@ -410,11 +627,11 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
     <header><h2>Histórico mensual</h2>
       <span class="sub">Venta total por mes de venta, con su variación contra el mes anterior.</span>
     </header>
-    <div class="cuerpo"><div class="barras" id="barrasV"></div></div>
+    <div class="gc"><canvas id="cvHist"></canvas></div>
     <div class="tscroll"><table id="tHistV"></table></div>
   </section>
 
-  <section class="card">
+  <section class="card solo-dash">
     <header><h2>Ranking de ejecutivos</h2>
       <span class="sub">Ordenado por venta. Quienes no tienen vendedor capturado se muestran aparte, sin posición.</span>
     </header>
@@ -425,10 +642,11 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
     <header><h2>Venta por cliente</h2>
       <span class="sub">Los doce con más venta; el resto se agrupa en «OTROS».</span>
     </header>
+    <div class="gc"><canvas id="cvCliV"></canvas></div>
     <div class="tscroll"><table id="tCliV"></table></div>
   </section>
 
-  <section class="card">
+  <section class="card solo-dash">
     <header><h2>Calidad del dato comercial</h2>
       <span class="sub">Pendientes de monto, proyectos sin vendedor y fechas dudosas.</span>
     </header>
@@ -440,7 +658,7 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 
   <section class="card" id="cProyectos">
     <header><h2>Proyectos</h2>
-      <span class="sub">Busca por cliente, proyecto, ODC, ODP o factura. Desde aquí se captura el monto de un pendiente, el vendedor y la cobranza.</span>
+      <span class="sub">Busca por cliente, proyecto, ODC, ODP o factura.<span class="solo-dash"> Desde aquí se captura el monto de un pendiente, el vendedor y la cobranza.</span></span>
     </header>
     <div class="buscar">
       <input type="text" id="qV" placeholder="Buscar…" onkeydown="if(event.key==='Enter'){buscarV()}">
@@ -480,6 +698,9 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
         <div class="campo"><label>Merma MT2</label><input type="number" id="f_merma" step="0.01" min="0" placeholder="1.8"></div>
         <div class="campo"><label>¿Es reimpresión?</label><select id="f_reimp"></select><span class="pista">Si marcas SI, la nota es obligatoria.</span></div>
         <div class="campo"><label>Motivo de paro</label><select id="f_paro"></select></div>
+        <div class="campo"><label>Acabado 1</label><select id="f_acab1"></select></div>
+        <div class="campo"><label>Acabado 2</label><select id="f_acab2"></select></div>
+        <div class="campo"><label>Acabado 3</label><select id="f_acab3"></select><span class="pista">Las tres listas son iguales; un acabado no se repite.</span></div>
         <div class="campo full" id="c_nota"><label>Nota</label><textarea id="f_nota" maxlength="500" placeholder="Reimpresión por raya en el material, sucursal Puerto Vallarta…"></textarea></div>
       </div>
     </div>
@@ -513,7 +734,7 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
         <div class="campo"><label>Vendedor</label><select id="v_vendedor"></select></div>
         <div class="campo"><label>Tipo de proyecto</label><select id="v_tipo"></select></div>
         <div class="campo"><label>Máquina</label><input type="text" id="v_maquina" list="dlMaq" maxlength="80"><datalist id="dlMaq"></datalist></div>
-        <div class="campo"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Debe existir en TARIFAS: de ahí sale el costo.</span></div>
+        <div class="campo"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Lista del catálogo MATERIAL. El costo sale de TARIFAS; si el material no tiene tarifa (p. ej. SOLO IMPRESIÓN), su costo de material queda en cero.</span></div>
         <div class="campo"><label>M2 del proyecto</label><input type="number" id="v_m2p" step="0.01" min="0"></div>
         <div class="campo"><label>M2 reales utilizados</label><input type="number" id="v_m2r" step="0.01" min="0"><span class="pista">La diferencia contra el proyecto es la merma.</span></div>
         <div class="campo"><label>Monto de venta (subtotal)</label><input type="number" id="v_venta" step="0.01" min="0" placeholder="vacío = pendiente"></div>
@@ -555,10 +776,19 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
     </footer>
   </div>
 </div>
+</div><!-- /appDash -->
 
 <script>
+/* Clave del enlace personal de un socio (?k=...); vacia para quien entra con su cuenta. Solo se
+   reenvia en las consultas de LECTURA: ninguna operacion que escriba la acepta. */
+var CLAVE = <?!= clave ?>;
+var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>;
+var MODO = 'dashboard';     /* 'dashboard' (todo) o 'direccion' (informativo, seleccion de lo anterior) */
+var DASH_LISTO = false;     /* el tablero se carga la primera vez que se entra */
+var perTendDir = 'mes';     /* Direccion: la tendencia abre mensual */
 var D = null;        /* ultimo tablero recibido */
-var CATS = null;     /* catalogos, se piden una sola vez */
+var CATS = null;     /* catalogos de captura de trabajo */
+var CATSt = 0;       /* cuando se pidieron: se vuelven a pedir pasado 1 minuto */
 var guardando = false;
 
 /* ---------- utilidades ---------- */
@@ -611,14 +841,14 @@ document.addEventListener('keydown', function(e){
 });
 
 /* ---------- filtros ---------- */
+/* UNA sola barra de filtros, la de arriba (fija al navegar): manda sobre TODO el
+   documento, PRODUCCION y COMERCIAL. */
 var OP = null;          /* opciones de los selectores */
-var FG = {};            /* filtro general (barra de arriba): listas + rango de fechas */
-var FL = {};            /* filtro del area COMERCIAL: listas */
+var FG = {};            /* filtro general: listas + rango de fechas */
 var SUB = [];           /* sub-filtros activados con las tarjetas de PRODUCCION */
 var MS = {};            /* estado de cada selector multiple: {opts, sel, vacio} */
 var msTimer = null;
-var GK = ['sem','mes','maq','ope','ven','mat','cli'];
-var LK = ['sem','mes','anio','ven','cli'];
+var GK = ['anio','mes','sem','maq','ope','ven','mat','cli'];
 var MESES_L = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 function mesLargo(k){ return MESES_L[Number(k.slice(5,7)) - 1] + ' ' + k.slice(0,4); }
 
@@ -641,6 +871,7 @@ function msBuild(id, arr, vacio, sin){
 }
 function msTexto(m){
   if (!m.sel.length) { return m.vacio; }
+  if (m.opts.length > 1 && m.sel.length === m.opts.length) { return 'Todos (' + m.opts.length + ')'; }
   if (m.sel.length === 1) {
     for (var i = 0; i < m.opts.length; i++) { if (m.opts[i].v === m.sel[0]) { return m.opts[i].t; } }
   }
@@ -657,12 +888,14 @@ function msPinta(id){
     h += '<label class="mso"><input type="checkbox" value="' + esc(m.opts[i].v) + '"' + (marcados[m.opts[i].v] ? ' checked' : '') +
          ' onchange="msCambia(\'' + id + '\')"><span>' + esc(m.opts[i].t) + '</span></label>';
   }
-  h += '</div><div class="msf"><button type="button" class="link" onclick="msLim(\'' + id + '\')">Limpiar</button>' +
+  h += '</div><div class="msf"><span><button type="button" class="link" onclick="msLim(\'' + id + '\')">Limpiar</button>' +
+       '<button type="button" class="link" onclick="msTodos(\'' + id + '\')">Todos</button></span>' +
        '<button type="button" class="b-sec" onclick="msCerrar()">Listo</button></div></div>';
   document.getElementById(id).innerHTML = h;
 }
 function msTog(id, ev){
   if (ev) { ev.stopPropagation(); }
+  hambCerrar();
   var p = document.getElementById(id).querySelector('.msp');
   var abierto = p.style.display !== 'none';
   msCerrar();
@@ -682,35 +915,75 @@ function msBus(id){
     ls[i].style.display = ls[i].textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
   }
 }
+/* Pone una seleccion sin repintar el panel (no se cierra ni pierde la busqueda). */
+function msSet(id, vals){
+  var m = MS[id], set = {}, i;
+  for (i = 0; i < vals.length; i++) { set[vals[i]] = true; }
+  m.sel = [];
+  for (i = 0; i < m.opts.length; i++) { if (set[m.opts[i].v]) { m.sel.push(m.opts[i].v); } }
+  var cs = document.getElementById(id).querySelectorAll('.mso input');
+  for (i = 0; i < cs.length; i++) { cs[i].checked = !!set[cs[i].value]; }
+  var b = document.getElementById(id).querySelector('.msb');
+  b.className = 'msb' + (m.sel.length ? ' activo' : '');
+  b.querySelector('.mst').textContent = msTexto(m);
+}
 function msCambia(id){
   var cs = document.getElementById(id).querySelectorAll('.mso input'), sel = [];
   for (var i = 0; i < cs.length; i++) { if (cs[i].checked) { sel.push(cs[i].value); } }
-  MS[id].sel = sel;
-  var b = document.getElementById(id).querySelector('.msb');
-  b.className = 'msb' + (sel.length ? ' activo' : '');
-  b.querySelector('.mst').textContent = msTexto(MS[id]);
+  msSet(id, sel);
+  propaga(id);
   if (msTimer) { clearTimeout(msTimer); }
-  msTimer = setTimeout(function(){ if (id.charAt(0) === 'g') { cambioG(); } else { cambioL(); } }, 350);
+  msTimer = setTimeout(cambioG, 350);
 }
-function msLim(id){
-  var cs = document.getElementById(id).querySelectorAll('.mso input');
-  for (var i = 0; i < cs.length; i++) { cs[i].checked = false; }
-  msCambia(id);
+function msLim(id){ msSet(id, []); msCambia(id); }
+function msTodos(id){
+  var v = [];
+  for (var i = 0; i < MS[id].opts.length; i++) { v.push(MS[id].opts[i].v); }
+  msSet(id, v); msCambia(id);
 }
 function msVacia(id){ MS[id].sel = []; msPinta(id); }
 document.addEventListener('click', function(e){
   if (!e.target.closest || !e.target.closest('.ms')) { msCerrar(); }
+  if (!e.target.closest || !e.target.closest('.hamb')) { hambCerrar(); }
 });
+
+/* ---- cascada año -> mes -> semana ----------------------------------------
+   Al elegir un mes se marcan solas TODAS las semanas que tocan ese mes (una
+   semana de lunes a domingo puede tocar dos meses); al elegir un año, todos sus
+   meses. Despues puedes quitar a mano las que no quieras. */
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+function finMes(k){ return k + '-' + pad2(new Date(Number(k.slice(0,4)), Number(k.slice(5,7)), 0).getDate()); }
+function sumaDias(iso, n){
+  var d = new Date(Date.UTC(Number(iso.slice(0,4)), Number(iso.slice(5,7)) - 1, Number(iso.slice(8,10))) + n * 864e5);
+  return d.toISOString().slice(0, 10);
+}
+function semanasDeMeses(meses){
+  var out = [];
+  for (var i = 0; i < OP.semanas.length; i++) {
+    var ini = OP.semanas[i].v, fin = sumaDias(ini, 6);
+    for (var m = 0; m < meses.length; m++) {
+      if (ini <= finMes(meses[m]) && fin >= meses[m] + '-01') { out.push(ini); break; }
+    }
+  }
+  return out;
+}
+function propaga(id){
+  if (id === 'g_anio') {
+    var ys = MS.g_anio.sel, ms = [];
+    for (var i = 0; i < OP.meses.length; i++) { if (ys.indexOf(OP.meses[i].slice(0, 4)) >= 0) { ms.push(OP.meses[i]); } }
+    msSet('g_mes', ms);
+  }
+  if (id === 'g_anio' || id === 'g_mes') { msSet('g_sem', semanasDeMeses(MS.g_mes.sel)); }
+}
 
 function llenaFiltros(){
   var o = OP, meses = [];
   for (var i = 0; i < o.meses.length; i++) { meses.push({ v: o.meses[i], t: mesLargo(o.meses[i]) }); }
-  msBuild('g_sem', o.semanas, 'Todas'); msBuild('g_mes', meses, 'Todos'); msBuild('g_maq', o.maquinas, 'Todas');
-  msBuild('g_ope', o.operadores, 'Todos', '(Sin operador)'); msBuild('g_ven', o.vendedores, 'Todos', '(Sin vendedor)');
+  msBuild('g_anio', o.anios, 'Todos'); msBuild('g_mes', meses, 'Todos'); msBuild('g_sem', o.semanas, 'Todas');
+  msBuild('g_maq', o.maquinas, 'Todas'); msBuild('g_ope', o.operadores, 'Todos', '(Sin operador)');
+  msBuild('g_ven', o.vendedores, 'Todos', '(Sin vendedor)');
   msBuild('g_mat', o.materiales, 'Todos'); msBuild('g_cli', o.clientes, 'Todos');
-  msBuild('l_sem', o.semanas, 'Todas'); msBuild('l_mes', meses, 'Todos'); msBuild('l_anio', o.anios, 'Todos');
-  msBuild('l_ven', o.vendedores, 'Todos', '(Sin vendedor)'); msBuild('l_cli', o.clientes, 'Todos');
-  leeG(); leeL();
+  leeG();
 }
 function leeG(){
   var f = {}, i;
@@ -723,11 +996,6 @@ function leeG(){
   }
   FG = f;
 }
-function leeL(){
-  var f = {};
-  for (var i = 0; i < LK.length; i++) { f[LK[i]] = MS['l_' + LK[i]].sel.slice(); }
-  FL = f;
-}
 function hayFiltro(f){
   for (var k in f) {
     if (!f.hasOwnProperty(k)) { continue; }
@@ -735,26 +1003,22 @@ function hayFiltro(f){
   }
   return false;
 }
-/* La barra general afecta a PRODUCCION y a COMERCIAL; la de COMERCIAL solo a esa area. */
 function cambioG(){
   leeG();
   pill(true, 'Aplicando filtros...');
   pedir(false, true);
   if (OP.ses.venta) { pedirCom(false, true); }
 }
-function cambioL(){ leeL(); pill(true, 'Aplicando filtros...'); pedirCom(false, true); }
 function limpiaG(){
   for (var i = 0; i < GK.length; i++) { msVacia('g_' + GK[i]); }
   document.getElementById('g_desde').value = ''; document.getElementById('g_hasta').value = '';
   SUB = [];
   cambioG();
 }
-function limpiaL(){
-  for (var i = 0; i < LK.length; i++) { msVacia('l_' + LK[i]); }
-  cambioL();
-}
 function areas(){
   var v = OP.ses.venta;
+  /* Direccion es solo para informar: siempre de solo lectura, sin capturar ni editar. */
+  document.body.classList.toggle('sololectura', !(OP.ses.rol === 'CAPTURA' || OP.ses.rol === 'MASTER') || MODO === 'direccion');
   document.getElementById('comBody').style.display = v ? '' : 'none';
   /* Sin permiso NO se oculta en silencio: se explica por que y como arreglarlo. */
   document.getElementById('comAviso').innerHTML = v ? '' :
@@ -766,9 +1030,23 @@ function areas(){
   for (var i = 0; i < fv.length; i++) { fv[i].style.display = v ? '' : 'none'; }
 }
 
+/* ---- menu de hamburguesa: ir directo a PRODUCCION o COMERCIAL ----------- */
+function hambTog(ev){
+  if (ev) { ev.stopPropagation(); }
+  msCerrar();
+  var m = document.getElementById('hmenu');
+  m.style.display = m.style.display === 'none' ? '' : 'none';
+}
+function hambCerrar(){ document.getElementById('hmenu').style.display = 'none'; }
+function irA(id){
+  hambCerrar();
+  var el = document.getElementById(id);
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+}
+
 /* ---- tarjetas de PRODUCCION como sub-filtros ----------------------------- */
-var SUBNOM = { propios: 'MT2 propios', maquila: 'MT2 maquilados', planta: 'MT2 total planta',
-               eventos: 'Eventos de campo', horas: 'Horas máquina', merma: 'Merma MT2', reimp: 'Reimpresiones' };
+var SUBNOM = { propios: 'MT2 propios', maquila: 'MT2 maquilados', planta: 'MT2 total + merma',
+               eventos: 'Eventos de campo', horas: 'Horas máquina', merma: '% de merma', reimp: 'Reimpresiones' };
 var SUBORIGEN = ['propios','maquila','planta'];   /* excluyentes entre si */
 function toggleSub(k){
   var i = SUB.indexOf(k);
@@ -815,23 +1093,23 @@ function init(){
   overlay(true, 'Cargando el tablero...');
   google.script.run
     .withSuccessHandler(function(o){
-      OP = o; llenaFiltros(); areas();
+      OP = o; OP.semanas = (o.semanas || []).map(function(w){ return { v: w.v, t: semLbl(w.t) }; }); llenaFiltros(); areas();
       pedir(true);
       if (o.ses.venta) { pedirCom(true); }
     })
     .withFailureHandler(fallaInicial)
-    .opcionesFiltros();
+    .opcionesFiltros(CLAVE);
 }
 /* Tras guardar algo: opciones nuevas (un cliente nuevo, un mes nuevo) y ambas areas. */
 function recarga(){
   google.script.run
     .withSuccessHandler(function(o){
-      OP = o; llenaFiltros(); areas();
+      OP = o; OP.semanas = (o.semanas || []).map(function(w){ return { v: w.v, t: semLbl(w.t) }; }); llenaFiltros(); areas();
       pedir(false);
       if (o.ses.venta) { pedirCom(true); }
     })
     .withFailureHandler(fallaInicial)
-    .opcionesFiltros();
+    .opcionesFiltros(CLAVE);
 }
 function refrescar(){
   if (!OP) { return init(); }
@@ -849,18 +1127,373 @@ function pedir(primera, silencioso){
       if (!primera && !silencioso) { toast('Tablero actualizado en ' + res.ms + ' ms', 'ok'); }
     })
     .withFailureHandler(fallaInicial)
-    .cargarTablero(FG, SUB);
+    .cargarTablero(FG, SUB, CLAVE);
 }
 
-/* ---------- costos de produccion ---------- */
+/* =====================================================================
+   GRAFICAS (Chart.js). Mismo look en todo el tablero: tarjetas blancas,
+   barras azules, merma en rojo, rejilla suave, leyenda arriba.
+   ===================================================================== */
+var AZUL = '#3B73B9', ROJO = '#C9402F', VERDE = '#2E8B57', MORADO = '#8B5CF6', AMBAR = '#F0A80C';
+var TEAL = '#0093AE', NARANJA = '#E07B39', GRIS = '#94A3B8', NAVY = '#18303C';
+var PALETA = [AZUL, ROJO, VERDE, MORADO, AMBAR, TEAL, NARANJA, '#64748B', '#D946EF', '#14B8A6'];
+var CH = {};   /* instancias vivas, por id de canvas */
+
+function n1(v){
+  var n = Number(v);
+  if (!isFinite(n)) { return '0.0'; }
+  return n.toLocaleString('es-MX',{minimumFractionDigits:1, maximumFractionDigits:1});
+}
+function acorta(t, n){ t = String(t); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+/* Parte un nombre largo en lineas de hasta `ancho` caracteres (maximo `max`). */
+function lineas(t, ancho, max){
+  var pal = String(t).split(/\s+/), out = [], cur = '', i;
+  for (i = 0; i < pal.length; i++) {
+    var prueba = (cur + ' ' + pal[i]).trim();
+    if (prueba.length <= ancho || !cur) { cur = prueba; } else { out.push(cur); cur = pal[i]; }
+  }
+  if (cur) { out.push(cur); }
+  if (out.length > max) { out = out.slice(0, max); out[max - 1] = acorta(out[max - 1], ancho - 1) + '…'; }
+  return out;
+}
+/* 2022_GRAN FORMATO_YASELAN KONICA 512i -> 2022 GF KONICA 512i */
+function nomMaq(n){ return String(n).replace(/_GRAN FORMATO_YASELAN /, ' GF ').replace(/_/g, ' '); }
+function corta(sem){ return String(sem).replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1'); }
+
+/* ---- semana del año + rango de fechas (DD-Mes3-AA) ---- */
+var MES3 = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function f2(n){ return (n < 10 ? '0' : '') + n; }
+function fmtF(d){ return f2(d.getDate()) + '-' + MES3[d.getMonth()] + '-' + f2(d.getFullYear() % 100); }
+/* numero de semana ISO (la semana empieza en lunes) */
+function isoSem(d){
+  var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7));
+  var w1 = new Date(t.getFullYear(), 0, 4);
+  return 1 + Math.round(((t - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+}
+/* etq = 'SEM 29/12-03/01/26' (el inicio es siempre lunes; el final de la etiqueta puede ser
+   sabado, de datos viejos, o domingo) o iso = lunes 'yyyy-MM-dd'. Toda semana es de LUNES a DOMINGO. */
+function semInfo(etq, iso){
+  var ini = null;
+  if (iso && /^\d{4}-\d\d-\d\d$/.test(iso)) { ini = new Date(+iso.slice(0,4), +iso.slice(5,7) - 1, +iso.slice(8,10)); }
+  else {
+    var m = /^SEM\s*(\d\d)\/(\d\d)-(\d\d)\/(\d\d)\/(\d\d)$/.exec(String(etq).trim());
+    if (m) {
+      var sd = +m[1], sm = +m[2], em = +m[4], ey = 2000 + (+m[5]);
+      ini = new Date(sm > em ? ey - 1 : ey, sm - 1, sd);
+    }
+  }
+  if (!ini) { return null; }
+  var fin = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + 6);
+  var n = isoSem(ini);
+  return { num: n, corta: 'S' + n, rango: fmtF(ini) + ' al ' + fmtF(fin), ini: ini, fin: fin };
+}
+/* Etiqueta de semana con final en DOMINGO, sin importar como se guardo en la hoja. */
+function semLbl(etq){
+  var i = semInfo(etq);
+  if (!i) { return String(etq); }
+  return 'SEM ' + f2(i.ini.getDate()) + '/' + f2(i.ini.getMonth() + 1) + '-' + f2(i.fin.getDate()) + '/' + f2(i.fin.getMonth() + 1) + '/' + f2(i.fin.getFullYear() % 100);
+}
+function semTxt(etq, iso){ var i = semInfo(etq, iso); return i ? i.corta : corta(etq); }
+/* titulo de tooltip de grafica: dos lineas */
+function semTit(etq, iso){ var i = semInfo(etq, iso); return i ? ['Semana ' + i.num, i.rango] : [String(etq)]; }
+/* celda/encabezado de tabla: numero de semana y, al pasar el mouse, las fechas */
+function semTip(etq, iso){ var i = semInfo(etq, iso); return i ? 'Semana ' + i.num + '|' + i.rango : ''; }
+function semTh(etq, iso){
+  var i = semInfo(etq, iso);
+  return i ? '<th data-tip="' + esc(semTip(etq, iso)) + '">' + i.corta + '</th>' : '<th>' + esc(etq) + '</th>';
+}
+function semTd(etq, iso){
+  var i = semInfo(etq, iso);
+  return i ? '<td data-tip="' + esc(semTip(etq, iso)) + '">' + i.corta + '</td>' : '<td>' + esc(etq) + '</td>';
+}
+/* Globo inmediato para todo lo que lleve data-tip (el title nativo tarda y a veces no sale). */
+(function(){
+  var el = null;
+  function mover(e){
+    if (!el) { return; }
+    var x = e.clientX + 14, y = e.clientY + 16, w = el.offsetWidth, h = el.offsetHeight;
+    if (x + w > window.innerWidth - 6) { x = e.clientX - w - 12; }
+    if (y + h > window.innerHeight - 6) { y = e.clientY - h - 12; }
+    el.style.left = Math.max(4, x) + 'px'; el.style.top = Math.max(4, y) + 'px';
+  }
+  document.addEventListener('mouseover', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (!t) { return; }
+    if (!el) { el = document.createElement('div'); el.id = 'tip'; document.body.appendChild(el); }
+    el.textContent = t.getAttribute('data-tip').replace('|', '\n');
+    el.style.display = 'block'; mover(e);
+  });
+  document.addEventListener('mousemove', mover);
+  document.addEventListener('mouseout', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (t && el) { el.style.display = 'none'; }
+  });
+})();
+
+/* Total sobre cada barra apilada (exacto). o = {pos: [...], vals: [...], fmt, rot} */
+var plugTot = { id: 'tot', afterDatasetsDraw: function(chart, args, o){
+  if (!o || !o.vals) { return; }
+  var ctx = chart.ctx, y = chart.scales.y, x = chart.scales.x;
+  ctx.save();
+  ctx.font = '700 ' + (o.size || 10.5) + 'px ' + Chart.defaults.font.family;
+  ctx.fillStyle = NAVY;
+  for (var i = 0; i < o.vals.length; i++) {
+    var px = x.getPixelForValue(i), py = y.getPixelForValue(o.pos[i]), txt = o.fmt(o.vals[i]);
+    if (o.rot) {
+      ctx.save(); ctx.translate(px + 3, py - 5); ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, 0, 0); ctx.restore();
+    } else {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(txt, px, py - 4);
+    }
+  }
+  ctx.restore();
+} };
+
+/* Valor junto a cada barra o punto. o = {modo: 'h'|'v'|'p', ds: [indices], fmt, size, colores} */
+var plugEtiq = { id: 'etiq', afterDatasetsDraw: function(chart, args, o){
+  if (!o || (!o.modo && !o.modos)) { return; }
+  var ctx = chart.ctx, ds = o.ds || [0];
+  ctx.save();
+  ctx.font = '600 ' + (o.size || 10) + 'px ' + Chart.defaults.font.family;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(255,255,255,.92)';
+  for (var k = 0; k < ds.length; k++) {
+    var meta = chart.getDatasetMeta(ds[k]);
+    if (!meta || meta.hidden) { continue; }
+    var data = chart.data.datasets[ds[k]].data;
+    ctx.fillStyle = o.colores ? o.colores[k] : NAVY;
+    var modo = (o.modos && o.modos[k]) || o.modo;
+    for (var i = 0; i < meta.data.length; i++) {
+      var el = meta.data[i], v = data[i];
+      if (v === null || v === undefined || el.skip) { continue; }
+      var txt = o.fmt(v, i, ds[k]);
+      if (!txt) { continue; }
+      var tx = el.x, ty = el.y;
+      if (modo === 'vb') {
+        /* dentro de la barra, pegado a su base; con rot el texto va vertical */
+        if (Math.abs(el.base - el.y) < 1) { continue; }
+        var by = el.base + (el.y > el.base ? 6 : -6);
+        if (o.rot) {
+          ctx.save(); ctx.translate(el.x, by); ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = el.y > el.base ? 'right' : 'left'; ctx.textBaseline = 'middle';
+          ctx.strokeText(txt, 0, 0); ctx.fillText(txt, 0, 0); ctx.restore();
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = el.y > el.base ? 'top' : 'bottom';
+          ctx.strokeText(txt, el.x, by); ctx.fillText(txt, el.x, by);
+        }
+        continue;
+      }
+      if (modo === 'h') { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; tx = el.x + 6; }
+      else if (modo === 'v') { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ty = el.y - 4; }
+      else if (modo === 'pa') { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ty = el.y - 8; }
+      else { ctx.textAlign = 'center'; ctx.textBaseline = (k % 2 ? 'top' : 'bottom'); ty = el.y + (k % 2 ? 8 : -8); }
+      ctx.strokeText(txt, tx, ty); ctx.fillText(txt, tx, ty);
+    }
+  }
+  ctx.restore();
+} };
+
+var plugVacio = { id: 'vacio', afterDraw: function(chart){
+  var hay = false;
+  chart.data.datasets.forEach(function(d){ (d.data || []).forEach(function(v){ if (v) { hay = true; } }); });
+  if (hay) { return; }
+  var a = chart.chartArea, c = chart.ctx;
+  c.save(); c.fillStyle = '#91A1AA'; c.font = '500 13px ' + Chart.defaults.font.family;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('Sin datos con los filtros elegidos', (a.left + a.right) / 2, (a.top + a.bottom) / 2);
+  c.restore();
+} };
+
+function iniChart(){
+  if (iniChart.hecho || typeof Chart === 'undefined') { return; }
+  iniChart.hecho = true;
+  Chart.defaults.font.family = "'Montserrat',-apple-system,'Segoe UI',Arial,sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = '#5C6F7A';
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  Chart.defaults.plugins.legend.labels.boxHeight = 12;
+  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(24,48,60,.94)';
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.register(plugTot, plugEtiq, plugVacio);
+}
+
+/* Crea o reemplaza la grafica de un canvas. Si la libreria no cargo (sin
+   internet), lo dice en lugar de dejar un hueco. */
+function graf(id, cfg){
+  var el = document.getElementById(id);
+  if (!el) { return; }
+  if (CH[id]) { CH[id].destroy(); delete CH[id]; }
+  if (typeof Chart === 'undefined') {
+    el.parentNode.innerHTML = '<div class="vacio">No se pudo cargar la librería de gráficas. Revisa la conexión a internet.</div>';
+    return;
+  }
+  iniChart();
+  cfg.options = cfg.options || {};
+  cfg.options.responsive = true;
+  cfg.options.maintainAspectRatio = false;
+  cfg.options.animation = { duration: 350 };
+  CH[id] = new Chart(el.getContext('2d'), cfg);
+}
+
+/* Barras horizontales (nombre a la izquierda, monto al final). */
+function cfgHBar(labels, data, color, fmt, nombre, fmtEje, fmtNom, pad){
+  return { type: 'bar',
+    data: { labels: labels, datasets: [{ label: nombre, data: data, backgroundColor: color, borderRadius: 3, maxBarThickness: 22 }] },
+    options: { indexAxis: 'y', layout: { padding: { right: pad || 78 } },
+      plugins: { legend: { display: false }, etiq: { modo: 'h', fmt: fmt },
+        tooltip: { callbacks: { label: function(c){ return ' ' + nombre + ': ' + fmt(c.parsed.x); } } } },
+      scales: { x: { beginAtZero: true, grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return (fmtEje || fmt)(v); } } },
+                y: { grid: { display: false }, ticks: { font: { size: 10 }, callback: function(v){ var t = this.getLabelForValue(v); return lineas(fmtNom ? fmtNom(t) : t, 24, 2); } } } } } };
+}
+/* Barras verticales, un color o uno por barra. */
+function cfgBar(labels, data, color, fmt, nombre, fmtEje, fmtNom){
+  return { type: 'bar',
+    data: { labels: labels, datasets: [{ label: nombre, data: data, backgroundColor: color, borderRadius: 4, maxBarThickness: 46 }] },
+    options: { layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, etiq: { modo: 'v', fmt: fmt },
+        tooltip: { callbacks: { label: function(c){ return ' ' + nombre + ': ' + fmt(c.parsed.y); } } } },
+      scales: { x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 10 }, callback: function(v){ var t = this.getLabelForValue(v); return lineas(fmtNom ? fmtNom(t) : t, 13, 3); } } },
+                y: { beginAtZero: true, grace: '8%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return (fmtEje || fmt)(v); } } } } } };
+}
+function cfgDona(labels, data, colores, fmtTip){
+  return { type: 'doughnut',
+    data: { labels: labels, datasets: [{ data: data, backgroundColor: colores, borderColor: '#fff', borderWidth: 2 }] },
+    options: { cutout: '58%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 14 } },
+        tooltip: { callbacks: { label: function(c){ return ' ' + fmtTip(c.parsed, c.dataIndex); } } } } } };
+}
+function pesos0(v){ return money(v); }
+
+/* ---- cuadros informativos de PRODUCCION (salen de las columnas de VENTAS) ---- */
+function pintaInfo(){
+  var el = document.getElementById('kpisI');
+  var C = D.costos, cards = [];
+  if (C) {
+    var k = C.kpi;
+    cards.push(['Costo de producción', money(k.costoProd), C.inclCarga ? 'Sin merma' : 'Sin merma ni carga administrativa', '']);
+    cards.push(['Costo de merma', money(k.costoMerma), 'Costo de los m² de merma', '']);
+    var pj = function(et, x){
+      return x ? '<span title="' + esc(x.nombre + (x.cliente ? ' · ' + x.cliente : '')) + '">' + et + ': <b>' + money(x.costo) + '</b> · ' + esc(acorta(x.nombre, 26)) + '</span>'
+               : et + ': —';
+    };
+    cards.push(['Proyectos', n0(k.proyectos), n0(k.clientes) + ' clientes<br>' + pj('Más caro', k.masCaro) + '<br>' + pj('Menos caro', k.masBarato), '']);
+  }
+  var h = '';
+  for (var i = 0; i < cards.length; i++) {
+    h += '<div class="kpi ' + cards[i][3] + '"><div class="et">' + cards[i][0] + '</div><div class="vl">' + cards[i][1] +
+         '</div><div class="un">' + cards[i][2] + '</div></div>';
+  }
+  el.innerHTML = h;
+}
+
+/* ---- tendencia de MT2: semanal (Dashboard) o mensual/semanal a eleccion (Direccion) ---- */
+function perTendAct(){ return MODO === 'direccion' ? perTendDir : 'sem'; }
+function tendPer(p){
+  perTendDir = p;
+  pintaTend();
+}
+function pintaTend(){
+  var mes = perTendAct() === 'mes';
+  var s = mes ? D.serieMes : D.serie;
+  var rot = s.length > 14;
+  var b = document.getElementById('segTend').getElementsByTagName('button');
+  b[0].className = mes ? 'on' : ''; b[1].className = mes ? '' : 'on';
+  document.getElementById('hTend').textContent = (MODO === 'direccion' && mes) ? 'Tendencia mensual' : 'Tendencia semanal';
+  var etq = function(w){ return mes ? mesTxt(w.k) : semTxt(w.semana); };
+  graf('cvTend', { type: 'bar',
+    data: { labels: s.map(etq),
+      datasets: [
+        { label: 'MT2 propios', data: s.map(function(w){ return w.propios; }), backgroundColor: AZUL, stack: 't', borderRadius: 2 },
+        { label: 'MT2 maquilados', data: s.map(function(w){ return w.maquila; }), backgroundColor: AMBAR, stack: 't', borderRadius: 2 }] },
+    options: { layout: { padding: { top: 4 } },
+      plugins: { legend: { position: 'top' },
+        tot: { pos: s.map(function(w){ return w.planta; }), vals: s.map(function(w){ return w.planta; }), fmt: n0, rot: rot },
+        tooltip: { callbacks: { title: function(c){ var w = s[c[0].dataIndex]; return mes ? mesLargo(w.k) : semTit(w.semana); },
+          label: function(c){ return ' ' + c.dataset.label + ': ' + n2(c.parsed.y) + ' MT2'; },
+          footer: function(c){ return 'Total planta: ' + n2(s[c[0].dataIndex].planta) + ' MT2'; } } } },
+      scales: { x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, grace: rot ? '24%' : '8%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return n0(v); } } } } } });
+}
+
+/* ---- graficas de PRODUCCION ---- */
+function pintaGrafProd(){
+  var s = D.serie, i;
+  pintaTend();
+
+  /* MT2 por maquina / material / operador (una grafica por tabla) */
+  var pm = D.porMaquina.slice(0, 10);
+  graf('cvMaq', cfgHBar(pm.map(function(r){ return r.nombre; }), pm.map(function(r){ return r.total; }), AZUL, n0, 'MT2', null, nomMaq));
+  var pt = D.porMaterial.slice(0, 10);
+  graf('cvMat', cfgHBar(pt.map(function(r){ return r.nombre; }), pt.map(function(r){ return r.total; }), MORADO, n0, 'MT2'));
+  var po = D.porOperador.slice(0, 12);
+  graf('cvOpe', cfgBar(po.map(function(r){ return r.nombre; }), po.map(function(r){ return r.total; }), VERDE, n0, 'MT2'));
+
+  /* tipo de impresion (dona) y acabados mas usados: no dependen de costos */
+  var pp = D.porProceso;
+  graf('cvDona', cfgDona(pp.map(function(r){ return r.nombre + ' · ' + n2(r.pct) + '%'; }), pp.map(function(r){ return r.mt2; }),
+    PALETA, function(v, idx){ return pp[idx].nombre + ': ' + n2(v) + ' MT2 (' + n2(pp[idx].pct) + '%)'; }));
+  var ac = D.acabados.slice(0, 10);
+  graf('cvAcab', cfgHBar(ac.map(function(r){ return r.nombre; }), ac.map(function(r){ return r.n; }), TEAL, function(v){ return n0(v); }, 'Registros'));
+
+  /* graficas de costo: solo con permiso de ventas */
+  var C = D.costos;
+  document.getElementById('gridCostos').style.display = C ? '' : 'none';
+  if (!C) { return; }
+  var sw = C.semanal, totCP = C.kpi.costoProd;
+  var pctTot = function(v){ return totCP ? n1(v / totCP * 100) + '%' : '—'; };
+  var rotS = sw.length > 14;
+  graf('cvCosSem', { type: 'bar',
+    data: { labels: sw.map(function(w){ return semTxt(w.etiqueta, w.k); }),
+      datasets: [
+        { type: 'bar', label: 'Costo', data: sw.map(function(w){ return w.costoProd; }), backgroundColor: AZUL, borderRadius: 2, yAxisID: 'y', order: 2 },
+        { type: 'line', label: 'Merma %', data: sw.map(function(w){ return w.mermaPct; }), borderColor: ROJO, backgroundColor: ROJO,
+          cubicInterpolationMode: 'monotone', pointRadius: 2.5, borderWidth: 2.5, yAxisID: 'y1', order: 1 }] },
+    options: { layout: { padding: { top: 18 } },
+      plugins: { legend: { position: 'top' },
+        etiq: { modos: ['vb', 'pa'], ds: [0, 1], rot: rotS, size: 9, colores: [NAVY, ROJO],
+                fmt: function(v, i, d){ return d === 0 ? pctTot(v) : n1(v) + '%'; } },
+        tooltip: { callbacks: { title: function(c){ var w = sw[c[0].dataIndex]; return semTit(w.etiqueta, w.k); },
+          label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '%') : ' Costo de producción: ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
+      scales: { x: { grid: { display: false } },
+                y: { beginAtZero: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
+                y1: { position: 'right', beginAtZero: true, grace: '25%', grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
+  var cc = C.porCliente;
+  graf('cvCosCli', cfgHBar(cc.map(function(r){ return r.nombre; }), cc.map(function(r){ return r.costo; }), AZUL, pesos0, 'Costo', corto));
+  var cm = C.porMaterial;
+  graf('cvCosMat', cfgHBar(cm.map(function(r){ return r.nombre; }), cm.map(function(r){ return r.costo; }), MORADO,
+    function(v){ return pesos0(v) + ' · ' + pctTot(v); }, 'Costo', corto, null, 150));
+  var cq = C.porMaquina;
+  graf('cvCosMaq', { type: 'bar',
+    data: { labels: cq.map(function(r){ return r.nombre; }),
+      datasets: [
+        { type: 'bar', label: 'Costo', data: cq.map(function(r){ return r.costo; }), backgroundColor: AZUL, borderRadius: 3, yAxisID: 'y', order: 2, maxBarThickness: 46 },
+        { type: 'line', label: 'Merma %', data: cq.map(function(r){ return r.mermaPct; }), borderColor: ROJO, backgroundColor: ROJO,
+          cubicInterpolationMode: 'monotone', pointRadius: 3.5, pointHoverRadius: 6, borderWidth: 2.5, yAxisID: 'y1', order: 1 }] },
+    options: { layout: { padding: { top: 18 } },
+      plugins: { legend: { position: 'top' },
+        etiq: { modos: ['vb', 'pa'], ds: [0, 1], size: 9.5, colores: [NAVY, ROJO],
+                fmt: function(v, i, d){ return d === 0 ? pctTot(v) : n1(v) + '%'; } },
+        tooltip: { callbacks: { label: function(c){
+          if (c.dataset.yAxisID === 'y1') {
+            var m = cq[c.dataIndex];
+            return ' Merma: ' + (c.parsed.y === null ? '—' : n2(c.parsed.y) + '% (' + n2(m.mermaM2) + ' m² adicionales de ' + n2(m.usadoM2) + ' m² usados)');
+          }
+          return ' Costo (sin maquila): ' + peso(c.parsed.y) + ' (' + pctTot(c.parsed.y) + ' del total)'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 10 }, callback: function(v){ return lineas(nomMaq(this.getLabelForValue(v)), 13, 3); } } },
+                y: { beginAtZero: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
+                y1: { position: 'right', beginAtZero: true, grace: '25%', grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return v + '%'; } } } } } });
+}
+
+/* ---------- costos de produccion (tendencia e historico, montos exactos) ---------- */
 var perC = 'mes';
 /* Un color por componente. Merma puede ser negativa (se uso menos material del
-   cotizado): no se apila hacia abajo, pero SI descuenta en el total exacto. */
+   cotizado): la barra la dibuja hacia abajo y el total exacto la descuenta. */
 var COSCOLS = [
-  ['mat','Material','#0093AE'], ['merma','Merma','#C0392B'], ['maq','Maquila','#F0A80C'],
-  ['inst','Instalación','#7D5BA6'], ['mo','Mano de obra','#1E8E5A'], ['hext','Horas extras','#E07B39'],
-  ['otros','Otros','#91A1AA'], ['carga','Carga administrativa','#2B4A5A']
+  ['mat','Material',AZUL], ['merma','Merma',ROJO], ['maq','Maquila',AMBAR],
+  ['inst','Instalación',MORADO], ['mo','Mano de obra',VERDE], ['hext','Horas extras',NARANJA],
+  ['otros','Otros',GRIS]
 ];
+var COL_CARGA = ['carga','Carga administrativa',NAVY];
 /* Monto EXACTO, con centavos. */
 function peso(v){
   var n = Number(v);
@@ -883,12 +1516,13 @@ function pintaCostos(){
   if (!D || !D.costos) { card.style.display = 'none'; return; }
   card.style.display = '';
   var C = D.costos, serie = perC === 'mes' ? C.mensual : C.semanal, t = C.total, i, c, h;
+  if (C.inclCarga && COSCOLS.indexOf(COL_CARGA) < 0) { COSCOLS.push(COL_CARGA); }
+  if (!C.inclCarga && COSCOLS.indexOf(COL_CARGA) >= 0) { COSCOLS.splice(COSCOLS.indexOf(COL_CARGA), 1); }
 
-  /* indicadores */
   var mayor = null;
   for (i = 0; i < COSCOLS.length; i++) { if (mayor === null || t[COSCOLS[i][0]] > t[mayor[0]]) { mayor = COSCOLS[i]; } }
   var kc = [
-    ['Costo total', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras, otros y carga', ''],
+    ['Costo total (con merma)', peso(t.total), 'material, merma, maquila, instalación, mano de obra, extras y otros' + (C.inclCarga ? ' y carga' : ' · sin carga administrativa'), ''],
     ['Costo por MT2 de planta', t.costoMt2 === null ? '—' : peso(t.costoMt2), 'costo total ÷ ' + n2(t.mt2) + ' MT2 de planta', 'mq'],
     ['Mayor componente', mayor && t.total ? esc(mayor[1]) : '—', mayor && t.total ? peso(t[mayor[0]]) + ' · ' + n2(t[mayor[0]] / t.total * 100) + '% del total' : '', '']
   ];
@@ -898,51 +1532,53 @@ function pintaCostos(){
   }
   document.getElementById('kpisC').innerHTML = h;
 
-  /* barras apiladas por componente; etiqueta = total EXACTO del periodo */
-  var cont = document.getElementById('barrasC');
-  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
-  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
-  var ult = serie.slice(perC === 'mes' ? -12 : -16), max = 0, pos;
-  function positivo(d){ var s = 0; for (var q = 0; q < COSCOLS.length; q++) { if (d[COSCOLS[q][0]] > 0) { s += d[COSCOLS[q][0]]; } } return s; }
-  for (i = 0; i < ult.length; i++) { pos = positivo(ult[i]); if (pos > max) { max = pos; } }
-  if (max <= 0) { max = 1; }
-  var rot = ult.length > 10;
-  h = '';
-  for (i = 0; i < ult.length; i++) {
-    var d = ult[i], seg = '', alto = 0, tip = [];
-    for (c = COSCOLS.length - 1; c >= 0; c--) {
-      var v = d[COSCOLS[c][0]];
-      if (v !== 0) { tip.unshift(COSCOLS[c][1] + ': ' + peso(v)); }
-      if (v > 0) {
-        var hh = Math.max(1, Math.round(v / max * hMax));
-        alto += hh;
-        seg += '<div class="bseg" style="height:' + hh + 'px;background:' + COSCOLS[c][2] + '"></div>';
-      }
-    }
-    var et = perC === 'mes' ? mesTxt(d.k) : d.etiqueta.replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1');
-    h += '<div class="bcol" title="' + esc((perC === 'mes' ? mesLargo(d.k) : d.etiqueta) + ' | Total ' + peso(d.total) + ' | ' + tip.join(' | ')) + '">' +
-         '<div class="bv' + (rot ? ' rot' : '') + '">' + peso(d.total) + '</div>' +
-         '<div class="bpila" style="height:' + alto + 'px">' + seg + '</div>' +
-         '<div class="be">' + esc(et) + '</div></div>';
+  /* barras apiladas por componente; arriba, el total EXACTO del periodo */
+  var ult = serie.slice(perC === 'mes' ? -12 : -20);
+  var rot = ult.length > 8;
+  var pos = ult.map(function(d){ var s = 0; for (var q = 0; q < COSCOLS.length; q++) { if (d[COSCOLS[q][0]] > 0) { s += d[COSCOLS[q][0]]; } } return s; });
+  /* Direccion: etiqueta = monto y % que representa del AÑO; tooltip = monto y % del total de ese periodo */
+  var dir = MODO === 'direccion', anual = {};
+  if (dir) {
+    for (i = 0; i < serie.length; i++) { var ya = String(serie[i].k).slice(0, 4); anual[ya] = (anual[ya] || 0) + serie[i].total; }
   }
-  cont.innerHTML = h || '<div class="vacio">Sin costos en el periodo</div>';
-  h = '';
-  for (c = 0; c < COSCOLS.length; c++) { h += '<span><i style="background:' + COSCOLS[c][2] + '"></i>' + COSCOLS[c][1] + '</span>'; }
-  document.getElementById('leyC').innerHTML = h;
+  var pctAnio = function(d){ var t = anual[String(d.k).slice(0, 4)]; return t ? d.total / t * 100 : null; };
+  var fmtTot = dir ? function(v){ return v; } : peso;
+  var etqTot = ult.map(function(d){ return d.total; });
+  graf('cvCosto', { type: 'bar',
+    data: { labels: ult.map(function(d){ return perC === 'mes' ? mesTxt(d.k) : semTxt(d.etiqueta, d.k); }),
+      datasets: COSCOLS.map(function(cc){
+        return { label: cc[1], data: ult.map(function(d){ return d[cc[0]]; }), backgroundColor: cc[2], stack: 'c', borderRadius: 2 };
+      }) },
+    options: { layout: { padding: { top: 4 } },
+      plugins: { legend: { position: 'top' },
+        tot: { pos: pos, vals: dir ? ult.map(function(d, ix){ return ix; }) : etqTot,
+               fmt: dir ? function(ix){ var d = ult[ix], p = pctAnio(d); return peso(d.total) + (p === null ? '' : ' · ' + n1(p) + '%'); } : peso, rot: rot },
+        tooltip: { callbacks: { title: function(cx){ var d = ult[cx[0].dataIndex]; return perC === 'mes' ? mesLargo(d.k) : semTit(d.etiqueta, d.k); },
+          label: function(cx){
+            var d = ult[cx.dataIndex], base = ' ' + cx.dataset.label + ': ' + peso(cx.parsed.y);
+            if (!dir) { return base; }
+            return base + (d.total ? ' (' + n1(cx.parsed.y / d.total * 100) + '% del total de ' + (perC === 'mes' ? 'ese mes' : 'esa semana') + ')' : '');
+          },
+          footer: function(cx){
+            var d = ult[cx[0].dataIndex], p = dir ? pctAnio(d) : null;
+            return 'Total: ' + peso(d.total) + (p === null ? '' : ' · ' + n1(p) + '% del año');
+          } } } },
+      scales: { x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, grace: rot ? (dir ? '55%' : '40%') : '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } } } } });
   var hayNeg = false;
   for (i = 0; i < serie.length; i++) { for (c = 0; c < COSCOLS.length; c++) { if (serie[i][COSCOLS[c][0]] < 0) { hayNeg = true; } } }
   var nota = document.getElementById('notaC');
   nota.style.display = hayNeg ? '' : 'none';
-  nota.textContent = 'Un monto negativo (normalmente en Merma) significa que se usaron menos m² de los cotizados. No se dibuja hacia abajo en la barra, pero el total exacto sí lo descuenta.';
+  nota.textContent = 'Un monto negativo (normalmente en Merma) significa que se usaron menos m² de los cotizados: la barra lo dibuja hacia abajo y el total exacto lo descuenta.';
 
   /* historico con montos exactos */
   if (!serie.length) { document.getElementById('tCos').innerHTML = '<tbody><tr><td class="vacio">Sin costos en el periodo.</td></tr></tbody>'; return; }
-  h = '<thead><tr><th>Periodo</th><th>MT2 planta</th>';
+  h = '<thead><tr><th>' + (perC === 'mes' ? 'Periodo' : 'Semana') + '</th><th>MT2 planta</th>';
   for (c = 0; c < COSCOLS.length; c++) { h += '<th>' + COSCOLS[c][1] + '</th>'; }
   h += '<th>Total</th><th>Costo / MT2</th></tr></thead><tbody>';
   for (i = 0; i < serie.length; i++) {
     var r = serie[i];
-    h += '<tr><td>' + esc(perC === 'mes' ? mesLargo(r.k) : r.etiqueta) + '</td>' + celda(r.mt2);
+    h += '<tr' + (perC === 'mes' ? '' : ' data-tip="' + esc(semTip(r.etiqueta, r.k)) + '"') + '>' + (perC === 'mes' ? '<td>' + esc(mesLargo(r.k)) + '</td>' : semTd(r.etiqueta, r.k)) + celda(r.mt2);
     for (c = 0; c < COSCOLS.length; c++) { h += cp2(r[COSCOLS[c][0]]); }
     h += '<td class="num"><b>' + peso(r.total) + '</b></td>' + (r.costoMt2 === null ? '<td class="num cero">—</td>' : cp2(r.costoMt2)) + '</tr>';
   }
@@ -955,6 +1591,7 @@ function pintaCostos(){
 /* ---------- pintado ---------- */
 function pintar(){
   var t = D.total, s = D.serie, a = D.alertas;
+  PG = {};
 
   document.getElementById('quien').innerHTML =
     '<b>' + esc(D.ses.correo) + '</b>Rol: ' + esc(D.ses.rol);
@@ -975,51 +1612,34 @@ function pintar(){
   var k = [
     ['MT2 propios', n2(kp.propios), 'impresion en planta', '', 'propios'],
     ['MT2 maquilados', n2(kp.maquila), kp.pctMaquila + '% del total', 'mq', 'maquila'],
-    ['MT2 total planta', n2(kp.planta), 'propios + maquila', '', 'planta'],
+    ['MT2 total + merma', n2(kp.usado), 'CANTIDAD + MERMA_MT2 · sin maquila', '', 'planta'],
     ['Eventos de campo', n0(kp.eventos), 'instalaciones, entregas, rotulaciones', '', 'eventos'],
     ['Horas maquina', kp.horas > 0 ? n2(kp.horas) : 'sin capturar',
       kp.mt2Hora !== null ? n2(kp.mt2Hora) + ' MT2 por hora' : 'sin este dato no hay productividad',
       kp.horas > 0 ? '' : 'al', 'horas'],
-    ['Merma MT2', kp.merma > 0 ? n2(kp.merma) : 'sin capturar',
-      kp.merma > 0 ? kp.mermaPct + '% de lo impreso' : 'sin este dato no se sabe que se reimprimio',
-      kp.merma > 0 ? '' : 'al', 'merma'],
-    ['Reimpresiones', n0(kp.reimp), 'renglones marcados como reimpresion', kp.reimp > 0 ? 'mq' : '', 'reimp']
+    ['% de merma', n2(kp.mermaPct) + '%',
+      kp.mermaP > 0 ? n2(kp.mermaP) + ' m² de MERMA_MT2 (adicionales)' : 'sin merma capturada en MERMA_MT2',
+      kp.mermaP > 0 ? '' : 'al', 'merma']
   ];
   var h = '';
-  for (var i = 0; i < k.length; i++) {
-    var act = SUB.indexOf(k[i][4]) >= 0;
-    h += '<button type="button" class="kpi ' + k[i][3] + (act ? ' sel' : '') + '" aria-pressed="' + act + '" onclick="toggleSub(\'' + k[i][4] + '\')">' +
-         '<div class="et">' + k[i][0] + '</div><div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></button>';
+  if (MODO === 'direccion') {
+    /* MT2 propios, horas maquina y % de merma: informativas, sin sub-filtro */
+    k = [k[0], k[4], k[5]];
+    for (var di = 0; di < k.length; di++) {
+      h += '<div class="kpi ' + k[di][3] + '"><div class="et">' + k[di][0] + '</div><div class="vl">' + k[di][1] + '</div><div class="un">' + k[di][2] + '</div></div>';
+    }
+  } else {
+    for (var i = 0; i < k.length; i++) {
+      var act = SUB.indexOf(k[i][4]) >= 0;
+      h += '<button type="button" class="kpi ' + k[i][3] + (act ? ' sel' : '') + '" aria-pressed="' + act + '" onclick="toggleSub(\'' + k[i][4] + '\')">' +
+           '<div class="et">' + k[i][0] + '</div><div class="vl">' + k[i][1] + '</div><div class="un">' + k[i][2] + '</div></button>';
+    }
   }
   document.getElementById('kpis').innerHTML = h;
   pintaSubBar();
+  pintaInfo();
   pintaCostos();
-
-  /* barras */
-  var max = 0;
-  for (var b = 0; b < s.length; b++) { if (s[b].planta > max) { max = s[b].planta; } }
-  if (max <= 0) { max = 1; }
-  /* La altura util la manda el CSS (--hmax), no una constante en JS: si se
-     fija aqui, en pantalla chica la barra mas alta se sale del contenedor
-     y se encima con el texto de arriba. */
-  var cont = document.getElementById('barras');
-  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
-  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
-  h = '';
-  for (var c = 0; c < s.length; c++) {
-    var d = s[c];
-    var hp = Math.round(d.propios / max * hMax);
-    var hm = Math.round(d.maquila / max * hMax);
-    if (d.propios > 0 && hp < 2) { hp = 2; }
-    if (d.maquila > 0 && hm < 2) { hm = 2; }
-    h += '<div class="bcol" title="' + esc(d.semana) + ': ' + n2(d.planta) + ' MT2">' +
-         '<div class="bv">' + n0(d.planta) + '</div>' +
-         '<div class="bpila" style="height:' + (hp + hm) + 'px">' +
-         '<div class="bseg m" style="height:' + hm + 'px"></div>' +
-         '<div class="bseg p" style="height:' + hp + 'px"></div></div>' +
-         '<div class="be">' + esc(d.semana.replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1')) + '</div></div>';
-  }
-  cont.innerHTML = h || '<div class="vacio">Sin datos</div>';
+  pintaGrafProd();
 
   /* tabla por semana */
   h = '<thead><tr><th>Semana</th><th>MT2 propios</th><th>MT2 maquila</th><th>MT2 planta</th>' +
@@ -1031,7 +1651,7 @@ function pintar(){
       ? '<span class="chip na">primera</span>'
       : '<span class="chip ' + (r.delta >= 0 ? 'up' : 'dn') + '">' +
         (r.delta >= 0 ? '+' : '') + n0(r.delta) + '%</span>';
-    h += '<tr><td>' + esc(r.semana) + '</td>' +
+    h += '<tr data-tip="' + esc(semTip(r.semana)) + '">' + semTd(r.semana) +
          celda(r.propios) + celda(r.maquila) + celda(r.planta) +
          '<td>' + ch + '</td>' +
          celda(r.corte) + celda(r.laminado) + celda(r.laminas,0) + celda(r.piezas,0) +
@@ -1044,7 +1664,7 @@ function pintar(){
   var gl = (s.length > 1 && s[0].planta > 0)
     ? '<span class="chip ' + (s[s.length - 1].planta >= s[0].planta ? 'up' : 'dn') + '" ' +
       'title="Variacion de la ultima semana contra la primera">' +
-      n0((s[s.length - 1].planta / s[0].planta - 1) * 100) + '% vs ' + esc(s[0].semana) + '</span>'
+      n0((s[s.length - 1].planta / s[0].planta - 1) * 100) + '% vs ' + esc(semTxt(s[0].semana)) + '</span>'
     : '';
   h += '<tr class="tot"><td>TOTAL</td>' + celda(t.propios) + celda(t.maquila) + celda(t.planta) +
        '<td>' + gl + '</td>' + celda(tCorte) + celda(tLam) +
@@ -1054,9 +1674,7 @@ function pintar(){
        '<td></td></tr></tbody>';
   document.getElementById('tSem').innerHTML = h;
 
-  matriz('tMaq', D.porMaquina);
-  matriz('tMat', D.porMaterial);
-  matriz('tOpe', D.porOperador);
+  pintaMatrices();
 
   /* calidad del dato */
   var cel = [
@@ -1082,7 +1700,7 @@ function pintar(){
         '<th>Material</th><th>Cant.</th><th>Que falta</th><th>Observacion</th></tr></thead><tbody>';
     for (var e = 0; e < a.ejemplos.length; e++) {
       var x = a.ejemplos[e];
-      h += '<tr><td>' + x.fila + '</td><td>' + esc(x.semana) + '</td><td>' + esc(x.maquina) +
+      h += '<tr><td>' + x.fila + '</td><td>' + esc(semTxt(x.semana)) + '</td><td>' + esc(x.maquina) +
            '</td><td>' + esc(x.proceso) + '</td><td>' + esc(x.material) + '</td>' +
            celda(x.cant) + '<td style="text-align:left">' + esc(x.motivo) + '</td>' +
            '<td style="text-align:left;white-space:normal;max-width:380px;font-size:11.5px;color:var(--tinta-2)">' +
@@ -1093,27 +1711,96 @@ function pintar(){
   }
 }
 
+/* Matrices por semana (maquina / material / operador): se ven 8 semanas a la vez
+   y un boton avanza o retrocede de 8 en 8, solo dentro de lo que dejan los
+   filtros maestros (D.semanas ya viene filtrado). */
+var PG = {}, VENT = 8;
+function pgIni(id, n){
+  if (n <= VENT) { return 0; }
+  if (PG[id] === undefined) { PG[id] = n - VENT; }          /* arranca en las 8 mas recientes */
+  PG[id] = Math.max(0, Math.min(n - VENT, PG[id]));
+  return PG[id];
+}
+function pgMover(id, d){
+  var n = D.semanas.length;
+  PG[id] = pgIni(id, n) + d * VENT;
+  pintaMatrices();
+}
+function pintaMatrices(){
+  if (MODO === 'direccion') {
+    /* Direccion: las mismas tablas, por MES (mismo dato que las semanales) */
+    matrizMes('tMaq', D.porMaquinaMes);
+    matrizMes('tMat', D.porMaterialMes);
+    matriz('tOpe', D.porOperador);
+    return;
+  }
+  matriz('tMaq', D.porMaquina);
+  matriz('tMat', D.porMaterial);
+  matriz('tOpe', D.porOperador);
+}
+/* Matriz nombre x mes (columnas = D.mesesCols). Sin paginador: un año son 12 columnas. */
+function matrizMes(id, filas){
+  var pg = document.getElementById('pg_' + id);
+  if (pg) { pg.innerHTML = ''; }
+  var meses = D.mesesCols || [];
+  if (!filas.length || !meses.length) {
+    document.getElementById(id).innerHTML = '<tbody><tr><td class="vacio">Sin datos en MT2.</td></tr></tbody>';
+    return;
+  }
+  var max = filas[0].total || 1, h = '<thead><tr><th>Nombre</th>', i, f, v;
+  for (i = 0; i < meses.length; i++) { h += '<th data-tip="' + esc(mesLargo(meses[i])) + '">' + esc(mesTxt(meses[i])) + '</th>'; }
+  h += '<th>Total MT2</th><th>Peso</th></tr></thead><tbody>';
+  var gt = 0;
+  for (f = 0; f < filas.length; f++) {
+    var r = filas[f];
+    gt += r.total;
+    h += '<tr><td>' + esc(r.nombre) + '</td>';
+    for (v = 0; v < r.val.length; v++) { h += celda(r.val[v]).replace('<td ', '<td data-tip="' + esc(mesLargo(meses[v])) + '" '); }
+    h += celda(r.total) + '<td><div class="mini"><span style="width:' + Math.max(2, Math.round(r.total / max * 100)) + '%"></span></div></td></tr>';
+  }
+  h += '<tr class="tot"><td>TOTAL</td>';
+  for (v = 0; v < meses.length; v++) {
+    var cs = 0;
+    for (f = 0; f < filas.length; f++) { cs += filas[f].val[v]; }
+    h += celda(cs);
+  }
+  h += celda(gt) + '<td></td></tr></tbody>';
+  document.getElementById(id).innerHTML = h;
+}
 function matriz(id, filas){
+  var pg = document.getElementById('pg_' + id);
+  var n = D.semanas.length, ini = pgIni(id, n), fin = Math.min(n, ini + VENT);
   if (!filas.length) {
     document.getElementById(id).innerHTML =
       '<tbody><tr><td class="vacio">Sin datos en MT2.</td></tr></tbody>';
+    if (pg) { pg.innerHTML = ''; }
     return;
+  }
+  if (pg) {
+    if (n <= VENT) { pg.innerHTML = ''; }
+    else {
+      var a = semInfo(D.semanas[ini]), b = semInfo(D.semanas[fin - 1]);
+      pg.innerHTML =
+        '<button type="button" onclick="pgMover(\'' + id + '\',-1)"' + (ini <= 0 ? ' disabled' : '') + '>◀ 8 anteriores</button>' +
+        '<span>Semanas <b>' + (a ? a.corta : (ini + 1)) + ' a ' + (b ? b.corta : fin) + '</b> · ' + (fin - ini) + ' de ' + n + '</span>' +
+        '<button type="button" onclick="pgMover(\'' + id + '\',1)"' + (fin >= n ? ' disabled' : '') + '>8 siguientes ▶</button>';
+    }
   }
   var max = filas[0].total || 1;
   var h = '<thead><tr><th>Nombre</th>';
-  for (var i = 0; i < D.semanas.length; i++) { h += '<th>' + esc(D.semanas[i]) + '</th>'; }
-  h += '<th>Total MT2</th><th>Peso</th></tr></thead><tbody>';
+  for (var i = ini; i < fin; i++) { h += semTh(D.semanas[i]); }
+  h += '<th data-tip="Total del periodo|todas las semanas que dejan los filtros">Total MT2</th><th>Peso</th></tr></thead><tbody>';
   var gt = 0;
   for (var f = 0; f < filas.length; f++) {
     var r = filas[f];
     gt += r.total;
     h += '<tr><td>' + esc(r.nombre) + '</td>';
-    for (var v = 0; v < r.val.length; v++) { h += celda(r.val[v]); }
+    for (var v = ini; v < fin; v++) { h += celda(r.val[v]).replace('<td ', '<td data-tip="' + esc(semTip(D.semanas[v])) + '" '); }
     h += celda(r.total) + '<td><div class="mini"><span style="width:' +
          Math.max(2, Math.round(r.total / max * 100)) + '%"></span></div></td></tr>';
   }
   h += '<tr class="tot"><td>TOTAL</td>';
-  for (var s2 = 0; s2 < D.semanas.length; s2++) {
+  for (var s2 = ini; s2 < fin; s2++) {
     var cs = 0;
     for (var g = 0; g < filas.length; g++) { cs += filas[g].val[s2]; }
     h += celda(cs);
@@ -1124,7 +1811,8 @@ function matriz(id, filas){
 
 /* ---------- detalle de semana ---------- */
 function verSemana(sem){
-  document.getElementById('detTit').textContent = 'Trabajos de ' + sem;
+  var si = semInfo(sem);
+  document.getElementById('detTit').textContent = si ? 'Trabajos de la semana ' + si.num + ' (' + si.rango + ')' : 'Trabajos de ' + sem;
   document.getElementById('tDet').innerHTML =
     '<tbody><tr><td class="vacio">Cargando los trabajos de la semana...</td></tr></tbody>';
   abrir('mDet');
@@ -1158,7 +1846,7 @@ function verSemana(sem){
         '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
       toast(m, 'err');
     })
-    .detalleSemana(sem, FG, SUB);
+    .detalleSemana(sem, FG, SUB, CLAVE);
 }
 
 /* ---------- captura ---------- */
@@ -1173,11 +1861,11 @@ function opciones(sel, lista, blanco){
   s.innerHTML = h;
 }
 function abrirAlta(){
-  if (CATS) { return mostrarAlta(); }
+  if (CATS && Date.now() - CATSt < 60000) { return mostrarAlta(); }
   pill(true, 'Cargando catalogos...');
   google.script.run
     .withSuccessHandler(function(res){
-      CATS = res; pill(false); mostrarAlta();
+      CATS = res; CATSt = Date.now(); pill(false); mostrarAlta();
     })
     .withFailureHandler(function(err){
       pill(false);
@@ -1195,6 +1883,9 @@ function mostrarAlta(){
   opciones('f_turno',    CATS.TURNO       || [], true);
   opciones('f_operador', CATS.OPERADOR    || [], true);
   opciones('f_reimp',    CATS.REIMPRESION || [], true);
+  opciones('f_acab1',    CATS.ACABADO     || [], true);
+  opciones('f_acab2',    CATS.ACABADO     || [], true);
+  opciones('f_acab3',    CATS.ACABADO     || [], true);
   document.getElementById('f_origen').value = 'PROPIO';
   document.getElementById('f_reimp').value = 'NO';
   var hoy = new Date();
@@ -1217,6 +1908,7 @@ function guardar(){
     material: val('f_material'), unidad: val('f_unidad'), cant: val('f_cant'),
     origen: val('f_origen'), cliente: val('f_cliente'), horas: val('f_horas'),
     merma: val('f_merma'), paro: val('f_paro'), nota: val('f_nota'), orden: val('f_orden'),
+    acabado1: val('f_acab1'), acabado2: val('f_acab2'), acabado3: val('f_acab3'),
     turno: val('f_turno'), operador: val('f_operador'), reimp: val('f_reimp')
   };
   /* Validacion en el cliente para dar aviso rapido. La que manda es la del
@@ -1255,7 +1947,7 @@ function guardar(){
       document.getElementById('f_cliente').value = '';
       document.getElementById('f_nota').value = '';
       document.getElementById('f_orden').value = '';
-      toast('Trabajo guardado en la fila ' + res.fila + ' (' + res.semana + ')', 'ok');
+      toast('Trabajo guardado en la fila ' + res.fila + ' (' + semLbl(res.semana) + ')', 'ok');
       pill(true, 'Recalculando el tablero...');
       recarga();
     })
@@ -1271,7 +1963,8 @@ function guardar(){
    COMERCIAL
    ===================================================================== */
 var CO = null;         /* ultimo resultado de cargarComercial */
-var CATV = null;       /* catalogos de venta, se piden una sola vez */
+var CATV = null;       /* catalogos de venta */
+var CATVt = 0;         /* cuando se pidieron: se vuelven a pedir pasado 1 minuto */
 var LV = {};           /* proyectos listados, por id, para el modal de edicion */
 var guardandoV = false;
 var editId = null;
@@ -1317,7 +2010,7 @@ function pedirCom(primera, silencioso){
         '<div class="aviso err"><span><b>No se pudo cargar el area comercial.</b><br>' + esc(m) + '</span></div>';
       toast(m, 'err');
     })
-    .cargarComercial(FG, FL);
+    .cargarComercial(FG, CLAVE);
 }
 
 function pintarCom(){
@@ -1337,7 +2030,7 @@ function pintarCom(){
     ['Clientes', n0(k.clientes), 'con venta en el periodo', ''],
     ['Ticket promedio', k.ticket === null ? '—' : money(k.ticket), 'venta por pedido', ''],
     ['Semana más reciente', su ? money(su.venta) : '—',
-      su ? esc(su.etiqueta) + (su.vsAnterior === null ? '' : ' · ' + (su.vsAnterior >= 0 ? '+' : '') + n0(su.vsAnterior) + '% vs semana anterior') : 'sin ventas', 'mq'],
+      su ? esc(semLbl(su.etiqueta)) + (su.vsAnterior === null ? '' : ' · ' + (su.vsAnterior >= 0 ? '+' : '') + n0(su.vsAnterior) + '% vs semana anterior') : 'sin ventas', 'mq'],
     ['Promedio semanal', k.promSemanal === null ? '—' : money(k.promSemanal), 'sobre ' + k.nSemanas + ' semanas, hasta hoy', '']
   ];
   h = '';
@@ -1347,21 +2040,22 @@ function pintarCom(){
   }
   document.getElementById('kpisV').innerHTML = h;
 
-  /* ---- venta por ejecutivo ---- */
+  /* ---- venta por ejecutivo (tabla) ---- */
   var pv = CO.porVendedor;
   if (!pv.length) {
     document.getElementById('tVenV').innerHTML = '<tbody><tr><td class="vacio">Sin ventas con monto.</td></tr></tbody>';
   } else {
-    var maxV = pv[0].venta || 1;
-    h = '<thead><tr><th>Ejecutivo</th><th>Venta</th><th>% del total</th><th>Pedidos</th><th>Clientes</th><th>Ticket</th><th>Peso</th></tr></thead><tbody>';
+    h = '<thead><tr><th>Ejecutivo</th><th>Venta</th><th>% del total</th><th>Pedidos</th><th>Clientes</th><th>Ticket promedio</th></tr></thead><tbody>';
     for (i = 0; i < pv.length; i++) {
-      var r = pv[i];
-      h += '<tr><td>' + esc(r.nombre) + '</td>' + cm(r.venta) + '<td class="num">' + n2(r.pct) + '%</td>' +
-           celda(r.pedidos,0) + celda(r.clientes,0) + (r.ticket === null ? '<td class="num cero">—</td>' : cm(r.ticket)) +
-           '<td><div class="mini"><span style="width:' + Math.max(2, Math.round(r.venta / maxV * 100)) + '%"></span></div></td></tr>';
+      var r = pv[i], cv = colorVend(r.nombre);
+      h += '<tr><td><span class="av" style="background:' + cv + '">' + esc(iniciales(r.nombre)) + '</span><b>' + esc(r.nombre) + '</b></td>' +
+           '<td class="num"><b>' + money(r.venta) + '</b></td>' +
+           '<td><div class="pbar"><span style="width:' + Math.max(2, Math.min(100, r.pct)) + '%;background:' + cv + '"></span><em>' + n2(r.pct) + '%</em></div></td>' +
+           '<td class="num"><span class="cifra">' + n0(r.pedidos) + '</span></td><td class="num"><span class="cifra">' + n0(r.clientes) + '</span></td>' +
+           (r.ticket === null ? '<td class="num cero">—</td>' : '<td class="num">' + money(r.ticket) + '</td>') + '</tr>';
     }
-    h += '<tr class="tot"><td>TOTAL</td>' + cm(k.venta) + '<td class="num">100.00%</td>' + celda(k.pedidos,0) +
-         celda(k.clientes,0) + (k.ticket === null ? '<td class="num cero">—</td>' : cm(k.ticket)) + '<td></td></tr></tbody>';
+    h += '<tr class="tot"><td>TOTAL</td><td class="num">' + money(k.venta) + '</td><td class="num">100.00%</td><td class="num">' + n0(k.pedidos) +
+         '</td><td class="num">' + n0(k.clientes) + '</td>' + (k.ticket === null ? '<td></td>' : '<td class="num">' + money(k.ticket) + '</td>') + '</tr></tbody>';
     document.getElementById('tVenV').innerHTML = h;
   }
 
@@ -1386,23 +2080,8 @@ function pintarCom(){
     document.getElementById('tCmpV').innerHTML = h;
   }
 
-  /* ---- historico mensual: barras + tabla ---- */
+  /* ---- historico mensual (tabla) ---- */
   var hs = CO.historico;
-  var cont = document.getElementById('barrasV');
-  var hMax = parseInt(getComputedStyle(cont).getPropertyValue('--hmax'), 10);
-  if (!isFinite(hMax) || hMax < 40) { hMax = 150; }
-  var max = 0;
-  for (i = 0; i < hs.length; i++) { if (hs[i].venta > max) { max = hs[i].venta; } }
-  if (max <= 0) { max = 1; }
-  h = '';
-  for (i = 0; i < hs.length; i++) {
-    var d = hs[i], alto = Math.max(d.venta > 0 ? 2 : 0, Math.round(d.venta / max * hMax));
-    h += '<div class="bcol" title="' + esc(mesLargo(d.nombre)) + ': ' + money(d.venta) + '">' +
-         '<div class="bv">' + corto(d.venta) + '</div>' +
-         '<div class="bpila" style="height:' + alto + 'px"><div class="bseg p" style="height:' + alto + 'px"></div></div>' +
-         '<div class="be">' + esc(mesTxt(d.nombre)) + '</div></div>';
-  }
-  cont.innerHTML = h || '<div class="vacio">Sin datos</div>';
   if (!hs.length) {
     document.getElementById('tHistV').innerHTML = '';
   } else {
@@ -1472,18 +2151,81 @@ function pintarCom(){
       var e = ej[i];
       h += '<tr><td>' + e.id + '</td><td>' + esc(e.fecha || 'sin fecha') + '</td><td class="izq">' + esc(e.cliente) +
            '</td><td class="izq">' + esc(e.proyecto) + '</td><td class="izq">' + esc(e.vendedor) + '</td>' + cm(e.venta) +
-           '<td class="ancho">' + esc(e.motivo) + '</td><td><button class="link" onclick="editarVenta(' + e.id + ')">editar</button></td></tr>';
+           '<td class="ancho">' + esc(e.motivo) + '</td><td><button class="link edit" onclick="editarVenta(' + e.id + ')">editar</button></td></tr>';
     }
     document.getElementById('tAleV').innerHTML = h + '</tbody>';
   }
+  pintaGrafCom();
+}
+
+/* ---------- graficas de COMERCIAL ---------- */
+/* Cada vendedor conserva SIEMPRE el mismo color en todas las graficas y tablas. */
+function colorVend(n){
+  if (n === '(SIN VENDEDOR)') { return GRIS; }
+  var l = (OP && OP.vendedores) ? OP.vendedores : [], i = l.indexOf(n);
+  if (i < 0) { i = 0; for (var k = 0; k < n.length; k++) { i += n.charCodeAt(k); } }
+  return PALETA[i % PALETA.length];
+}
+function iniciales(n){
+  if (n === '(SIN VENDEDOR)') { return '—'; }
+  var p = String(n).replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9 -]/g, '').split(/[ -]+/);
+  return ((p[0] || '').charAt(0) + (p.length > 1 ? p[1].charAt(0) : '')).toUpperCase();
+}
+function pintaGrafCom(){
+  var pv = CO.porVendedor, nom = pv.map(function(v){ return v.nombre; }), col = nom.map(colorVend), i;
+
+  /* Venta por ejecutivo: cuatro graficas (venta, % del total, pedidos, clientes) */
+  graf('cvVenV', cfgBar(nom, pv.map(function(v){ return v.venta; }), col, money, 'Venta', corto));
+  graf('cvVenPct', cfgDona(nom, pv.map(function(v){ return v.pct; }), col, function(v){ return n2(v) + '% del total'; }));
+  graf('cvVenPed', cfgBar(nom, pv.map(function(v){ return v.pedidos; }), col, n0, 'Pedidos'));
+  graf('cvVenCli', cfgBar(nom, pv.map(function(v){ return v.clientes; }), col, n0, 'Clientes'));
+
+  /* Comparativo: una linea por vendedor, mes a mes. Montos en el eje DERECHO, el
+     monto vendido sobre cada punto y, a la derecha, nombre y color. */
+  var meses = CO.meses.map(mesTxt), cmp = CO.comparativo;
+  var ds = [], idx = [], cols = [];
+  for (i = 0; i < cmp.length; i++) {
+    var c = colorVend(cmp[i].nombre);
+    ds.push({ label: cmp[i].nombre, data: cmp[i].val, borderColor: c, backgroundColor: c, borderWidth: 2.5, cubicInterpolationMode: 'monotone',
+              pointBackgroundColor: '#fff', pointBorderColor: c, pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 6 });
+    idx.push(i); cols.push(c);
+  }
+  graf('cvCmp', { type: 'line', data: { labels: meses, datasets: ds },
+    options: { layout: { padding: { top: 26, bottom: 4, left: 4, right: 4 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'right', labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, padding: 16, font: { size: 12, weight: '600' } } },
+        etiq: { modo: 'p', ds: idx, fmt: function(v){ return v ? money(v) : ''; }, size: 9, colores: cols },
+        tooltip: { callbacks: { label: function(cx){ return ' ' + cx.dataset.label + ': ' + money(cx.parsed.y); } } } },
+      scales: { x: { grid: { display: false } },
+                y: { position: 'right', beginAtZero: true, grace: '8%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return money(v); } } } } } });
+
+  /* Historico mensual: barras de venta y, en el eje derecho, la variacion vs el mes anterior */
+  var hs = CO.historico;
+  graf('cvHist', { type: 'bar',
+    data: { labels: hs.map(function(h){ return mesTxt(h.nombre); }),
+      datasets: [
+        { type: 'bar', label: 'Venta', data: hs.map(function(h){ return h.venta; }), backgroundColor: AZUL, borderRadius: 4, maxBarThickness: 54, yAxisID: 'y', order: 2 },
+        { type: 'line', label: 'Variación vs mes anterior', data: hs.map(function(h){ return h.varPct; }), borderColor: ROJO, backgroundColor: ROJO,
+          cubicInterpolationMode: 'monotone', pointRadius: 3, borderWidth: 2.2, yAxisID: 'y1', order: 1 }] },
+    options: { layout: { padding: { top: 22 } },
+      plugins: { legend: { position: 'top' }, etiq: { modo: 'v', ds: [0], fmt: corto },
+        tooltip: { callbacks: { title: function(c){ return mesLargo(hs[c[0].dataIndex].nombre); },
+          label: function(c){ return c.dataset.yAxisID === 'y1' ? ' Variación: ' + (c.parsed.y === null ? '—' : n0(c.parsed.y) + '%') : ' Venta: ' + money(c.parsed.y); } } } },
+      scales: { x: { grid: { display: false } },
+                y: { beginAtZero: true, grace: '8%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } },
+                y1: { position: 'right', min: -100, max: 150, grid: { drawOnChartArea: false }, ticks: { callback: function(v){ return n0(v) + '%'; } } } } } });
+
+  /* Venta por cliente */
+  var pc = CO.porCliente;
+  graf('cvCliV', cfgHBar(pc.map(function(r){ return r.nombre; }), pc.map(function(r){ return r.venta; }), AZUL, money, 'Venta', corto));
 }
 
 /* ---------- catalogos de venta ---------- */
 function conCatalogosV(fn){
-  if (CATV) { return fn(); }
+  if (CATV && Date.now() - CATVt < 60000) { return fn(); }
   pill(true, 'Cargando catalogos...');
   google.script.run
-    .withSuccessHandler(function(res){ CATV = res; pill(false); fn(); })
+    .withSuccessHandler(function(res){ CATV = res; CATVt = Date.now(); pill(false); fn(); })
     .withFailureHandler(function(err){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');
@@ -1543,7 +2285,7 @@ function guardarV(){
                  'v_venta','v_maq','v_inst','v_mo','v_hext','v_otros','v_factura','v_ffactura','v_fprod'];
       for (var q = 0; q < ids.length; q++) { document.getElementById(ids[q]).value = ''; }
       CATV = null;   /* el cliente nuevo debe aparecer en la lista la proxima vez */
-      toast('Venta guardada (' + res.semana + ')' + (res.pendiente ? ' como PENDIENTE de monto' : ''), 'ok');
+      toast('Venta guardada (' + semLbl(res.semana) + ')' + (res.pendiente ? ' como PENDIENTE de monto' : ''), 'ok');
       pill(true, 'Recalculando...');
       recarga();
     })
@@ -1575,7 +2317,7 @@ function buscarV(){
              '<td class="izq">' + esc(r.odc || r.odp) + '</td><td class="izq">' + esc(r.vendedor) + '</td>' +
              (r.pendiente ? '<td><span class="chip dn">pendiente</span></td>' : cm(r.venta)) +
              '<td>' + esc(r.factura) + '</td><td>' + esc(r.cobro) + '</td>' +
-             '<td><button class="link" onclick="editarVenta(' + r.id + ')">editar</button></td></tr>';
+             '<td><button class="link edit" onclick="editarVenta(' + r.id + ')">editar</button></td></tr>';
       }
       if (res.total > res.filas.length) {
         h += '<tr><td class="vacio" colspan="10">Se muestran ' + res.filas.length + ' de ' + res.total +
@@ -1588,7 +2330,7 @@ function buscarV(){
       document.getElementById('tProyV').innerHTML = '<tbody><tr><td class="vacio">' + esc(m) + '</td></tr></tbody>';
       toast(m, 'err');
     })
-    .listarVentas({ q: val('qV'), soloPendientes: document.getElementById('soloPendV').checked });
+    .listarVentas({ q: val('qV'), soloPendientes: document.getElementById('soloPendV').checked }, CLAVE);
 }
 function editarVenta(id){
   if (LV[id]) { return conCatalogosV(function(){ mostrarEdit(LV[id]); }); }
@@ -1606,7 +2348,7 @@ function editarVenta(id){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudo buscar', 'err');
     })
-    .listarVentas({ id: id });
+    .listarVentas({ id: id }, CLAVE);
 }
 function mostrarEdit(r){
   editId = r.id;
@@ -1658,7 +2400,178 @@ window.addEventListener('resize', function(){
   tRes = setTimeout(function(){ pintar(); pintarCom(); }, 200);
 });
 
-init();
+
+/* =====================================================================
+   PORTAL DE LA INTRANET Y CAMBIO DE PANTALLA
+   Todo vive en esta misma pagina: cambiar de area no navega a otra URL.
+   ===================================================================== */
+var PT = null;   /* respuesta de portalInicio */
+var PT_ICONOS = {
+  /* iconos propios: trazo grueso y redondeado como las letras del logo, con acento naranja */
+  grafica: '<path d="M13 37V27M24 37V16M35 37V9" stroke="#fff" stroke-width="6.5"/><path d="M8 43h32" stroke="#FF8A3D" stroke-width="4.5"/>',
+  brujula: '<circle cx="24" cy="24" r="15" stroke="#fff" stroke-width="5.5"/><circle cx="24" cy="24" r="5.2" fill="#FF8A3D" stroke="none"/><path d="M24 4v6M24 38v6M4 24h6M38 24h6" stroke="#fff" stroke-width="4.5"/>',
+  personas: '<circle cx="18" cy="16" r="6.2" stroke="#fff" stroke-width="5"/><path d="M6 39c0-7.5 5.3-11.5 12-11.5s12 4 12 11.5" stroke="#fff" stroke-width="5.5"/><circle cx="33.5" cy="18" r="4.6" stroke="#FF8A3D" stroke-width="4.2"/><path d="M33 29c5 .2 8.5 3.4 9 9" stroke="#FF8A3D" stroke-width="4.5"/>',
+  engrane: '<circle cx="24" cy="24" r="8.6" stroke="#fff" stroke-width="5.5"/><circle cx="24" cy="24" r="2.8" fill="#FF8A3D" stroke="none"/><path d="M24 5v6.5M24 36.5V43M5 24h6.5M36.5 24H43M10.6 10.6l4.6 4.6M32.8 32.8l4.6 4.6M37.4 10.6l-4.6 4.6M15.2 32.8l-4.6 4.6" stroke="#fff" stroke-width="5.5"/>',
+  negocio: '<rect x="7" y="16" width="34" height="24" rx="7.5" stroke="#fff" stroke-width="5.5"/><path d="M17 16v-2.5a5 5 0 015-5h4a5 5 0 015 5V16" stroke="#fff" stroke-width="5.5"/><rect x="20.5" y="24" width="7" height="7" rx="2.2" fill="#FF8A3D" stroke="none"/>',
+  candado: '<rect x="9" y="21" width="30" height="21" rx="6.5" stroke="#fff" stroke-width="5.5"/><path d="M16 21v-5a8 8 0 0116 0v5" stroke="#fff" stroke-width="5.5"/>',
+  obra: '<path d="M6 42h36M10 42V19l14-10 14 10v23" stroke="#fff" stroke-width="5.5"/>'
+};
+function ptIco(n){ return '<span class="pt-ico"><svg viewBox="0 0 48 48" aria-hidden="true">' + (PT_ICONOS[n] || PT_ICONOS.obra) + '</svg></span>'; }
+var PT_FLECHA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+var PT_EXTERNO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>';
+var PT_ROL = { MASTER: 'Administrador', CAPTURA: 'Captura', SOCIO: 'Socio', LECTOR: 'Colaborador' };
+function ptToast(m){ var t = document.getElementById('ptToast'); t.textContent = m; t.className = 'on'; clearTimeout(ptToast.h); ptToast.h = setTimeout(function(){ t.className = ''; }, 3800); }
+
+function ptInicioPinta(info){
+  PT = info;
+  document.getElementById('ptQuien').innerHTML = '<b>' + esc(info.ses.correo) + '</b>' + esc(PT_ROL[info.ses.rol] || info.ses.rol);
+  var h = '';
+  info.areas.forEach(function(a){
+    var cuerpo = ptIco(a.acceso ? a.icono : 'candado') + '<h2>' + esc(a.nombre) + '</h2><p>' + esc(a.desc) + '</p>' +
+      '<span class="pt-go">' + (a.acceso ? 'Entrar' : 'Acceso restringido') + (a.acceso ? PT_FLECHA : '') + '</span>';
+    if (a.acceso) {
+      h += '<button type="button" class="pt-tile" onclick="ptEntrar(\'' + a.id + '\')" aria-label="Entrar a ' + esc(a.nombre) + '">' + cuerpo + '</button>';
+    } else {
+      h += '<button type="button" class="pt-tile pt-cerrado" onclick="ptSinAcceso(\'' + esc(a.nombre) + '\')" aria-label="' + esc(a.nombre) + ': acceso restringido">' + cuerpo + '</button>';
+    }
+  });
+  document.getElementById('ptTiles').innerHTML = h;
+  document.getElementById('ptCarga').className = 'pt-oculto';
+  document.getElementById('ptTiles').className = 'pt-tiles';
+  /* enlace directo (?a=dashboard / ?a=direccion): abre esa pantalla */
+  if (VISTA0 && !ptInicioPinta.hecho) {
+    ptInicioPinta.hecho = true;
+    var ar = info.areas.filter(function(x){ return x.id === VISTA0; })[0];
+    if (ar && ar.acceso) { ptEntrar(ar.id); }
+  }
+  ptInicioPinta.hecho = true;
+}
+function ptSinAcceso(n){ ptToast('No tienes acceso a ' + n + '. Si lo necesitas, solicítalo a la administración.'); }
+function ptFalla(err){
+  var m = (err && err.message) ? err.message : 'Error desconocido';
+  document.getElementById('ptCarga').className = 'pt-oculto';
+  document.getElementById('ptFalla').innerHTML = '<div class="pt-err"><b>No se pudo cargar la intranet.</b>' + esc(m) + '</div>';
+}
+function ptEntrar(id){
+  var a = (PT ? PT.areas : []).filter(function(x){ return x.id === id; })[0];
+  if (!a) { return; }
+  if (a.vista) { abrirTablero(a.vista); return; }
+  ptAbrirArea(id);
+}
+function ptVolver(){
+  document.getElementById('ptArea').className = 'pt-oculto';
+  document.getElementById('ptInicio').className = '';
+  document.getElementById('ptHero').className = 'pt-hero';
+  window.scrollTo(0, 0);
+}
+function ptAbrirArea(id){
+  document.getElementById('ptInicio').className = 'pt-oculto';
+  document.getElementById('ptHero').className = 'pt-hero pt-oculto';
+  var v = document.getElementById('ptArea');
+  v.className = '';
+  v.innerHTML = '<div class="pt-estado"><div class="pt-spin"></div>Abriendo el área…</div>';
+  window.scrollTo(0, 0);
+  google.script.run
+    .withSuccessHandler(ptAreaPinta)
+    .withFailureHandler(function(err){
+      var m = (err && err.message) ? err.message : 'Error desconocido';
+      v.innerHTML = ptMigas('') + '<div class="pt-err"><b>No se pudo abrir el área.</b>' + esc(m) + '</div>';
+    })
+    .portalArea(id, CLAVE);
+}
+function ptMigas(n){
+  return '<div class="pt-migas"><button type="button" onclick="ptVolver()">‹ Inicio</button>' + (n ? '<span>/</span><span>' + esc(n) + '</span>' : '') + '</div>';
+}
+function ptAreaPinta(a){
+  var h = ptMigas(a.nombre) + '<div class="pt-av-cab">' + ptIco(a.icono) + '<div><h2>' + esc(a.nombre) + '</h2><p>' + esc(a.desc) + '</p></div></div>';
+  var hay = false;
+  if (a.modulos && a.modulos.length) {
+    hay = true;
+    h += '<div class="pt-bloque"><h3>Módulos</h3><div class="pt-cards">';
+    a.modulos.forEach(function(m){
+      if (m.estado === 'activo' && m.destino === 'dashboard') {
+        h += '<a class="pt-card" href="#" onclick="abrirTablero(\'dashboard\'); return false;"><span class="pt-badge ok">Disponible</span><h4>' + esc(m.nombre) + '</h4><p>' + esc(m.desc) + '</p></a>';
+      } else {
+        h += '<div class="pt-card pt-prox"><span class="pt-badge">Próximamente</span><h4>' + esc(m.nombre) + '</h4><p>' + esc(m.desc) + '</p></div>';
+      }
+    });
+    h += '</div></div>';
+  }
+  if (a.enlaces && a.enlaces.length) {
+    hay = true;
+    var por = {}, orden = [];
+    a.enlaces.forEach(function(e){ if (!por[e.categoria]) { por[e.categoria] = []; orden.push(e.categoria); } por[e.categoria].push(e); });
+    orden.forEach(function(cat){
+      h += '<div class="pt-bloque"><h3>' + esc(cat) + '</h3><div class="pt-cards">';
+      por[cat].forEach(function(e){
+        h += '<a class="pt-card pt-enlace" href="' + esc(e.url) + '" target="_blank" rel="noopener noreferrer">' + PT_EXTERNO +
+             '<h4>' + esc(e.titulo) + '</h4>' + (e.descripcion ? '<p>' + esc(e.descripcion) + '</p>' : '') + '</a>';
+      });
+      h += '</div></div>';
+    });
+  }
+  if (!hay) {
+    var admin = PT && PT.ses.rol === 'MASTER';
+    h += '<div class="pt-bloque"><div class="pt-vacio">' + ptIco(a.icono);
+    if (a.id === 'talento') {
+      h += '<h4>Aún no hay enlaces publicados</h4><p>' + (admin
+        ? 'Agrega solicitudes y documentos en la hoja <b>ENLACES</b> del Sheet: AREA = <b>talento</b>, una CATEGORIA, un TITULO y la URL. Aparecen aquí sin tocar el código.'
+        : 'Pronto encontrarás aquí las solicitudes y los documentos de consulta de políticas.') + '</p>';
+    } else {
+      h += '<h4>Esta área está en construcción</h4><p>La estructura ya está lista; los módulos se irán agregando aquí.</p>';
+    }
+    if (a.planeados && a.planeados.length) {
+      h += '<div class="pt-chips">' + a.planeados.map(function(x){ return '<span class="pt-chip">' + esc(x) + '</span>'; }).join('') + '</div>';
+    }
+    h += '</div></div>';
+  }
+  document.getElementById('ptArea').innerHTML = h;
+  window.scrollTo(0, 0);
+}
+
+/* ---- pantalla del tablero: Dashboard completo o Direccion (informativa) ---- */
+function setModoUI(){
+  var dir = MODO === 'direccion';
+  document.body.classList.toggle('modo-dir', dir);
+  document.getElementById('tituloDoc').textContent = dir ? 'TABLERO DE DIRECCIÓN' : 'TABLERO BIG FOOT print';
+}
+function abrirTablero(modo){
+  if (modo === 'direccion') {
+    /* el servidor valida el acceso (lista de Direccion, socios o area extra) */
+    google.script.run
+      .withSuccessHandler(function(){ entraTablero('direccion'); })
+      .withFailureHandler(function(err){ ptToast((err && err.message) ? err.message : 'Sin acceso a Dirección.'); })
+      .portalArea('direccion', CLAVE);
+    return;
+  }
+  entraTablero('dashboard');
+}
+function entraTablero(modo){
+  var tenia = SUB.length;
+  MODO = modo;
+  if (modo === 'direccion') { SUB = []; }
+  document.getElementById('appPortal').className = 'oculto';
+  document.getElementById('appDash').className = '';
+  setModoUI();
+  window.scrollTo(0, 0);
+  if (!DASH_LISTO) { DASH_LISTO = true; init(); return; }
+  areas();
+  if (tenia && modo === 'direccion') { pedir(false, true); }   /* hay que quitar el sub-filtro del servidor */
+  else { pintar(); pintarCom(); }
+}
+function irInicio(){
+  msCerrar(); hambCerrar();
+  document.getElementById('appDash').className = 'oculto';
+  document.getElementById('appPortal').className = '';
+  window.scrollTo(0, 0);
+}
+
+document.getElementById('ptLogo').src = LOGO_AZUL || '';
+document.getElementById('logoC').src = LOGO_BLANCO || '';
+if (!LOGO_AZUL) { document.getElementById('ptLogo').outerHTML = '<div style="font:700 40px Khand,Poppins,sans-serif;color:#173E81">bigfoot <span style="color:#DF4A10">print</span></div>'; }
+if (!LOGO_BLANCO) { document.getElementById('logoC').style.display = 'none'; }
+google.script.run.withSuccessHandler(ptInicioPinta).withFailureHandler(ptFalla).portalInicio(CLAVE);
+
 </script>
 </body>
 </html>
