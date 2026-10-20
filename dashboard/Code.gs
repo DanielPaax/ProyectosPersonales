@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.8.3',
+  version:  '1.8.4',
   liberada: '2026-10-13',
   esquema:  6
 };
@@ -2214,12 +2214,13 @@ function listarOdpFaltantes() {
 /* Nombre viejo -> nombre nuevo. Se aplica a BASE (MAQUINA), VENTAS (MAQUINA) y al catalogo
    MAQUINA de CATALOGOS. Menu Produccion > Renombrar maquinas (solo MASTER): muestra cuantos
    renglones cambian y pide confirmacion. Se puede repetir sin riesgo. El resto de las
-   maquinas (por ejemplo 2017_GRAN FORMATO..., PLOTTER DE CORTE) no se toca. */
+   maquinas (por ejemplo PLOTTER DE CORTE) no se toca. */
 var RENOMBRE_MAQUINAS = [
   ['2022_GRAN FORMATO_YASELAN KONICA 512i', 'GF_Chona'],
   ['2020_ALTA RESOLUCION (MIMAKI JV33)', 'HD_Mimaki'],
   ['2021_GRAN FORMATO_YASELAN KONICA 512i', 'GF_Juana'],
-  ['2023_SERIGRAFIA', 'SERIGRAFIA_UV']
+  ['2023_SERIGRAFIA', 'SERIGRAFIA_UV'],
+  ['2017_GRAN FORMATO_YASELAN KONICA 512i', 'GF_Chona']   /* dos nombres viejos de la misma maquina */
 ];
 
 function _clavePorNombre_(t) { return String(t === null || t === undefined ? '' : t).replace(/\s+/g, ' ').trim().toUpperCase(); }
