@@ -1156,8 +1156,8 @@ function lineas(t, ancho, max){
   if (out.length > max) { out = out.slice(0, max); out[max - 1] = acorta(out[max - 1], ancho - 1) + '…'; }
   return out;
 }
-/* 2022_GRAN FORMATO_YASELAN KONICA 512i -> 2022 GF KONICA 512i */
-function nomMaq(n){ return String(n).replace(/_GRAN FORMATO_YASELAN /, ' GF ').replace(/_/g, ' '); }
+/* GF_Chona -> GF Chona (y los nombres viejos: 2022_GRAN FORMATO_YASELAN KONICA 512i -> 2022 GF KONICA 512i) */
+function nomMaq(n){ return String(n).replace(/_GRAN FORMATO_YASELAN /, ' GF ').replace(/_/g, ' '); }   /* GF_Chona -> GF Chona */
 function corta(sem){ return String(sem).replace(/^SEM\s*(\d\d\/\d\d).*$/, '$1'); }
 
 /* ---- semana del año + rango de fechas (DD-Mes3-AA) ---- */

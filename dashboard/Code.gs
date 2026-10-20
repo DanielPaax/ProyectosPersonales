@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.8.2',
+  version:  '1.8.3',
   liberada: '2026-10-13',
   esquema:  6
 };
@@ -2136,6 +2136,7 @@ function onOpen() {
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
       .addItem('Listar ODP faltantes (columna H de VENTAS)', 'listarOdpFaltantes')
       .addItem('Revisar nombres de máquina (catalogo)', 'revisarMaquinas')
+      .addItem('Renombrar máquinas (GF_Chona, HD_Mimaki…)', 'renombrarMaquinas')
       .addSeparator()
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Accesos por enlace (socios / empleados)')
         .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
@@ -2207,6 +2208,107 @@ function listarOdpFaltantes() {
   ui.alert('ODP faltantes', 'Desde ' + r.minimo + ' hasta ' + r.maximo + ': faltan ' + r.faltan.length + '.\n\n' +
     (r.aislados.length ? 'OJO: excluí ' + r.aislados.map(function (x) { return x.numero + ' (fila ' + x.filas.join(', ') + ')'; }).join(', ') +
       ' por estar muy lejos del resto; revisa si es un error de captura.\n\n' : '') + txt, ui.ButtonSet.OK);
+}
+
+/* ===================== RENOMBRAR MAQUINAS ===================== */
+/* Nombre viejo -> nombre nuevo. Se aplica a BASE (MAQUINA), VENTAS (MAQUINA) y al catalogo
+   MAQUINA de CATALOGOS. Menu Produccion > Renombrar maquinas (solo MASTER): muestra cuantos
+   renglones cambian y pide confirmacion. Se puede repetir sin riesgo. El resto de las
+   maquinas (por ejemplo 2017_GRAN FORMATO..., PLOTTER DE CORTE) no se toca. */
+var RENOMBRE_MAQUINAS = [
+  ['2022_GRAN FORMATO_YASELAN KONICA 512i', 'GF_Chona'],
+  ['2020_ALTA RESOLUCION (MIMAKI JV33)', 'HD_Mimaki'],
+  ['2021_GRAN FORMATO_YASELAN KONICA 512i', 'GF_Juana'],
+  ['2023_SERIGRAFIA', 'SERIGRAFIA_UV']
+];
+
+function _clavePorNombre_(t) { return String(t === null || t === undefined ? '' : t).replace(/\s+/g, ' ').trim().toUpperCase(); }
+
+/* Valores nuevos de una columna y cuantos cambiaron por cada nombre viejo. */
+function _renombraColumna_(valores, mapa) {
+  var nuevos = [], cambios = {}, total = 0;
+  for (var i = 0; i < valores.length; i++) {
+    var v = valores[i][0], k = _clavePorNombre_(v);
+    if (mapa[k] !== undefined && String(v) !== mapa[k]) {
+      nuevos.push([mapa[k]]); cambios[k] = (cambios[k] || 0) + 1; total++;
+    } else { nuevos.push([v]); }
+  }
+  return { nuevos: nuevos, cambios: cambios, total: total };
+}
+
+function _limpiaCacheBase_() {
+  var h = _hoja_(CFG.HOJA_BASE);
+  CacheService.getScriptCache().removeAll([
+    'base_v' + JG_SELLO.esquema + '_' + h.getLastRow(),
+    'base_v' + JG_SELLO.esquema + '_' + (h.getLastRow() - 1)
+  ]);
+}
+
+function renombrarMaquinas() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var mapa = {};
+  for (var m = 0; m < RENOMBRE_MAQUINAS.length; m++) { mapa[_clavePorNombre_(RENOMBRE_MAQUINAS[m][0])] = RENOMBRE_MAQUINAS[m][1]; }
+  var hb = _hoja_(CFG.HOJA_BASE), hv = _hoja_(CFG.HOJA_VENTAS), hc = _hoja_(CFG.HOJA_CATALOGOS);
+  var ub = hb.getLastRow(), uv = hv.getLastRow(), uc = hc.getLastRow();
+  var rb = ub >= 2 ? _renombraColumna_(hb.getRange(2, COL.MAQUINA, ub - 1, 1).getValues(), mapa) : { nuevos: [], cambios: {}, total: 0 };
+  var rv = uv >= 2 ? _renombraColumna_(hv.getRange(2, CV.MAQUINA, uv - 1, 1).getValues(), mapa) : { nuevos: [], cambios: {}, total: 0 };
+  /* catalogo: columna MAQUINA (se reconoce por su encabezado) */
+  var colCat = 0, valsCat = [];
+  var ancho = hc.getLastColumn();
+  if (uc >= 1 && ancho >= 1) {
+    var enc = hc.getRange(1, 1, 1, ancho).getValues()[0];
+    for (var c = 0; c < enc.length; c++) { if (_normCat_(enc[c]) === 'MAQUINA') { colCat = c + 1; break; } }
+    if (colCat && uc >= 2) { valsCat = hc.getRange(2, colCat, uc - 1, 1).getValues(); }
+  }
+  var nuevoCat = [], cambiosCat = 0, existentes = {};
+  for (var e = 0; e < valsCat.length; e++) { var kx = _clavePorNombre_(valsCat[e][0]); if (kx) { existentes[kx] = true; } }
+  var yaPuesto = {};
+  for (var i = 0; i < valsCat.length; i++) {
+    var v = valsCat[i][0], k = _clavePorNombre_(v);
+    if (mapa[k] !== undefined) {
+      var nn = _clavePorNombre_(mapa[k]);
+      if (existentes[nn] || yaPuesto[nn]) { nuevoCat.push(['']); }   /* el nuevo ya esta: se quita el viejo */
+      else { nuevoCat.push([mapa[k]]); yaPuesto[nn] = true; }
+      cambiosCat++;
+    } else { nuevoCat.push([v]); }
+  }
+  /* si los datos ya usaran un nombre nuevo que el catalogo no tiene, se agrega para que los formularios lo ofrezcan */
+  if (colCat) {
+    for (var j2 = 0; j2 < RENOMBRE_MAQUINAS.length; j2++) {
+      var ko = _clavePorNombre_(RENOMBRE_MAQUINAS[j2][0]), nn2 = _clavePorNombre_(RENOMBRE_MAQUINAS[j2][1]);
+      if ((rb.cambios[ko] || rv.cambios[ko]) && !existentes[nn2] && !yaPuesto[nn2]) {
+        nuevoCat.push([RENOMBRE_MAQUINAS[j2][1]]); yaPuesto[nn2] = true; cambiosCat++;
+      }
+    }
+  }
+  var total = rb.total + rv.total + cambiosCat;
+  if (!total) {
+    ui.alert('Renombrar máquinas', 'No hay nada que renombrar: ningún renglón de BASE, VENTAS ni del catálogo tiene los nombres viejos (ya estaban cambiados).', ui.ButtonSet.OK);
+    return 'sin cambios';
+  }
+  var lineas = [];
+  for (var j = 0; j < RENOMBRE_MAQUINAS.length; j++) {
+    var kk = _clavePorNombre_(RENOMBRE_MAQUINAS[j][0]);
+    lineas.push('• ' + RENOMBRE_MAQUINAS[j][0] + '  →  ' + RENOMBRE_MAQUINAS[j][1] + '\n    BASE: ' + (rb.cambios[kk] || 0) + ' · VENTAS: ' + (rv.cambios[kk] || 0));
+  }
+  var r = ui.alert('Renombrar máquinas',
+    'Se cambiarán ' + rb.total + ' renglones de BASE, ' + rv.total + ' de VENTAS y ' + cambiosCat + ' celda(s) del catálogo MAQUINA:\n\n' +
+    lineas.join('\n') + '\n\nLas demás máquinas no se tocan. ¿Aplicar el cambio?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) { return 'cancelado'; }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) { throw new Error('El sistema esta ocupado. Intenta de nuevo en unos segundos.'); }
+  try {
+    if (rb.total) { hb.getRange(2, COL.MAQUINA, rb.nuevos.length, 1).setValues(rb.nuevos); }
+    if (rv.total) { hv.getRange(2, CV.MAQUINA, rv.nuevos.length, 1).setValues(rv.nuevos); }
+    if (cambiosCat && colCat) { hc.getRange(2, colCat, nuevoCat.length, 1).setValues(nuevoCat); }
+    _limpiaCacheBase_(); _limpiaCacheVentas_(); _limpiaCacheCatalogos_();
+    _bitacora_(ses.correo, 'RENOMBRA_MAQUINAS', 'BASE=' + rb.total + ' VENTAS=' + rv.total + ' CATALOGO=' + cambiosCat);
+  } finally { lock.releaseLock(); }
+  ui.alert('Renombrar máquinas', 'Listo: ' + rb.total + ' renglones de BASE, ' + rv.total + ' de VENTAS y ' + cambiosCat +
+    ' celda(s) del catálogo. Recarga el tablero para ver los nombres nuevos.', ui.ButtonSet.OK);
+  return 'listo';
 }
 
 /* ===================== REVISION DE NOMBRES DE MAQUINA ===================== */
