@@ -526,12 +526,22 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
     <div class="tscroll"><table id="tMaq"></table></div>
   </section>
 
-  <section class="card" id="cUso">
+  <section class="card solo-dash" id="cUso">
     <header><h2>% de uso Máquina</h2>
-      <span class="sub">Qué tanto de su capacidad por hora usó cada máquina. Horas calculadas = (CANTIDAD + MERMA_MT2) ÷ capacidad por hora (hoja CAPACIDAD_MAQUINAS); % de uso = horas calculadas ÷ horas reales (HORAS_MAQ).</span>
+      <span class="sub" id="subUso"></span>
     </header>
+    <div class="gc bajo"><canvas id="cvUso"></canvas></div>
     <div class="tscroll"><table id="tUso"></table></div>
     <div class="nota" id="notaUso" style="margin:12px 16px 16px"></div>
+  </section>
+
+  <section class="card" id="cUsoMes">
+    <header><h2>% de uso por máquina y por mes</h2>
+      <span class="sub" id="subUsoMes"></span>
+    </header>
+    <div class="gc alto"><canvas id="cvUsoMes"></canvas></div>
+    <div class="tscroll"><table id="tUsoMes"></table></div>
+    <div class="nota" id="notaUsoMes" style="margin:12px 16px 16px"></div>
   </section>
 
   <section class="card" id="cCostos" style="display:none">
@@ -1597,45 +1607,125 @@ function pintaCostos(){
 }
 
 /* ---------- % de uso de maquina ---------- */
-function usoTd(v){
-  if (v === null || v === undefined) { return '<td class="num cero">—</td>'; }
-  return '<td class="num">' + n1(v) + '%</td>';
+function usoExplica(U){
+  var t = U ? U.horasTurno : 11;
+  return 'Cómo se calcula: % de uso = lo que produjo la máquina ÷ lo que podía producir. Podía producir = su capacidad por hora × ' + n0(t) +
+         ' horas de turno (8 am a 7 pm) × los días hábiles (lunes a viernes) del periodo. Producción = CANTIDAD + MERMA_MT2. ' +
+         '100% = turno completo, todos los días, a su capacidad.';
 }
+function colorMaq(nombre, lista){
+  var i = lista.indexOf(nombre);
+  return PALETA[(i < 0 ? 0 : i) % PALETA.length];
+}
+function pctTxt(v){ return v === null || v === undefined ? '—' : n1(v) + '%'; }
+
 function pintaUso(){
-  var U = D.usoMaq, t = document.getElementById('tUso'), nota = document.getElementById('notaUso');
+  var U = D.usoMaq;
+  document.getElementById('subUso').textContent = usoExplica(U);
+  document.getElementById('subUsoMes').textContent = usoExplica(U);
+  pintaUsoGlobal(U);
+  pintaUsoMes(U);
+}
+
+/* tabla y grafico globales (Dashboard) */
+function pintaUsoGlobal(U){
+  var t = document.getElementById('tUso'), nota = document.getElementById('notaUso');
   if (!U || !U.filas.length) {
     t.innerHTML = '<tbody><tr><td class="vacio">Sin renglones de producción con los filtros elegidos.</td></tr></tbody>';
-    nota.textContent = ''; return;
+    nota.textContent = ''; graf('cvUso', { type: 'bar', data: { labels: [], datasets: [{ data: [] }] } }); return;
   }
+  var conCap = U.filas.filter(function(r){ return !r.sinCapacidad; });
+  /* grafico: la misma informacion que la tabla */
+  var maxP = 0; conCap.forEach(function(r){ if (r.pctUso !== null && r.pctUso > maxP) { maxP = r.pctUso; } });
+  var cfg = cfgHBar(conCap.map(function(r){ return r.maquina; }), conCap.map(function(r){ return r.pctUso === null ? 0 : r.pctUso; }),
+    conCap.map(function(r){ return r.pctUso !== null && r.pctUso > 100 ? ROJO : AZUL; }),
+    function(v){ return n1(v) + '%'; }, '% de uso', function(v){ return v + '%'; }, nomMaq);
+  cfg.options.scales.x.max = Math.max(100, Math.ceil(maxP / 10) * 10);
+  cfg.options.plugins.tooltip.callbacks.label = function(c){
+    var r = conCap[c.dataIndex];
+    return ' ' + n1(c.parsed.x) + '% · ' + n2(r.horasCalc) + ' h calculadas de ' + n2(r.horasDisp) + ' h disponibles';
+  };
+  graf('cvUso', cfg);
+
   var h = '<thead><tr><th>Máquina</th><th>Capacidad por hora</th><th>Producción (CANTIDAD + MERMA)</th>' +
-          '<th>Horas calculadas</th><th>Horas reales</th><th>% de uso</th><th>Renglones con horas</th></tr></thead><tbody>';
+          '<th>Horas calculadas</th><th>Horas disponibles</th><th>% de uso</th><th>Horas reales capturadas</th></tr></thead><tbody>';
   var hayAlto = false, sinCap = [];
   U.filas.forEach(function(r){
-    var u = r.unidad === 'PZS' ? 'pzs' : 'm²';
-    var barra = '', pct;
+    var u = r.unidad === 'PZS' ? 'pzs' : 'm²', pct;
     if (r.pctUso === null) { pct = '<td class="num cero">—</td>'; }
     else {
       var alto = r.pctUso > 100; if (alto) { hayAlto = true; }
-      pct = '<td class="num"' + (alto ? ' data-tip="Más de 100%|las horas capturadas son menos de las que exige la capacidad"' : '') + '>' +
+      pct = '<td class="num"' + (alto ? ' data-tip="Más de 100%|produjo más de lo que cabe en un turno de lunes a viernes"' : '') + '>' +
             '<b' + (alto ? ' style="color:var(--rojo)"' : '') + '>' + n1(r.pctUso) + '%</b>' +
             '<div class="mini" style="margin-top:4px"><span style="width:' + Math.max(2, Math.min(100, Math.round(r.pctUso))) + '%' + (alto ? ';background:var(--rojo)' : '') + '"></span></div></td>';
     }
     if (r.sinCapacidad) { sinCap.push(r.maquina); }
     h += '<tr><td>' + esc(nomMaq(r.maquina)) + '</td>' +
-         (r.sinCapacidad ? '<td class="num" style="color:var(--rojo)">sin capacidad</td><td class="num cero">—</td><td class="num cero">—</td>'
-                         : '<td class="num">' + n0(r.capacidad) + ' ' + u + '/h</td><td class="num">' + n2(r.cantidad) + ' ' + u + '</td><td class="num">' + n2(r.horasCalc) + '</td>') +
-         '<td class="num">' + (r.horasReal > 0 ? n2(r.horasReal) : '<span class="cero">0</span>') + '</td>' + pct +
-         '<td class="num">' + (r.sinCapacidad ? '—' : n0(r.conHoras) + ' de ' + n0(r.renglones)) + '</td></tr>';
+         (r.sinCapacidad ? '<td class="num" style="color:var(--rojo)">sin capacidad</td><td class="num cero">—</td><td class="num cero">—</td><td class="num cero">—</td>'
+                         : '<td class="num">' + n0(r.capacidad) + ' ' + u + '/h</td><td class="num">' + n2(r.cantidad) + ' ' + u + '</td><td class="num">' + n2(r.horasCalc) + '</td><td class="num">' + n2(r.horasDisp) + '</td>') +
+         pct + '<td class="num">' + (r.horasReal > 0 ? n2(r.horasReal) : '<span class="cero">0</span>') + '</td></tr>';
   });
-  var T = U.total;
-  h += '<tr class="tot"><td>TOTAL (máquinas con capacidad)</td><td></td><td></td><td class="num">' + n2(T.horasCalc) + '</td><td class="num">' + n2(T.horasReal) + '</td>' +
-       usoTd(T.pctUso).replace('<td class="num">', '<td class="num"><b>').replace('</td>', '</b></td>') + '<td class="num">' + n0(T.conHoras) + ' de ' + n0(T.renglones) + '</td></tr></tbody>';
+  h += '<tr class="tot"><td>PROMEDIO DE LAS MÁQUINAS</td><td></td><td></td><td></td><td class="num">' + n2(U.horasDisp) + '</td><td class="num"><b>' + pctTxt(U.promedio) + '</b></td><td></td></tr></tbody>';
   t.innerHTML = h;
   var m = [];
-  m.push('El % compara solo los renglones que tienen HORAS_MAQ capturadas (' + n0(T.conHoras) + ' de ' + n0(T.renglones) + '); los demás cuentan en "Horas calculadas" pero no en el %.');
-  if (hayAlto) { m.push('Un % mayor a 100 (en rojo) significa que se produjo más de lo que la capacidad permite en las horas capturadas: revisa HORAS_MAQ o la capacidad.'); }
-  if (U.sinMaquina) { m.push(n0(U.sinMaquina) + ' renglones no tienen máquina asignada (NO REPORTADA) y no entran en esta tabla.'); }
+  m.push('Periodo: ' + n0(U.diasHabiles) + ' días hábiles (lunes a viernes, sin descontar festivos) × ' + n0(U.horasTurno) + ' h = ' + n2(U.horasDisp) + ' horas disponibles por máquina.');
+  m.push('"Horas reales capturadas" (HORAS_MAQ) es solo informativo: el % ya no depende de ellas.');
+  if (hayAlto) { m.push('En rojo: más de 100%. Produjo más de lo que cabe en un turno de lunes a viernes (horas extra, sábados o capacidad subestimada).'); }
+  if (U.sinMaquina) { m.push(n0(U.sinMaquina) + ' renglones sin máquina (NO REPORTADA / NO APLICA) no entran en esta tabla.'); }
   if (sinCap.length) { m.push('Sin capacidad: ' + sinCap.map(nomMaq).join(', ') + '. Agrégala en la hoja CAPACIDAD_MAQUINAS.'); }
+  nota.innerHTML = m.map(esc).join('<br>');
+}
+
+/* grafico y tabla por mes (Dashboard y Direccion) */
+function pintaUsoMes(U){
+  var t = document.getElementById('tUsoMes'), nota = document.getElementById('notaUsoMes');
+  var M = U ? U.mensual : null;
+  if (!M || !M.filas.length || !M.meses.length) {
+    t.innerHTML = '<tbody><tr><td class="vacio">Sin renglones de producción con los filtros elegidos.</td></tr></tbody>';
+    nota.textContent = ''; graf('cvUsoMes', { type: 'line', data: { labels: [], datasets: [{ data: [] }] } }); return;
+  }
+  var nombres = M.filas.map(function(r){ return r.maquina; });
+  var puntos = M.filas.length * M.meses.length, conEtq = puntos <= 36;
+  var ds = M.filas.map(function(r){
+    var c = colorMaq(r.maquina, nombres);
+    return { label: nomMaq(r.maquina), data: r.vals.map(function(v){ return v.pct; }), borderColor: c, backgroundColor: c,
+             cubicInterpolationMode: 'monotone', pointRadius: 3.5, pointHoverRadius: 6, borderWidth: 2.5, spanGaps: true };
+  });
+  var idx = ds.map(function(_, i){ return i; });
+  graf('cvUsoMes', { type: 'line',
+    data: { labels: M.meses.map(mesTxt), datasets: ds },
+    options: { layout: { padding: { top: 14 } },
+      plugins: { legend: { position: 'top' },
+        etiq: conEtq ? { modo: 'pa', ds: idx, fmt: function(v){ return v === null ? '' : n0(v) + '%'; }, size: 9, colores: ds.map(function(d){ return d.borderColor; }) } : {},
+        tooltip: { callbacks: { title: function(c){ return mesLargo(M.meses[c[0].dataIndex]); },
+          label: function(c){
+            var r = M.filas[c.datasetIndex], v = r.vals[c.dataIndex], u = r.unidad === 'PZS' ? 'pzs' : 'm²';
+            return ' ' + c.dataset.label + ': ' + pctTxt(c.parsed.y) + ' · ' + n2(v.prod) + ' ' + u + ' · ' + n2(v.horasCalc) + ' h de ' + n2(v.horasDisp) + ' h';
+          } } } },
+      scales: { x: { grid: { display: false } },
+                y: { beginAtZero: true, grace: '12%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return v + '%'; } } } } } });
+
+  var h = '<thead><tr><th>Máquina</th>';
+  M.meses.forEach(function(m){ h += '<th data-tip="' + esc(mesLargo(m)) + '">' + esc(mesTxt(m)) + '</th>'; });
+  h += '<th data-tip="Todo el periodo|capacidad de todos los días hábiles">Periodo</th></tr></thead><tbody>';
+  var hayAlto = false;
+  M.filas.forEach(function(r){
+    var u = r.unidad === 'PZS' ? 'pzs' : 'm²';
+    h += '<tr><td>' + esc(nomMaq(r.maquina)) + ' <span class="cero">(' + n0(r.capacidad) + ' ' + u + '/h)</span></td>';
+    r.vals.forEach(function(v, i){
+      if (v.pct === null) { h += '<td class="num cero">—</td>'; return; }
+      var alto = v.pct > 100; if (alto) { hayAlto = true; }
+      h += '<td class="num" data-tip="' + esc(mesLargo(M.meses[i]) + '|' + n2(v.prod) + ' ' + u + ' · ' + n2(v.horasCalc) + ' h de ' + n2(v.horasDisp) + ' h') + '">' +
+           (alto ? '<b style="color:var(--rojo)">' + n1(v.pct) + '%</b>' : n1(v.pct) + '%') + '</td>';
+    });
+    h += '<td class="num"><b>' + pctTxt(r.pctTotal) + '</b></td></tr>';
+  });
+  h += '<tr class="tot"><td>Días hábiles del mes</td>';
+  M.dias.forEach(function(d){ h += '<td class="num">' + n0(d) + '</td>'; });
+  h += '<td class="num">' + n0(U.diasHabiles) + '</td></tr></tbody>';
+  t.innerHTML = h;
+  var m = ['Cada mes se mide contra sus propios días hábiles (lunes a viernes); el mes en curso cuenta solo hasta hoy. Los meses sin producción aparecen en 0%.'];
+  if (hayAlto) { m.push('En rojo: más de 100%, produjo más de lo que cabe en un turno de lunes a viernes.'); }
   nota.innerHTML = m.map(esc).join('<br>');
 }
 

@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.9.0',
+  version:  '1.10.0',
   liberada: '2026-10-13',
   esquema:  7
 };
@@ -877,7 +877,6 @@ function _agregaTablero_(filas) {
     serie: serie,
     mesesCols: mesesCols,
     serieMes: serieMes,
-    usoMaq: _usoMaquinas_(filas),
     porMaquinaMes: _matrizMes_(filas, 'maquina', mesesCols),
     porMaterialMes: _matrizMes_(filas, 'material', mesesCols),
     total: tot,
@@ -1085,7 +1084,7 @@ function cargarTablero(filtros, sub, clave) {
     serie: res.serie,
     mesesCols: res.mesesCols,
     serieMes: res.serieMes,
-    usoMaq: res.usoMaq,
+    usoMaq: _usoMaquinas_(filas, q, _leerBase_()),
     porMaquinaMes: res.porMaquinaMes,
     porMaterialMes: res.porMaterialMes,
     total: res.total,
@@ -1118,9 +1117,9 @@ function detalleSemana(semana, filtros, sub, clave) {
   var filas = _filtraProd_(_leerBase_(), q);
   var subs = _subs_(sub);
   if (subs.length) { filas = _aplicaSub_(filas, subs); }
-  var out = [], caps = _leerCapacidades_();
+  var out = [], caps = _leerCapacidades_(), turno = _horasTurno_();
   for (var i = 0; i < filas.length; i++) {
-    if (filas[i].semana === s) { filas[i].uso = _usoFila_(filas[i], caps); out.push(filas[i]); }
+    if (filas[i].semana === s) { filas[i].uso = _usoFila_(filas[i], caps, turno); out.push(filas[i]); }
   }
   out.sort(function (a, b) {
     if (a.maquina !== b.maquina) { return a.maquina < b.maquina ? -1 : 1; }
@@ -1408,15 +1407,19 @@ function _leerTarifas_() {
 }
 
 /* ===================== CAPACIDAD DE MAQUINAS Y % DE USO ===================== */
-/* Hoja CAPACIDAD_MAQUINAS (MAQUINA, CAPACIDAD_HORA, UNIDAD): cuanto es capaz de hacer cada
-   maquina por hora. UNIDAD = M2 (renglones en MT2) o PZS (renglones en PIEZA). Se edita en la
-   hoja, sin tocar codigo. Los valores de abajo solo siembran la hoja la primera vez. */
+/* % DE USO = lo que produjo la maquina / lo que PODIA producir.
+   Lo que podia producir = capacidad por hora x HORAS_TURNO (11: de 8 am a 7 pm) x dias habiles
+   (lunes a viernes) del periodo. Produccion = CANTIDAD + MERMA_MT2 (la merma tambien uso la maquina).
+   La hoja CAPACIDAD_MAQUINAS (MAQUINA, CAPACIDAD_HORA, UNIDAD) se edita sin tocar codigo; UNIDAD = M2
+   (renglones en MT2) o PZS (renglones en PIEZA). A la derecha (E:F) viven los parametros del turno.
+   Los valores de abajo solo siembran la hoja la primera vez. No se descuentan festivos. */
 var ENCABEZADOS_CAPACIDAD = ['MAQUINA', 'CAPACIDAD_HORA', 'UNIDAD'];
 var CAPACIDADES_INICIALES = [
   ['GF_Chona', 38, 'M2'], ['GF_Juana', 38, 'M2'], ['UV_La Mary', 25, 'M2'], ['HD_Mimaki', 18, 'M2'],
   ['ROUTER CNC', 6, 'M2'], ['LAMINADORA', 20, 'M2'], ['CAMAPLANA', 30, 'M2'],
   ['SERIGRAFIA_UV', 3200, 'PZS'], ['PLOTTER DE CORTE', 18, 'M2']
 ];
+var HORAS_TURNO_INICIAL = 11;   /* 8:00 a 19:00 */
 
 function _hojaCapacidad_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1427,7 +1430,19 @@ function _hojaCapacidad_() {
     h.getRange(1, 1, filas.length, 3).setValues(filas);
     try { h.setFrozenRows(1); h.getRange(1, 1, 1, 3).setFontWeight('bold'); } catch (e) { /* cosmetico */ }
   }
+  /* parametros del turno (hojas creadas antes de la v1.10 no los traen) */
+  var p = h.getRange(1, 5, 3, 2).getValues();
+  if (!p[0][0]) {
+    h.getRange(1, 5, 3, 2).setValues([['PARAMETRO', 'VALOR'], ['HORAS_TURNO', HORAS_TURNO_INICIAL], ['DIAS_HABILES', 'LUN-VIE']]);
+    try { h.getRange(1, 5, 1, 2).setFontWeight('bold'); } catch (e) { /* cosmetico */ }
+  }
   return h;
+}
+
+/* Horas del turno diario (8 am a 7 pm = 11). Se cambia en CAPACIDAD_MAQUINAS!F2. */
+function _horasTurno_() {
+  var h = _hojaCapacidad_(), v = Number(h.getRange(2, 6).getValue());
+  return (v > 0 && v <= 24) ? v : HORAS_TURNO_INICIAL;
 }
 
 /* { NOMBRE_EN_MAYUSCULAS: {nombre, cap, unidad} } */
@@ -1454,67 +1469,148 @@ function _unidadCompatible_(unidadFila, unidadCap) {
   return (unidadCap === 'M2' && unidadFila === 'MT2') || (unidadCap === 'PZS' && unidadFila === 'PIEZA');
 }
 
-/* % de uso por renglon: lo que realmente se produjo (CANTIDAD + MERMA_MT2) contra lo que la
-   maquina habria hecho a su capacidad en las horas reales capturadas. null si no se puede. */
-function _usoFila_(f, caps) {
+/* NO APLICA no es una maquina: indica que el proceso no usa maquina. Sin maquina no hay capacidad. */
+function _esSinMaquina_(nombre) {
+  var k = _clavePorNombre_(nombre);
+  return k === '' || k === '(SIN DATO)' || k === '(NO REPORTADA)' || k === 'NO APLICA';
+}
+
+/* % de uso de UN renglon: que parte de la capacidad de UN turno de esa maquina ocupa
+   (CANTIDAD + MERMA_MT2) / (capacidad por hora x horas del turno). Puede pasar de 100 si el
+   proyecto es mas grande que un turno. null si no es comparable. */
+function _usoFila_(f, caps, turno) {
   var c = caps[_clavePorNombre_(f.maquina)];
-  if (!c || !_unidadCompatible_(f.unidad, c.unidad) || !(f.horas > 0)) { return null; }
-  return _r2_((f.cant + f.merma) / (f.horas * c.cap) * 100);
+  if (!c || _esSinMaquina_(f.maquina) || !_unidadCompatible_(f.unidad, c.unidad)) { return null; }
+  return _r2_((f.cant + f.merma) / (c.cap * turno) * 100);
 }
 
-/* Tabla global por maquina. Horas calculadas = (CANTIDAD + MERMA_MT2) / capacidad. Horas reales
-   = HORAS_MAQ capturadas. El % compara ambas SOLO sobre los renglones que tienen horas reales
-   (si no, lo que no se capturo parecería horas de sobra). Dinero y metros en centesimas. */
-function _usoMaquinas_(filas) {
-  var caps = _leerCapacidades_(), por = {}, sinMaquina = 0;
+function _pad2n_(n) { return n < 10 ? '0' + n : '' + n; }
+function _isoDe_(d) { return d.getFullYear() + '-' + _pad2n_(d.getMonth() + 1) + '-' + _pad2n_(d.getDate()); }
+
+/* Dias habiles (lunes a viernes) que cuentan en cada mes, segun los filtros: solo dias ya
+   transcurridos, dentro del rango Desde/Hasta y de las semanas, meses o años elegidos. Va de
+   el primer dia con produccion al ultimo mes con produccion (los meses sin produccion cuentan: eso es no usar la maquina). */
+function _calendarioUso_(filas, q, desdeGlobal) {
+  var min = '', max = '';
   for (var i = 0; i < filas.length; i++) {
-    var f = filas[i], nombre = f.maquina || '(SIN DATO)', cap = caps[_clavePorNombre_(nombre)];
-    if (nombre === '(SIN DATO)' || nombre === '(NO REPORTADA)') { sinMaquina++; continue; }   /* sin maquina no hay capacidad que comparar */
-    var a = por[nombre] || (por[nombre] = { maquina: nombre, cap: cap ? cap.cap : null, unidad: cap ? cap.unidad : '',
-                                              qty: 0, qtyH: 0, horas: 0, ren: 0, renH: 0, otras: 0 });
-    if (!cap || !_unidadCompatible_(f.unidad, cap.unidad)) { a.otras++; continue; }
-    var q = _cc_(f.cant) + _cc_(f.merma), hh = _cc_(f.horas);
-    a.qty += q; a.ren++;
-    if (hh > 0) { a.horas += hh; a.qtyH += q; a.renH++; }
+    var fe = filas[i].fecha;
+    if (!fe) { continue; }
+    if (!min || fe < min) { min = fe; }
+    if (!max || fe > max) { max = fe; }
   }
-  var out = [], tot = { qty: 0, horasCalc: 0, horasCalcH: 0, horasReal: 0, ren: 0, renH: 0 };
-  for (var k in por) {
-    if (!por.hasOwnProperty(k)) { continue; }
-    var a2 = por[k], conCap = a2.cap !== null;
-    var hc = conCap ? a2.qty / 100 / a2.cap : null, hcH = conCap ? a2.qtyH / 100 / a2.cap : 0, hr = a2.horas / 100;
-    out.push({ maquina: a2.maquina, capacidad: a2.cap, unidad: a2.unidad, cantidad: _dc_(a2.qty),
-               horasCalc: hc === null ? null : _r2_(hc), horasReal: _r2_(hr),
-               pctUso: conCap && hr > 0 ? _r2_(hcH / hr * 100) : null,
-               renglones: a2.ren, conHoras: a2.renH, otras: a2.otras, sinCapacidad: !conCap });
-    if (conCap) { tot.qty += a2.qty; tot.horasCalc += hc; tot.horasCalcH += hcH; tot.horasReal += hr; tot.ren += a2.ren; tot.renH += a2.renH; }
+  var out = { meses: [], dias: {}, total: 0 };
+  if (!min) { return out; }
+  var inicio = desdeGlobal && desdeGlobal < min ? desdeGlobal : min;   /* primer dia con produccion de TODA la hoja */
+  q = q || {};
+  var qAnio = q.anio || [], qMes = q.mes || [], qSem = q.sem || [];
+  var hoy = _hoyIso_();
+  var d = new Date(Number(min.slice(0, 4)), Number(min.slice(5, 7)) - 1, 1);
+  var fin = new Date(Number(max.slice(0, 4)), Number(max.slice(5, 7)), 0);
+  for (; d <= fin; d.setDate(d.getDate() + 1)) {
+    var mk = d.getFullYear() + '-' + _pad2n_(d.getMonth() + 1);
+    if (out.dias[mk] === undefined) { out.dias[mk] = 0; out.meses.push(mk); }
+    var dow = d.getDay();
+    if (dow === 0 || dow === 6) { continue; }
+    var iso = _isoDe_(d);
+    if (iso < inicio || iso > hoy) { continue; }   /* arranca en el primer dia con produccion */
+    if (q.desde && iso < q.desde) { continue; }
+    if (q.hasta && iso > q.hasta) { continue; }
+    if (!_en_(qAnio, iso.slice(0, 4)) || !_en_(qMes, mk)) { continue; }
+    if (qSem.length) {
+      var l = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((dow + 6) % 7));
+      if (qSem.indexOf(_isoDe_(l)) < 0) { continue; }
+    }
+    out.dias[mk]++; out.total++;
   }
-  out.sort(function (x, y) {
-    if (x.sinCapacidad !== y.sinCapacidad) { return x.sinCapacidad ? 1 : -1; }
-    return (y.horasCalc || 0) - (x.horasCalc || 0);
-  });
-  return { filas: out, total: { horasCalc: _r2_(tot.horasCalc), horasReal: _r2_(tot.horasReal),
-           pctUso: tot.horasReal > 0 ? _r2_(tot.horasCalcH / tot.horasReal * 100) : null, renglones: tot.ren, conHoras: tot.renH }, sinMaquina: sinMaquina };
+  return out;
 }
 
-/* Formula de la columna %_USO_MAQ de BASE: la misma regla que _usoFila_, viva en la hoja. */
+/* Tabla global por maquina y la misma por mes. Dinero y metros en centesimas enteras. */
+function _usoMaquinas_(filas, q, todas) {
+  var caps = _leerCapacidades_(), turno = _horasTurno_();
+  /* el calendario arranca en el primer renglon CON maquina: una fecha suelta sin maquina no debe
+     alargar el periodo (y bajar el % de todas) */
+  var conMaq = [];
+  for (var c0 = 0; c0 < filas.length; c0++) { if (!_esSinMaquina_(filas[c0].maquina || '(SIN DATO)')) { conMaq.push(filas[c0]); } }
+  var minGlobal = '';
+  var fuente = todas || filas;
+  for (var c1 = 0; c1 < fuente.length; c1++) {
+    if (fuente[c1].fecha && !_esSinMaquina_(fuente[c1].maquina || '(SIN DATO)') && (!minGlobal || fuente[c1].fecha < minGlobal)) { minGlobal = fuente[c1].fecha; }
+  }
+  var cal = _calendarioUso_(conMaq, q, minGlobal);
+  var por = {}, sinMaquina = 0;
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i], nombre = f.maquina || '(SIN DATO)';
+    if (_esSinMaquina_(nombre)) { sinMaquina++; continue; }
+    var cap = caps[_clavePorNombre_(nombre)];
+    var a = por[nombre] || (por[nombre] = { maquina: nombre, cap: cap ? cap.cap : null, unidad: cap ? cap.unidad : '',
+                                              qty: 0, horas: 0, ren: 0, renH: 0, otras: 0, mes: {} });
+    if (!cap || !_unidadCompatible_(f.unidad, cap.unidad)) { a.otras++; continue; }
+    var qq = _cc_(f.cant) + _cc_(f.merma), hh = _cc_(f.horas);
+    a.qty += qq; a.ren++;
+    if (hh > 0) { a.horas += hh; a.renH++; }
+    if (f.fecha) { var mk = f.fecha.slice(0, 7); a.mes[mk] = (a.mes[mk] || 0) + qq; }
+  }
+  var horasDisp = cal.total * turno, nombres = [];
+  for (var k in por) { if (por.hasOwnProperty(k)) { nombres.push(k); } }
+  var filasG = [], filasM = [], sumHc = 0, nCap = 0;
+  for (var n = 0; n < nombres.length; n++) {
+    var a2 = por[nombres[n]], conCap = a2.cap !== null;
+    var hc = conCap ? a2.qty / 100 / a2.cap : null;
+    filasG.push({ maquina: a2.maquina, capacidad: a2.cap, unidad: a2.unidad, cantidad: _dc_(a2.qty),
+                  horasCalc: hc === null ? null : _r2_(hc), horasDisp: conCap ? _r2_(horasDisp) : null,
+                  pctUso: conCap && horasDisp > 0 ? _r2_(hc / horasDisp * 100) : null,
+                  horasReal: _r2_(a2.horas / 100), renglones: a2.ren, conHoras: a2.renH, otras: a2.otras, sinCapacidad: !conCap });
+    if (conCap) {
+      sumHc += hc; nCap++;
+      var vals = [];
+      for (var m = 0; m < cal.meses.length; m++) {
+        var qm = a2.mes[cal.meses[m]] || 0, hcm = qm / 100 / a2.cap, hdm = cal.dias[cal.meses[m]] * turno;
+        vals.push({ pct: hdm > 0 ? _r2_(hcm / hdm * 100) : null, prod: _dc_(qm), horasCalc: _r2_(hcm), horasDisp: _r2_(hdm) });
+      }
+      filasM.push({ maquina: a2.maquina, capacidad: a2.cap, unidad: a2.unidad, vals: vals,
+                    pctTotal: horasDisp > 0 ? _r2_(hc / horasDisp * 100) : null });
+    }
+  }
+  var orden = function (x, y) {
+    if (!!x.sinCapacidad !== !!y.sinCapacidad) { return x.sinCapacidad ? 1 : -1; }
+    return (y.horasCalc || y.pctTotal || 0) - (x.horasCalc || x.pctTotal || 0);
+  };
+  filasG.sort(orden);
+  filasM.sort(function (x, y) { return (y.pctTotal || 0) - (x.pctTotal || 0); });
+  var diasMes = [];
+  for (var mm = 0; mm < cal.meses.length; mm++) { diasMes.push(cal.dias[cal.meses[mm]]); }
+  return {
+    horasTurno: turno, diasHabiles: cal.total, horasDisp: _r2_(horasDisp), sinMaquina: sinMaquina,
+    filas: filasG,
+    promedio: nCap && horasDisp > 0 ? _r2_(sumHc / (nCap * horasDisp) * 100) : null,
+    mensual: { meses: cal.meses, dias: diasMes, filas: filasM }
+  };
+}
+
+/* Formula de la columna %_USO_MAQ de BASE: la misma regla que _usoFila_, viva en la hoja
+   (CAPACIDAD_MAQUINAS: capacidad en B, unidad en C, horas del turno en F2). */
 function _formulaUsoMaq_(n) {
   var cap = 'CAPACIDAD_MAQUINAS', f = 'MATCH(E' + n + ',' + cap + '!A:A,0)';
   var unidad = 'INDEX(' + cap + '!C:C,' + f + ')', valor = 'INDEX(' + cap + '!B:B,' + f + ')';
-  return '=IFERROR(IF(AND(N(L' + n + ')>0,OR(AND(H' + n + '="MT2",' + unidad + '="M2"),AND(H' + n + '="PIEZA",' + unidad + '="PZS"))),' +
-         '(N(I' + n + ')+N(M' + n + '))/(L' + n + '*' + valor + '),""),"")';
+  return '=IFERROR(IF(OR(AND(H' + n + '="MT2",' + unidad + '="M2"),AND(H' + n + '="PIEZA",' + unidad + '="PZS")),' +
+         '(N(I' + n + ')+N(M' + n + '))/(' + valor + '*' + cap + '!$F$2),""),"")';
 }
 
+/* Pone (o actualiza) la formula en todos los renglones: la definicion cambio en la v1.10. */
 function _rellenaUsoMaq_(base) {
   _sinValidacion_(base, COL.USO_MAQ, 1);
   var ult = base.getLastRow();
   if (ult < 2) { return '%_USO_MAQ: sin renglones todavia.'; }
   var rng = base.getRange(2, COL.USO_MAQ, ult - 1, 1);
-  var act = rng.getFormulas(), out = [], nuevos = 0;
+  var act = rng.getFormulas(), out = [], cambios = 0;
   for (var i = 0; i < act.length; i++) {
-    if (act[i][0]) { out.push([act[i][0]]); } else { out.push([_formulaUsoMaq_(i + 2)]); nuevos++; }
+    var nueva = _formulaUsoMaq_(i + 2);
+    if (act[i][0] !== nueva) { cambios++; }
+    out.push([nueva]);
   }
-  if (nuevos) { rng.setFormulas(out); rng.setNumberFormat('0.0%'); }
-  return '%_USO_MAQ: ' + nuevos + ' formulas agregadas.';
+  if (cambios) { rng.setFormulas(out); rng.setNumberFormat('0.0%'); }
+  return '%_USO_MAQ: ' + cambios + ' formulas agregadas o actualizadas.';
 }
 
 /* Las maquinas de CAPACIDAD_MAQUINAS tambien deben estar en el catalogo MAQUINA: asi las
