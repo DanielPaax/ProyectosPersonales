@@ -733,7 +733,7 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
         <div class="campo"><label>ODP</label><input type="text" id="v_odp" maxlength="30" placeholder="6427"></div>
         <div class="campo"><label>Vendedor</label><select id="v_vendedor"></select></div>
         <div class="campo"><label>Tipo de proyecto</label><select id="v_tipo"></select></div>
-        <div class="campo"><label>Máquina</label><input type="text" id="v_maquina" list="dlMaq" maxlength="80"><datalist id="dlMaq"></datalist></div>
+        <div class="campo"><label>Máquina</label><select id="v_maquina"></select><span class="pista">Misma lista que la captura de trabajo (catálogo MAQUINA).</span></div>
         <div class="campo"><label>Material</label><input type="text" id="v_material" list="dlMat" maxlength="120" placeholder="Empieza a escribir…"><datalist id="dlMat"></datalist><span class="pista">Lista del catálogo MATERIAL. El costo sale de TARIFAS; si el material no tiene tarifa (p. ej. SOLO IMPRESIÓN), su costo de material queda en cero.</span></div>
         <div class="campo"><label>M2 del proyecto</label><input type="number" id="v_m2p" step="0.01" min="0"></div>
         <div class="campo"><label>M2 reales utilizados</label><input type="number" id="v_m2r" step="0.01" min="0"><span class="pista">La diferencia contra el proyecto es la merma.</span></div>
@@ -2245,7 +2245,7 @@ function mostrarVenta(){
   opciones('v_vendedor', CATV.VENDEDOR, true);
   opciones('v_metodo', CATV.METODO_PAGO, true);
   opciones('v_cobro', CATV.ESTATUS_COBRO, true);
-  lista('dlCli', CATV.CLIENTE); lista('dlMaq', CATV.MAQUINA); lista('dlMat', CATV.MATERIAL);
+  lista('dlCli', CATV.CLIENTE); opciones('v_maquina', CATV.MAQUINA || [], true); lista('dlMat', CATV.MATERIAL);
   var hoy = new Date(), mm = hoy.getMonth() + 1, dd = hoy.getDate();
   document.getElementById('v_fecha').value =
     hoy.getFullYear() + '-' + (mm < 10 ? '0' + mm : mm) + '-' + (dd < 10 ? '0' + dd : dd);

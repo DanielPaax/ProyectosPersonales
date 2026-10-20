@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.8.0',
+  version:  '1.8.2',
   liberada: '2026-10-13',
   esquema:  6
 };
@@ -1611,17 +1611,16 @@ function cargarCatalogosVenta() {
   var cats = _leerCatalogos_();
   var tar = _leerTarifas_();
   var filas = _leerVentas_();
-  var cli = {}, maq = {};
+  var cli = {};
   for (var i = 0; i < filas.length; i++) {
     if (filas[i].cliente) { cli[filas[i].cliente] = true; }
-    if (filas[i].maquina && filas[i].maquina !== '(NO REPORTADA)') { maq[filas[i].maquina] = true; }
   }
   return {
     VENDEDOR: cats.VENDEDOR || [],
     METODO_PAGO: cats.METODO_PAGO || [], ESTATUS_COBRO: cats.ESTATUS_COBRO || [],
     TIPO_PROYECTO: cats.TIPO_PROYECTO || [],
     MATERIAL: _materialesVenta_(cats, tar), CARGA_M2: tar.carga,
-    CLIENTE: Object.keys(cli).sort(), MAQUINA: Object.keys(maq).sort()
+    CLIENTE: Object.keys(cli).sort(), MAQUINA: cats.MAQUINA || []   /* misma lista que Produccion */
   };
 }
 
@@ -1677,7 +1676,8 @@ function guardarVenta(d) {
   var proyecto = _texto_(d.proyecto, 160);
   var odc      = _texto_(d.odc, 30);
   var odp      = _texto_(d.odp, 30);
-  var maquina  = _texto_(d.maquina, 80);
+  /* La MISMA lista que la captura de trabajo: catalogo MAQUINA de CATALOGOS (opcional, pero si se pone debe existir). */
+  var maquina  = _enCatalogo_(cats, 'MAQUINA', _texto_(d.maquina, 80), false);
   var tipo     = _enCatalogo_(cats, 'TIPO_PROYECTO', _texto_(d.tipo, 30),     false);
   var vendedor = _enCatalogo_(cats, 'VENDEDOR',      _texto_(d.vendedor, 60),  false);
   var metodo   = _enCatalogo_(cats, 'METODO_PAGO',   _texto_(d.metodo, 30),   false);
@@ -2134,6 +2134,8 @@ function onOpen() {
       .addSeparator()
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
+      .addItem('Listar ODP faltantes (columna H de VENTAS)', 'listarOdpFaltantes')
+      .addItem('Revisar nombres de máquina (catalogo)', 'revisarMaquinas')
       .addSeparator()
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Accesos por enlace (socios / empleados)')
         .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
@@ -2143,6 +2145,125 @@ function onOpen() {
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
+}
+
+/* ===================== ODP FALTANTES ===================== */
+/* Revisa la columna ODP (H) de VENTAS: desde el numero mas bajo hasta el mas alto lista los
+   consecutivos que no aparecen. Ignora lo que no es numero (vacios, "NA", "-", OP-2026-0001).
+   Un numero muy aislado (a mas de 1000 del siguiente) se excluye del rango y se avisa: casi
+   siempre es un error de captura que estiraria la lista a decenas de miles de falsos faltantes.
+   Escribe el resultado en la hoja ODP_FALTANTES. Solo MASTER. */
+function _rangosTexto_(arr) {
+  var out = [], i = 0;
+  while (i < arr.length) {
+    var j = i;
+    while (j + 1 < arr.length && arr[j + 1] === arr[j] + 1) { j++; }
+    out.push(i === j ? String(arr[i]) : arr[i] + '-' + arr[j]);
+    i = j + 1;
+  }
+  return out;
+}
+
+function _faltantesOdp_(vals) {
+  var nums = {}, lista = [], raros = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var t = String(vals[i][0] === null || vals[i][0] === undefined ? '' : vals[i][0]).trim();
+    if (!t) { continue; }
+    if (/^\d+$/.test(t)) { var n = Number(t); if (!nums[n]) { nums[n] = [i + 2]; lista.push(n); } else { nums[n].push(i + 2); } }
+    else { raros++; }
+  }
+  lista.sort(function (a, b) { return a - b; });
+  var aislados = [];
+  while (lista.length > 1 && lista[lista.length - 1] - lista[lista.length - 2] > 1000) {
+    var a = lista.pop(); aislados.push({ numero: a, filas: nums[a] });
+  }
+  var faltan = [];
+  if (lista.length) { for (var k = lista[0]; k <= lista[lista.length - 1]; k++) { if (!nums[k]) { faltan.push(k); } } }
+  return { minimo: lista.length ? lista[0] : null, maximo: lista.length ? lista[lista.length - 1] : null,
+           distintos: lista.length, faltan: faltan, aislados: aislados, noNumericos: raros };
+}
+
+function listarOdpFaltantes() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var h = _hoja_(CFG.HOJA_VENTAS), ult = h.getLastRow();
+  var vals = ult >= 2 ? h.getRange(2, CV.ODP, ult - 1, 1).getValues() : [];
+  var r = _faltantesOdp_(vals);
+  if (r.minimo === null) { ui.alert('ODP faltantes', 'No encontré números en la columna ODP de VENTAS.', ui.ButtonSet.OK); return; }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName('ODP_FALTANTES') || ss.insertSheet('ODP_FALTANTES');
+  try { hoja.clearContents(); } catch (e) { hoja.getRange(1, 1, Math.max(hoja.getLastRow(), 1), 3).setValues([['', '', '']]); }
+  var filas = [['ODP_FALTANTE', '', 'RESUMEN']];
+  var resumen = ['Desde ' + r.minimo + ' hasta ' + r.maximo, r.distintos + ' numeros distintos presentes',
+                 r.faltan.length + ' faltantes', r.noNumericos + ' celdas no numericas (vacias aparte)'];
+  for (var a = 0; a < r.aislados.length; a++) {
+    resumen.push('Excluido por aislado: ' + r.aislados[a].numero + ' (fila ' + r.aislados[a].filas.join(', ') + ')');
+  }
+  var total = Math.max(r.faltan.length, resumen.length);
+  for (var i = 0; i < total; i++) { filas.push([i < r.faltan.length ? r.faltan[i] : '', '', i < resumen.length ? resumen[i] : '']); }
+  hoja.getRange(1, 1, filas.length, 3).setValues(filas);
+  _bitacora_(ses.correo, 'ODP_FALTANTES', r.faltan.length + ' faltantes entre ' + r.minimo + ' y ' + r.maximo);
+  var rangos = _rangosTexto_(r.faltan), txt = rangos.slice(0, 60).join(', ') + (rangos.length > 60 ? ' ... (lista completa en la hoja ODP_FALTANTES)' : '');
+  ui.alert('ODP faltantes', 'Desde ' + r.minimo + ' hasta ' + r.maximo + ': faltan ' + r.faltan.length + '.\n\n' +
+    (r.aislados.length ? 'OJO: excluí ' + r.aislados.map(function (x) { return x.numero + ' (fila ' + x.filas.join(', ') + ')'; }).join(', ') +
+      ' por estar muy lejos del resto; revisa si es un error de captura.\n\n' : '') + txt, ui.ButtonSet.OK);
+}
+
+/* ===================== REVISION DE NOMBRES DE MAQUINA ===================== */
+/* Compara los nombres de maquina que YA estan escritos en BASE y VENTAS contra el catalogo
+   MAQUINA y los deja en la hoja MAQUINAS_REVISION, con cuantos renglones usa cada uno y, si
+   parece el mismo, a cual del catalogo corresponde. No cambia ningun dato. Solo MASTER. */
+function _normMaq_(t) { return String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+function _revisaMaquinas_(cat, base, ven) {
+  var usos = {};
+  function cuenta(lista, campo) {
+    for (var i = 0; i < lista.length; i++) {
+      var n = String(lista[i] || '').trim();
+      if (!n || n === '(NO REPORTADA)') { continue; }
+      var u = usos[n] || (usos[n] = { nombre: n, base: 0, ventas: 0 });
+      u[campo]++;
+    }
+  }
+  cuenta(base, 'base'); cuenta(ven, 'ventas');
+  var enCat = {};
+  for (var c = 0; c < cat.length; c++) { enCat[String(cat[c]).trim().toUpperCase()] = String(cat[c]).trim(); }
+  var out = [];
+  for (var k in usos) {
+    if (!usos.hasOwnProperty(k)) { continue; }
+    var u = usos[k], ok = !!enCat[u.nombre.toUpperCase()], sug = '';
+    if (!ok) {
+      var nn = _normMaq_(u.nombre);
+      for (var j = 0; j < cat.length; j++) {
+        var nc = _normMaq_(cat[j]);
+        if (nc && nn && (nc === nn || nc.indexOf(nn) >= 0 || nn.indexOf(nc) >= 0)) { sug = String(cat[j]).trim(); break; }
+      }
+    }
+    out.push({ nombre: u.nombre, enCatalogo: ok, base: u.base, ventas: u.ventas, sugerencia: sug });
+  }
+  out.sort(function (a, b) { return (a.enCatalogo === b.enCatalogo ? 0 : (a.enCatalogo ? 1 : -1)) || (b.base + b.ventas) - (a.base + a.ventas); });
+  return out;
+}
+
+function revisarMaquinas() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var cat = _leerCatalogos_().MAQUINA || [];
+  var base = _leerBase_(), ven = _leerVentas_();
+  var r = _revisaMaquinas_(cat, base.map(function (x) { return x.maquina; }), ven.map(function (x) { return x.maquina; }));
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName('MAQUINAS_REVISION') || ss.insertSheet('MAQUINAS_REVISION');
+  try { hoja.clearContents(); } catch (e) { /* hoja nueva */ }
+  var filas = [['MAQUINA_EN_LOS_DATOS', 'EN_CATALOGO', 'RENGLONES_BASE', 'RENGLONES_VENTAS', 'PARECE_SER']];
+  for (var i = 0; i < r.length; i++) { filas.push([r[i].nombre, r[i].enCatalogo ? 'SI' : 'NO', r[i].base, r[i].ventas, r[i].sugerencia]); }
+  hoja.getRange(1, 1, filas.length, 5).setValues(filas);
+  var fuera = r.filter(function (x) { return !x.enCatalogo; });
+  _bitacora_(ses.correo, 'REVISA_MAQUINAS', fuera.length + ' fuera del catalogo de ' + r.length);
+  ui.alert('Revision de máquinas',
+    'Catálogo MAQUINA: ' + cat.length + ' máquinas. En los datos hay ' + r.length + ' nombres distintos; ' + fuera.length + ' no están en el catálogo.\n\n' +
+    (fuera.length ? fuera.slice(0, 15).map(function (x) { return '• ' + x.nombre + ' (BASE ' + x.base + ', VENTAS ' + x.ventas + ')' + (x.sugerencia ? ' → ' + x.sugerencia : ''); }).join('\n') +
+      (fuera.length > 15 ? '\n… (todo en la hoja MAQUINAS_REVISION)' : '') : 'Todos los nombres coinciden con el catálogo.') +
+    '\n\nNo se cambió ningún dato.', ui.ButtonSet.OK);
 }
 
 function abrirTablero() {
