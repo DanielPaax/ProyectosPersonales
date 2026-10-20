@@ -2,9 +2,9 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.8.4',
+  version:  '1.9.0',
   liberada: '2026-10-13',
-  esquema:  6
+  esquema:  7
 };
 
 /* ===================== CONFIGURACION ===================== */
@@ -16,6 +16,7 @@ var CFG = {
   HOJA_BITACORA:  'BITACORA',
   HOJA_VENTAS:    'VENTAS',
   HOJA_TARIFAS:   'TARIFAS',
+  HOJA_CAPACIDAD: 'CAPACIDAD_MAQUINAS',
   CACHE_SEG:      120,
   TOPE_FILAS:     20000
 };
@@ -114,15 +115,16 @@ var COL = {
   HORAS_MAQ: 12, MERMA_MT2: 13, MOTIVO_PARO: 14, NOTA: 15,
   CELDA_ORIGEN: 16, OBS_MIGRACION: 17,
   TURNO: 18, OPERADOR: 19, REIMPRESION: 20,
-  ORDEN: 21, ACABADOS_1: 22, ACABADOS_2: 23, ACABADOS_3: 24
+  ORDEN: 21, ACABADOS_1: 22, ACABADOS_2: 23, ACABADOS_3: 24,
+  USO_MAQ: 25   /* %_USO_MAQ: formula (esquema 7) */
 };
-var COL_N = 24;
+var COL_N = 25;
 
 var ENCABEZADOS_BASE = [
   'ID', 'FECHA', 'SEM_INICIO', 'SEMANA', 'MAQUINA', 'PROCESO', 'MATERIAL',
   'UNIDAD', 'CANTIDAD', 'ORIGEN', 'CLIENTE_OT', 'HORAS_MAQ', 'MERMA_MT2',
   'MOTIVO_PARO', 'NOTA', 'CELDA_ORIGEN', 'OBS_MIGRACION',
-  'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN', 'ACABADOS_1', 'ACABADOS_2', 'ACABADOS_3'
+  'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN', 'ACABADOS_1', 'ACABADOS_2', 'ACABADOS_3', '%_USO_MAQ'
 ];
 var ENCABEZADOS_BITACORA = ['TIMESTAMP', 'CORREO', 'ACCION', 'DETALLE'];
 
@@ -403,7 +405,7 @@ function _normCat_(t) {
 var CACHE_CATALOGOS_SEG = 300;
 
 function _limpiaCacheCatalogos_() {
-  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema]);
+  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema, 'capacidad_v' + JG_SELLO.esquema]);
 }
 
 function _leerCatalogos_() {
@@ -875,6 +877,7 @@ function _agregaTablero_(filas) {
     serie: serie,
     mesesCols: mesesCols,
     serieMes: serieMes,
+    usoMaq: _usoMaquinas_(filas),
     porMaquinaMes: _matrizMes_(filas, 'maquina', mesesCols),
     porMaterialMes: _matrizMes_(filas, 'material', mesesCols),
     total: tot,
@@ -1082,6 +1085,7 @@ function cargarTablero(filtros, sub, clave) {
     serie: res.serie,
     mesesCols: res.mesesCols,
     serieMes: res.serieMes,
+    usoMaq: res.usoMaq,
     porMaquinaMes: res.porMaquinaMes,
     porMaterialMes: res.porMaterialMes,
     total: res.total,
@@ -1114,9 +1118,9 @@ function detalleSemana(semana, filtros, sub, clave) {
   var filas = _filtraProd_(_leerBase_(), q);
   var subs = _subs_(sub);
   if (subs.length) { filas = _aplicaSub_(filas, subs); }
-  var out = [];
+  var out = [], caps = _leerCapacidades_();
   for (var i = 0; i < filas.length; i++) {
-    if (filas[i].semana === s) { out.push(filas[i]); }
+    if (filas[i].semana === s) { filas[i].uso = _usoFila_(filas[i], caps); out.push(filas[i]); }
   }
   out.sort(function (a, b) {
     if (a.maquina !== b.maquina) { return a.maquina < b.maquina ? -1 : 1; }
@@ -1276,6 +1280,8 @@ function guardarTrabajo(d) {
     var nueva = h.getLastRow();
     h.getRange(nueva, COL.FECHA, 1, 2).setValues([[_aDate_(fecha), _aDate_(lunes)]]);
     h.getRange(nueva, COL.FECHA, 1, 2).setNumberFormat('dd/mm/yyyy');
+    /* %_USO_MAQ: formula viva contra CAPACIDAD_MAQUINAS */
+    try { h.getRange(nueva, COL.USO_MAQ).setFormula(_formulaUsoMaq_(nueva)); h.getRange(nueva, COL.USO_MAQ).setNumberFormat('0.0%'); } catch (e) { /* la columna aun no existe: corre Instalar */ }
 
     CacheService.getScriptCache().removeAll(['base_v' + JG_SELLO.esquema + '_' + (nueva - 1)]);
     _bitacora_(ses.correo, 'ALTA_TRABAJO',
@@ -1399,6 +1405,131 @@ function _leerTarifas_() {
   }
   try { cache.put('tarifas_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
   return out;
+}
+
+/* ===================== CAPACIDAD DE MAQUINAS Y % DE USO ===================== */
+/* Hoja CAPACIDAD_MAQUINAS (MAQUINA, CAPACIDAD_HORA, UNIDAD): cuanto es capaz de hacer cada
+   maquina por hora. UNIDAD = M2 (renglones en MT2) o PZS (renglones en PIEZA). Se edita en la
+   hoja, sin tocar codigo. Los valores de abajo solo siembran la hoja la primera vez. */
+var ENCABEZADOS_CAPACIDAD = ['MAQUINA', 'CAPACIDAD_HORA', 'UNIDAD'];
+var CAPACIDADES_INICIALES = [
+  ['GF_Chona', 38, 'M2'], ['GF_Juana', 38, 'M2'], ['UV_La Mary', 25, 'M2'], ['HD_Mimaki', 18, 'M2'],
+  ['ROUTER CNC', 6, 'M2'], ['LAMINADORA', 20, 'M2'], ['CAMAPLANA', 30, 'M2'],
+  ['SERIGRAFIA_UV', 3200, 'PZS'], ['PLOTTER DE CORTE', 18, 'M2']
+];
+
+function _hojaCapacidad_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var h = ss.getSheetByName(CFG.HOJA_CAPACIDAD);
+  if (!h) {
+    h = ss.insertSheet(CFG.HOJA_CAPACIDAD);
+    var filas = [ENCABEZADOS_CAPACIDAD].concat(CAPACIDADES_INICIALES);
+    h.getRange(1, 1, filas.length, 3).setValues(filas);
+    try { h.setFrozenRows(1); h.getRange(1, 1, 1, 3).setFontWeight('bold'); } catch (e) { /* cosmetico */ }
+  }
+  return h;
+}
+
+/* { NOMBRE_EN_MAYUSCULAS: {nombre, cap, unidad} } */
+function _leerCapacidades_() {
+  var cache = CacheService.getScriptCache();
+  var g = cache.get('capacidad_v' + JG_SELLO.esquema);
+  if (g) { try { return JSON.parse(g); } catch (e) { /* se relee */ } }
+  var h = _hojaCapacidad_(), ult = h.getLastRow(), out = {};
+  if (ult >= 2) {
+    var v = h.getRange(2, 1, ult - 1, 3).getValues();
+    for (var i = 0; i < v.length; i++) {
+      var nombre = String(v[i][0] || '').trim(), cap = Number(v[i][1]);
+      if (!nombre || !(cap > 0) || !isFinite(cap)) { continue; }
+      out[_clavePorNombre_(nombre)] = { nombre: nombre, cap: cap, unidad: /^P/i.test(String(v[i][2] || '').trim()) ? 'PZS' : 'M2' };
+    }
+  }
+  try { cache.put('capacidad_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
+  return out;
+}
+
+/* Un renglon cuenta contra la capacidad solo si su unidad es la de la capacidad:
+   M2 con MT2, PZS con PIEZA. Las laminas y los eventos no son comparables. */
+function _unidadCompatible_(unidadFila, unidadCap) {
+  return (unidadCap === 'M2' && unidadFila === 'MT2') || (unidadCap === 'PZS' && unidadFila === 'PIEZA');
+}
+
+/* % de uso por renglon: lo que realmente se produjo (CANTIDAD + MERMA_MT2) contra lo que la
+   maquina habria hecho a su capacidad en las horas reales capturadas. null si no se puede. */
+function _usoFila_(f, caps) {
+  var c = caps[_clavePorNombre_(f.maquina)];
+  if (!c || !_unidadCompatible_(f.unidad, c.unidad) || !(f.horas > 0)) { return null; }
+  return _r2_((f.cant + f.merma) / (f.horas * c.cap) * 100);
+}
+
+/* Tabla global por maquina. Horas calculadas = (CANTIDAD + MERMA_MT2) / capacidad. Horas reales
+   = HORAS_MAQ capturadas. El % compara ambas SOLO sobre los renglones que tienen horas reales
+   (si no, lo que no se capturo parecería horas de sobra). Dinero y metros en centesimas. */
+function _usoMaquinas_(filas) {
+  var caps = _leerCapacidades_(), por = {}, sinMaquina = 0;
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i], nombre = f.maquina || '(SIN DATO)', cap = caps[_clavePorNombre_(nombre)];
+    if (nombre === '(SIN DATO)' || nombre === '(NO REPORTADA)') { sinMaquina++; continue; }   /* sin maquina no hay capacidad que comparar */
+    var a = por[nombre] || (por[nombre] = { maquina: nombre, cap: cap ? cap.cap : null, unidad: cap ? cap.unidad : '',
+                                              qty: 0, qtyH: 0, horas: 0, ren: 0, renH: 0, otras: 0 });
+    if (!cap || !_unidadCompatible_(f.unidad, cap.unidad)) { a.otras++; continue; }
+    var q = _cc_(f.cant) + _cc_(f.merma), hh = _cc_(f.horas);
+    a.qty += q; a.ren++;
+    if (hh > 0) { a.horas += hh; a.qtyH += q; a.renH++; }
+  }
+  var out = [], tot = { qty: 0, horasCalc: 0, horasCalcH: 0, horasReal: 0, ren: 0, renH: 0 };
+  for (var k in por) {
+    if (!por.hasOwnProperty(k)) { continue; }
+    var a2 = por[k], conCap = a2.cap !== null;
+    var hc = conCap ? a2.qty / 100 / a2.cap : null, hcH = conCap ? a2.qtyH / 100 / a2.cap : 0, hr = a2.horas / 100;
+    out.push({ maquina: a2.maquina, capacidad: a2.cap, unidad: a2.unidad, cantidad: _dc_(a2.qty),
+               horasCalc: hc === null ? null : _r2_(hc), horasReal: _r2_(hr),
+               pctUso: conCap && hr > 0 ? _r2_(hcH / hr * 100) : null,
+               renglones: a2.ren, conHoras: a2.renH, otras: a2.otras, sinCapacidad: !conCap });
+    if (conCap) { tot.qty += a2.qty; tot.horasCalc += hc; tot.horasCalcH += hcH; tot.horasReal += hr; tot.ren += a2.ren; tot.renH += a2.renH; }
+  }
+  out.sort(function (x, y) {
+    if (x.sinCapacidad !== y.sinCapacidad) { return x.sinCapacidad ? 1 : -1; }
+    return (y.horasCalc || 0) - (x.horasCalc || 0);
+  });
+  return { filas: out, total: { horasCalc: _r2_(tot.horasCalc), horasReal: _r2_(tot.horasReal),
+           pctUso: tot.horasReal > 0 ? _r2_(tot.horasCalcH / tot.horasReal * 100) : null, renglones: tot.ren, conHoras: tot.renH }, sinMaquina: sinMaquina };
+}
+
+/* Formula de la columna %_USO_MAQ de BASE: la misma regla que _usoFila_, viva en la hoja. */
+function _formulaUsoMaq_(n) {
+  var cap = 'CAPACIDAD_MAQUINAS', f = 'MATCH(E' + n + ',' + cap + '!A:A,0)';
+  var unidad = 'INDEX(' + cap + '!C:C,' + f + ')', valor = 'INDEX(' + cap + '!B:B,' + f + ')';
+  return '=IFERROR(IF(AND(N(L' + n + ')>0,OR(AND(H' + n + '="MT2",' + unidad + '="M2"),AND(H' + n + '="PIEZA",' + unidad + '="PZS"))),' +
+         '(N(I' + n + ')+N(M' + n + '))/(L' + n + '*' + valor + '),""),"")';
+}
+
+function _rellenaUsoMaq_(base) {
+  _sinValidacion_(base, COL.USO_MAQ, 1);
+  var ult = base.getLastRow();
+  if (ult < 2) { return '%_USO_MAQ: sin renglones todavia.'; }
+  var rng = base.getRange(2, COL.USO_MAQ, ult - 1, 1);
+  var act = rng.getFormulas(), out = [], nuevos = 0;
+  for (var i = 0; i < act.length; i++) {
+    if (act[i][0]) { out.push([act[i][0]]); } else { out.push([_formulaUsoMaq_(i + 2)]); nuevos++; }
+  }
+  if (nuevos) { rng.setFormulas(out); rng.setNumberFormat('0.0%'); }
+  return '%_USO_MAQ: ' + nuevos + ' formulas agregadas.';
+}
+
+/* Las maquinas de CAPACIDAD_MAQUINAS tambien deben estar en el catalogo MAQUINA: asi las
+   ofrecen los formularios de trabajo y de venta. Solo agrega las que falten. */
+function _agregaMaquinasCatalogo_(cat) {
+  var ancho = Math.max(cat.getLastColumn(), 1), enc = cat.getRange(1, 1, 1, ancho).getValues()[0], col = 0;
+  for (var c = 0; c < enc.length; c++) { if (_normCat_(enc[c]) === 'MAQUINA') { col = c + 1; break; } }
+  if (!col) { return 'Catalogo MAQUINA: no hay columna MAQUINA en CATALOGOS.'; }
+  var caps = _leerCapacidades_(), ult = cat.getLastRow();
+  var vals = ult >= 2 ? cat.getRange(2, col, ult - 1, 1).getValues() : [], hay = {}, sig = 2;
+  for (var i = 0; i < vals.length; i++) { var k = _clavePorNombre_(vals[i][0]); if (k) { hay[k] = true; sig = i + 3; } }
+  var nuevos = [];
+  for (var kk in caps) { if (caps.hasOwnProperty(kk) && !hay[kk]) { nuevos.push([caps[kk].nombre]); } }
+  if (nuevos.length) { cat.getRange(sig, col, nuevos.length, 1).setValues(nuevos); }
+  return 'Catalogo MAQUINA: ' + nuevos.length + ' maquinas de capacidad agregadas.';
 }
 
 function _clavePed_(f) { return f.odc || f.odp || ('F' + f.fila); }
@@ -2416,6 +2547,11 @@ function instalar() {
   hechos.push(asegurarCatalogosVenta(cat));
   hechos.push(_validaAcabados_(base, cat));
   hechos.push(fusionarCatalogosProduccion(ss, cat));
+  _hojaCapacidad_();
+  hechos.push('Hoja ' + CFG.HOJA_CAPACIDAD + ' lista (' + Object.keys(_leerCapacidades_()).length + ' maquinas con capacidad).');
+  hechos.push(_agregaMaquinasCatalogo_(cat));
+  hechos.push(_rellenaUsoMaq_(base));
+  _limpiaCacheCatalogos_();
 
   /* VENTAS y TARIFAS. Si ya importaste la migracion, solo se verifican los
      encabezados; si no existen, se crean vacias. */
@@ -2618,7 +2754,7 @@ function refrescarCatalogos() {
 function onEdit(e) {
   try {
     var n = (e && e.range) ? e.range.getSheet().getName() : '';
-    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS) { _limpiaCacheCatalogos_(); }
+    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS || n === CFG.HOJA_CAPACIDAD) { _limpiaCacheCatalogos_(); }
   } catch (err) { /* nunca estorba la edicion */ }
 }
 
@@ -2795,6 +2931,16 @@ function migrarEsquema(base, ven) {
     }
     props.setProperty('esquema', '6');
     actual = 6;
+  }
+  if (actual < 7) {
+    /* v6 -> v7: %_USO_MAQ al final de BASE (columna 25). Solo se escribe el encabezado si la
+       celda esta vacia. Las formulas las pone instalar() con _rellenaUsoMaq_. */
+    if (base && base.getLastRow() >= 1 && base.getMaxColumns() >= COL.USO_MAQ) {
+      var cu = base.getRange(1, COL.USO_MAQ);
+      if (!cu.getValue()) { cu.setValue('%_USO_MAQ'); }
+    }
+    props.setProperty('esquema', '7');
+    actual = 7;
   }
   /* Peldanos futuros van aqui, siempre con if (actual < n), nunca de un salto:
      una instalacion puede estar dos o tres versiones atras. */

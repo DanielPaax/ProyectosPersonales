@@ -526,6 +526,14 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
     <div class="tscroll"><table id="tMaq"></table></div>
   </section>
 
+  <section class="card" id="cUso">
+    <header><h2>% de uso Máquina</h2>
+      <span class="sub">Qué tanto de su capacidad por hora usó cada máquina. Horas calculadas = (CANTIDAD + MERMA_MT2) ÷ capacidad por hora (hoja CAPACIDAD_MAQUINAS); % de uso = horas calculadas ÷ horas reales (HORAS_MAQ).</span>
+    </header>
+    <div class="tscroll"><table id="tUso"></table></div>
+    <div class="nota" id="notaUso" style="margin:12px 16px 16px"></div>
+  </section>
+
   <section class="card" id="cCostos" style="display:none">
     <header><h2>Costos de producción</h2>
       <div class="seg" id="segCosto">
@@ -1588,6 +1596,49 @@ function pintaCostos(){
   document.getElementById('tCos').innerHTML = h;
 }
 
+/* ---------- % de uso de maquina ---------- */
+function usoTd(v){
+  if (v === null || v === undefined) { return '<td class="num cero">—</td>'; }
+  return '<td class="num">' + n1(v) + '%</td>';
+}
+function pintaUso(){
+  var U = D.usoMaq, t = document.getElementById('tUso'), nota = document.getElementById('notaUso');
+  if (!U || !U.filas.length) {
+    t.innerHTML = '<tbody><tr><td class="vacio">Sin renglones de producción con los filtros elegidos.</td></tr></tbody>';
+    nota.textContent = ''; return;
+  }
+  var h = '<thead><tr><th>Máquina</th><th>Capacidad por hora</th><th>Producción (CANTIDAD + MERMA)</th>' +
+          '<th>Horas calculadas</th><th>Horas reales</th><th>% de uso</th><th>Renglones con horas</th></tr></thead><tbody>';
+  var hayAlto = false, sinCap = [];
+  U.filas.forEach(function(r){
+    var u = r.unidad === 'PZS' ? 'pzs' : 'm²';
+    var barra = '', pct;
+    if (r.pctUso === null) { pct = '<td class="num cero">—</td>'; }
+    else {
+      var alto = r.pctUso > 100; if (alto) { hayAlto = true; }
+      pct = '<td class="num"' + (alto ? ' data-tip="Más de 100%|las horas capturadas son menos de las que exige la capacidad"' : '') + '>' +
+            '<b' + (alto ? ' style="color:var(--rojo)"' : '') + '>' + n1(r.pctUso) + '%</b>' +
+            '<div class="mini" style="margin-top:4px"><span style="width:' + Math.max(2, Math.min(100, Math.round(r.pctUso))) + '%' + (alto ? ';background:var(--rojo)' : '') + '"></span></div></td>';
+    }
+    if (r.sinCapacidad) { sinCap.push(r.maquina); }
+    h += '<tr><td>' + esc(nomMaq(r.maquina)) + '</td>' +
+         (r.sinCapacidad ? '<td class="num" style="color:var(--rojo)">sin capacidad</td><td class="num cero">—</td><td class="num cero">—</td>'
+                         : '<td class="num">' + n0(r.capacidad) + ' ' + u + '/h</td><td class="num">' + n2(r.cantidad) + ' ' + u + '</td><td class="num">' + n2(r.horasCalc) + '</td>') +
+         '<td class="num">' + (r.horasReal > 0 ? n2(r.horasReal) : '<span class="cero">0</span>') + '</td>' + pct +
+         '<td class="num">' + (r.sinCapacidad ? '—' : n0(r.conHoras) + ' de ' + n0(r.renglones)) + '</td></tr>';
+  });
+  var T = U.total;
+  h += '<tr class="tot"><td>TOTAL (máquinas con capacidad)</td><td></td><td></td><td class="num">' + n2(T.horasCalc) + '</td><td class="num">' + n2(T.horasReal) + '</td>' +
+       usoTd(T.pctUso).replace('<td class="num">', '<td class="num"><b>').replace('</td>', '</b></td>') + '<td class="num">' + n0(T.conHoras) + ' de ' + n0(T.renglones) + '</td></tr></tbody>';
+  t.innerHTML = h;
+  var m = [];
+  m.push('El % compara solo los renglones que tienen HORAS_MAQ capturadas (' + n0(T.conHoras) + ' de ' + n0(T.renglones) + '); los demás cuentan en "Horas calculadas" pero no en el %.');
+  if (hayAlto) { m.push('Un % mayor a 100 (en rojo) significa que se produjo más de lo que la capacidad permite en las horas capturadas: revisa HORAS_MAQ o la capacidad.'); }
+  if (U.sinMaquina) { m.push(n0(U.sinMaquina) + ' renglones no tienen máquina asignada (NO REPORTADA) y no entran en esta tabla.'); }
+  if (sinCap.length) { m.push('Sin capacidad: ' + sinCap.map(nomMaq).join(', ') + '. Agrégala en la hoja CAPACIDAD_MAQUINAS.'); }
+  nota.innerHTML = m.map(esc).join('<br>');
+}
+
 /* ---------- pintado ---------- */
 function pintar(){
   var t = D.total, s = D.serie, a = D.alertas;
@@ -1675,6 +1726,7 @@ function pintar(){
   document.getElementById('tSem').innerHTML = h;
 
   pintaMatrices();
+  pintaUso();
 
   /* calidad del dato */
   var cel = [
@@ -1825,7 +1877,7 @@ function verSemana(sem){
       }
       var h = '<thead><tr><th>Fila</th><th>Fecha</th><th>Maquina</th><th>Proceso</th><th>Material</th>' +
               '<th>Cant.</th><th>Un.</th><th>Origen</th><th>Cliente / OT</th><th>Turno</th>' +
-              '<th>Operador</th><th>Horas</th><th>Merma</th><th>Reimp.</th><th>Nota</th></tr></thead><tbody>';
+              '<th>Operador</th><th>Horas</th><th>% uso</th><th>Merma</th><th>Reimp.</th><th>Nota</th></tr></thead><tbody>';
       for (var i = 0; i < res.filas.length; i++) {
         var r = res.filas[i];
         h += '<tr><td>' + r.fila + '</td><td>' + esc(r.fecha || 'sin fecha') + '</td>' +
@@ -1833,7 +1885,7 @@ function verSemana(sem){
              '<td>' + esc(r.material) + '</td>' + celda(r.cant) +
              '<td>' + esc(r.unidad) + '</td><td>' + esc(r.origen) + '</td>' +
              '<td>' + esc(r.cliente) + '</td><td>' + esc(r.turno) + '</td>' +
-             '<td>' + esc(r.operador) + '</td>' + celda(r.horas) + celda(r.merma) +
+             '<td>' + esc(r.operador) + '</td>' + celda(r.horas) + usoTd(r.uso) + celda(r.merma) +
              '<td>' + (r.reimp === 'SI' ? '<span class="chip dn">SI</span>' : '') + '</td>' +
              '<td style="text-align:left;white-space:normal;max-width:300px;font-size:11.5px">' +
              esc(r.nota || r.obs) + '</td></tr>';
