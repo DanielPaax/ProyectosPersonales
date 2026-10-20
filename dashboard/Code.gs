@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.8.0',
+  version:  '1.8.1',
   liberada: '2026-10-13',
   esquema:  6
 };
@@ -2134,6 +2134,7 @@ function onOpen() {
       .addSeparator()
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
+      .addItem('Listar ODP faltantes (columna H de VENTAS)', 'listarOdpFaltantes')
       .addSeparator()
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Accesos por enlace (socios / empleados)')
         .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
@@ -2143,6 +2144,68 @@ function onOpen() {
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
+}
+
+/* ===================== ODP FALTANTES ===================== */
+/* Revisa la columna ODP (H) de VENTAS: desde el numero mas bajo hasta el mas alto lista los
+   consecutivos que no aparecen. Ignora lo que no es numero (vacios, "NA", "-", OP-2026-0001).
+   Un numero muy aislado (a mas de 1000 del siguiente) se excluye del rango y se avisa: casi
+   siempre es un error de captura que estiraria la lista a decenas de miles de falsos faltantes.
+   Escribe el resultado en la hoja ODP_FALTANTES. Solo MASTER. */
+function _rangosTexto_(arr) {
+  var out = [], i = 0;
+  while (i < arr.length) {
+    var j = i;
+    while (j + 1 < arr.length && arr[j + 1] === arr[j] + 1) { j++; }
+    out.push(i === j ? String(arr[i]) : arr[i] + '-' + arr[j]);
+    i = j + 1;
+  }
+  return out;
+}
+
+function _faltantesOdp_(vals) {
+  var nums = {}, lista = [], raros = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var t = String(vals[i][0] === null || vals[i][0] === undefined ? '' : vals[i][0]).trim();
+    if (!t) { continue; }
+    if (/^\d+$/.test(t)) { var n = Number(t); if (!nums[n]) { nums[n] = [i + 2]; lista.push(n); } else { nums[n].push(i + 2); } }
+    else { raros++; }
+  }
+  lista.sort(function (a, b) { return a - b; });
+  var aislados = [];
+  while (lista.length > 1 && lista[lista.length - 1] - lista[lista.length - 2] > 1000) {
+    var a = lista.pop(); aislados.push({ numero: a, filas: nums[a] });
+  }
+  var faltan = [];
+  if (lista.length) { for (var k = lista[0]; k <= lista[lista.length - 1]; k++) { if (!nums[k]) { faltan.push(k); } } }
+  return { minimo: lista.length ? lista[0] : null, maximo: lista.length ? lista[lista.length - 1] : null,
+           distintos: lista.length, faltan: faltan, aislados: aislados, noNumericos: raros };
+}
+
+function listarOdpFaltantes() {
+  var ses = _exigeMasterMenu_();
+  var ui = SpreadsheetApp.getUi();
+  var h = _hoja_(CFG.HOJA_VENTAS), ult = h.getLastRow();
+  var vals = ult >= 2 ? h.getRange(2, CV.ODP, ult - 1, 1).getValues() : [];
+  var r = _faltantesOdp_(vals);
+  if (r.minimo === null) { ui.alert('ODP faltantes', 'No encontré números en la columna ODP de VENTAS.', ui.ButtonSet.OK); return; }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName('ODP_FALTANTES') || ss.insertSheet('ODP_FALTANTES');
+  try { hoja.clearContents(); } catch (e) { hoja.getRange(1, 1, Math.max(hoja.getLastRow(), 1), 3).setValues([['', '', '']]); }
+  var filas = [['ODP_FALTANTE', '', 'RESUMEN']];
+  var resumen = ['Desde ' + r.minimo + ' hasta ' + r.maximo, r.distintos + ' numeros distintos presentes',
+                 r.faltan.length + ' faltantes', r.noNumericos + ' celdas no numericas (vacias aparte)'];
+  for (var a = 0; a < r.aislados.length; a++) {
+    resumen.push('Excluido por aislado: ' + r.aislados[a].numero + ' (fila ' + r.aislados[a].filas.join(', ') + ')');
+  }
+  var total = Math.max(r.faltan.length, resumen.length);
+  for (var i = 0; i < total; i++) { filas.push([i < r.faltan.length ? r.faltan[i] : '', '', i < resumen.length ? resumen[i] : '']); }
+  hoja.getRange(1, 1, filas.length, 3).setValues(filas);
+  _bitacora_(ses.correo, 'ODP_FALTANTES', r.faltan.length + ' faltantes entre ' + r.minimo + ' y ' + r.maximo);
+  var rangos = _rangosTexto_(r.faltan), txt = rangos.slice(0, 60).join(', ') + (rangos.length > 60 ? ' ... (lista completa en la hoja ODP_FALTANTES)' : '');
+  ui.alert('ODP faltantes', 'Desde ' + r.minimo + ' hasta ' + r.maximo + ': faltan ' + r.faltan.length + '.\n\n' +
+    (r.aislados.length ? 'OJO: excluí ' + r.aislados.map(function (x) { return x.numero + ' (fila ' + x.filas.join(', ') + ')'; }).join(', ') +
+      ' por estar muy lejos del resto; revisa si es un error de captura.\n\n' : '') + txt, ui.ButtonSet.OK);
 }
 
 function abrirTablero() {
