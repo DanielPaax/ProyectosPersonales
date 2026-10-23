@@ -582,8 +582,8 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
   <section class="card">
     <header><h2>MT2 por material</h2></header>
     <div class="gc"><canvas id="cvMat"></canvas></div>
-    <div class="pager" id="pg_tMat"></div>
-    <div class="tscroll"><table id="tMat"></table></div>
+    <div class="pager solo-dash" id="pg_tMat"></div>
+    <div class="tscroll solo-dash"><table id="tMat"></table></div>
   </section>
 
   <section class="card solo-dash">
@@ -1870,9 +1870,8 @@ function pgMover(id, d){
 }
 function pintaMatrices(){
   if (MODO === 'direccion') {
-    /* Direccion: las mismas tablas, por MES (mismo dato que las semanales) */
+    /* Direccion: MT2 por maquina en tabla por MES (misma fuente que la semanal); MT2 por material solo grafico */
     matrizMes('tMaq', D.porMaquinaMes);
-    matrizMes('tMat', D.porMaterialMes);
     matriz('tOpe', D.porOperador);
     return;
   }
@@ -2554,6 +2553,7 @@ var PT_ICONOS = {
   brujula: '<circle cx="24" cy="24" r="15" stroke="#fff" stroke-width="5.5"/><circle cx="24" cy="24" r="5.2" fill="#FF8A3D" stroke="none"/><path d="M24 4v6M24 38v6M4 24h6M38 24h6" stroke="#fff" stroke-width="4.5"/>',
   personas: '<circle cx="18" cy="16" r="6.2" stroke="#fff" stroke-width="5"/><path d="M6 39c0-7.5 5.3-11.5 12-11.5s12 4 12 11.5" stroke="#fff" stroke-width="5.5"/><circle cx="33.5" cy="18" r="4.6" stroke="#FF8A3D" stroke-width="4.2"/><path d="M33 29c5 .2 8.5 3.4 9 9" stroke="#FF8A3D" stroke-width="4.5"/>',
   engrane: '<circle cx="24" cy="24" r="8.6" stroke="#fff" stroke-width="5.5"/><circle cx="24" cy="24" r="2.8" fill="#FF8A3D" stroke="none"/><path d="M24 5v6.5M24 36.5V43M5 24h6.5M36.5 24H43M10.6 10.6l4.6 4.6M32.8 32.8l4.6 4.6M37.4 10.6l-4.6 4.6M15.2 32.8l-4.6 4.6" stroke="#fff" stroke-width="5.5"/>',
+  monedas: '<rect x="8" y="31" width="32" height="9" rx="4.5" stroke="#fff" stroke-width="5"/><rect x="8" y="19.5" width="32" height="9" rx="4.5" stroke="#fff" stroke-width="5"/><rect x="8" y="8" width="32" height="9" rx="4.5" fill="#FF8A3D" stroke="none"/>',
   negocio: '<rect x="7" y="16" width="34" height="24" rx="7.5" stroke="#fff" stroke-width="5.5"/><path d="M17 16v-2.5a5 5 0 015-5h4a5 5 0 015 5V16" stroke="#fff" stroke-width="5.5"/><rect x="20.5" y="24" width="7" height="7" rx="2.2" fill="#FF8A3D" stroke="none"/>',
   candado: '<rect x="9" y="21" width="30" height="21" rx="6.5" stroke="#fff" stroke-width="5.5"/><path d="M16 21v-5a8 8 0 0116 0v5" stroke="#fff" stroke-width="5.5"/>',
   obra: '<path d="M6 42h36M10 42V19l14-10 14 10v23" stroke="#fff" stroke-width="5.5"/>'

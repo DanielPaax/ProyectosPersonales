@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.10.0',
+  version:  '1.10.1',
   liberada: '2026-10-13',
   esquema:  7
 };
@@ -39,6 +39,8 @@ var ROLES = {
   SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx'],
   /* Areas de la intranet: correos con acceso ademas de MASTER. Se llenan "mas adelante". */
   DIRECCION:   [],
+  /* FINANZAS: solo MASTER y los correos de esta lista (los socios NO entran, salvo que se les dé el área). */
+  FINANZAS:    [],
   COMERCIAL:   [],
   OPERACIONES: []
 };
@@ -60,6 +62,9 @@ var AREAS = [
   { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
     desc: 'Información estratégica y de gestión. Acceso restringido.',
     acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
+  { id: 'finanzas', nombre: 'Finanzas', icono: 'monedas',
+    desc: 'Estado financiero de la empresa. Acceso restringido.',
+    acceso: { roles: [], lista: 'FINANZAS', socios: false }, modulos: [], planeados: [] },
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
@@ -2299,7 +2304,7 @@ function crearAccesoSocio() {
   if (pf.getSelectedButton() !== ui.Button.OK) { return; }
   var perfil = /^\s*EMPLEADO\s*$/i.test(pf.getResponseText()) ? 'LECTOR' : 'SOCIO';
   var ar = ui.prompt('Áreas extra', 'Áreas de la intranet además de las generales, separadas por coma (' +
-    'direccion, operaciones, comercial). Vacío = ninguna:', ui.ButtonSet.OK_CANCEL);
+    'direccion, finanzas, operaciones, comercial). Vacío = ninguna:', ui.ButtonSet.OK_CANCEL);
   if (ar.getSelectedButton() !== ui.Button.OK) { return; }
   var extra = [];
   var pedidas = ar.getResponseText().toLowerCase().split(/[,;\s]+/);
