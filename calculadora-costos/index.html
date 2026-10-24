@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Costos · Impresión 3D y Carpintería</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#fff; --ink:#1c2230; --muted:#6a7385; --line:#e1e4ea;
+  --brand:#d9622b; --brand-ink:#fff; --ok:#1f8f55; --bad:#c0392b; --soft:#fbefe8;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#14171d; --card:#1d222b; --ink:#e8ebf1; --muted:#98a1b3; --line:#2c3340; --soft:#2b2019;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{margin:0;font-size:18px}
+header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+nav{display:flex;gap:4px;padding:8px 16px 0;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;color:var(--muted);padding:10px 14px;font:inherit;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-color:var(--brand);font-weight:600}
+main{max-width:1150px;margin:0 auto;padding:16px;display:grid;gap:16px}
+main.two{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start}
+@media (max-width:860px){main.two{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{margin:0 0 4px;font-size:15px}
+.card .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+input,select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+.rows{width:100%;border-collapse:collapse;margin-top:4px}
+.rows th{font-size:11.5px;color:var(--muted);text-align:left;font-weight:500;padding:0 4px 3px}
+.rows td{padding:2px 4px 2px 0}
+.rows td.x{width:30px}
+button.sm{border:1px solid var(--line);background:none;color:var(--muted);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit}
+button.sm:hover{border-color:var(--brand);color:var(--brand)}
+button.pri{background:var(--brand);color:var(--brand-ink);border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;width:100%}
+.sticky{position:sticky;top:12px}
+.price{background:var(--soft);border-radius:10px;padding:14px;text-align:center;margin-bottom:12px}
+.price small{display:block;color:var(--muted);font-size:12px}
+.price b{font-size:30px;display:block}
+.line{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.line span:first-child{color:var(--muted)}
+.line.tot{font-weight:700;border-bottom:2px solid var(--line)}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:10px 0;background:var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin-bottom:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.good{color:var(--ok)} .bad{color:var(--bad)}
+.warn{background:#fdecea;color:var(--bad);padding:8px 10px;border-radius:8px;font-size:13px;margin-bottom:10px}
+table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+table.t th,table.t td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+table.t th:first-child,table.t td:first-child{text-align:left}
+table.t th{color:var(--muted);font-weight:500;font-size:12px}
+.mut{color:var(--muted);font-size:12.5px}
+.actions{display:flex;gap:8px;margin-top:10px}
+.actions .sm{flex:1}
+.derived{background:var(--soft);padding:8px 10px;border-radius:8px;font-size:13px;margin-top:10px}
+@media print{
+  header,nav,.noprint,.card.form{display:none!important}
+  main.two{display:block}
+  body{background:#fff;color:#000}
+  .card{border:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Calculadora de costos y precios</h1>
+  <p>Impresión 3D y carpintería · los datos se guardan solo en este navegador</p>
+</header>
+<nav id="nav"></nav>
+<main id="app"></main>
+
+<script>
+'use strict';
+const KEY = 'calc-costos-v1';
+const COLORS = ['#d9622b','#2a7ab8','#1f8f55','#b8860b','#8e5ac8','#c0392b','#5f6b7a'];
+
+const DEF = {
+  cfg: {
+    moneda: '$', labor: 80, kwh: 2.5, margen: 40, comision: 0, iva: 16, redondeo: 5,
+    d3: { precioImp: 12000, vidaH: 5000, mantH: 3, watts: 150, fijos: 3000, horasMes: 400, fallos: 5, desperdicio: 8 },
+    cp: { maqH: 40, fijos: 8000, horasMes: 140, merma: 10, contingencia: 5 }
+  },
+  d3: { nombre: '', qty: 1, h: 2, m: 0, prep: 10, post: 10, emp: 5,
+        fil: [{ n: 'PLA', g: 50, c: 350 }], ext: [{ n: '', q: 1, c: 0 }] },
+  cp: { nombre: '', qty: 1, maqHoras: 1,
+        mat: [{ n: 'Triplay 18 mm', q: 1, u: 'hoja', c: 900 }, { n: 'Tornillos, pegamento, lijas', q: 1, u: 'lote', c: 80 }],
+        lab: [{ n: 'Diseño / despiece', h: 1, r: '' }, { n: 'Corte y armado', h: 3, r: '' }, { n: 'Lijado y acabado', h: 2, r: '' }],
+        otros: [{ n: 'Flete / instalación', q: 1, c: 0 }] },
+  quotes: []
+};
+const NEWROW = {
+  'd3.fil': { n: '', g: 0, c: 350 }, 'd3.ext': { n: '', q: 1, c: 0 },
+  'cp.mat': { n: '', q: 1, u: '', c: 0 }, 'cp.lab': { n: '', h: 1, r: '' }, 'cp.otros': { n: '', q: 1, c: 0 }
+};
+
+let S = load();
+let tab = 'd3';
+
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if (raw) return merge(structuredClone(DEF), raw);
+  } catch (e) {}
+  return structuredClone(DEF);
+}
+function merge(base, src) {
+  for (const k in src) {
+    if (Array.isArray(src[k])) base[k] = src[k];
+    else if (src[k] && typeof src[k] === 'object' && base[k]) merge(base[k], src[k]);
+    else base[k] = src[k];
+  }
+  return base;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+const num = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+const get = p => p.split('.').reduce((o, k) => o?.[k], S);
+function set(p, v) { const ks = p.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], S)[last] = v; }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = v => S.cfg.moneda + ' ' + v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = v => (v * 100).toFixed(1) + '%';
+
+/* ---------- cálculo ---------- */
+function calc3d() {
+  const c = S.cfg, k = c.d3, d = S.d3;
+  const horas = num(d.h) + num(d.m) / 60;
+  const filamento = d.fil.reduce((s, f) => s + num(f.g) / 1000 * num(f.c), 0) * (1 + num(k.desperdicio) / 100);
+  const energia = horas * num(k.watts) / 1000 * num(c.kwh);
+  const maquina = horas * (num(k.vidaH) ? num(k.precioImp) / num(k.vidaH) : 0) + horas * num(k.mantH);
+  const indirectos = horas * (num(k.horasMes) ? num(k.fijos) / num(k.horasMes) : 0);
+  const mano = (num(d.prep) + num(d.post) + num(d.emp)) / 60 * num(c.labor);
+  const extras = d.ext.reduce((s, e) => s + num(e.q) * num(e.c), 0);
+  const fallos = (filamento + energia + maquina) * num(k.fallos) / 100;
+  const lines = [
+    ['Filamento (con soportes/purga)', filamento], ['Electricidad', energia], ['Desgaste de impresora', maquina],
+    ['Mano de obra (preparar, post-proceso, empaque)', mano], ['Extras y empaque', extras],
+    ['Reserva por impresiones fallidas', fallos], ['Gastos indirectos del taller', indirectos]
+  ];
+  return { lines, qty: Math.max(1, num(d.qty)), nombre: d.nombre, tipo: 'Impresión 3D' };
+}
+function calcCp() {
+  const c = S.cfg, k = c.cp, d = S.cp;
+  const material = d.mat.reduce((s, m) => s + num(m.q) * num(m.c), 0) * (1 + num(k.merma) / 100);
+  const horasMO = d.lab.reduce((s, l) => s + num(l.h), 0);
+  const mano = d.lab.reduce((s, l) => s + num(l.h) * (l.r === '' ? num(c.labor) : num(l.r)), 0);
+  const maq = num(d.maqHoras) * num(k.maqH);
+  const indirectos = horasMO * (num(k.horasMes) ? num(k.fijos) / num(k.horasMes) : 0);
+  const otros = d.otros.reduce((s, e) => s + num(e.q) * num(e.c), 0);
+  const base = material + mano + maq + indirectos + otros;
+  const cont = base * num(k.contingencia) / 100;
+  const lines = [
+    ['Materiales (con merma)', material], ['Mano de obra', mano], ['Uso de maquinaria', maq],
+    ['Gastos indirectos del taller', indirectos], ['Flete, instalación y otros', otros], ['Contingencia / imprevistos', cont]
+  ];
+  return { lines, qty: Math.max(1, num(d.qty)), nombre: d.nombre, tipo: 'Carpintería' };
+}
+// precio unitario sin IVA para un margen dado (margen sobre precio, descontando comisión)
+function priceFor(costoUnit, margen) {
+  const den = 1 - num(S.cfg.comision) / 100 - margen;
+  return den > 0 ? costoUnit / den : NaN;
+}
+function roundUp(p) { const r = num(S.cfg.redondeo); return r > 0 ? Math.ceil(p / r - 1e-9) * r : p; }
+
+/* ---------- UI ---------- */
+const TABS = [['d3', 'Impresión 3D'], ['cp', 'Carpintería'], ['cfg', 'Configuración'], ['quotes', 'Cotizaciones']];
+
+function field(label, path, opts = {}) {
+  const v = get(path);
+  return `<div><label>${label}</label><input data-p="${path}" type="${opts.text ? 'text' : 'number'}" ${opts.text ? '' : 'step="any" min="0"'} value="${esc(v)}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''}></div>`;
+}
+function rows(path, cols, addLabel) {
+  const list = get(path);
+  const head = cols.map(c => `<th style="width:${c.w || 'auto'}">${c.l}</th>`).join('') + '<th></th>';
+  const body = list.map((r, i) => '<tr>' + cols.map(c =>
+    `<td><input data-p="${path}.${i}.${c.k}" type="${c.text ? 'text' : 'number'}" ${c.text ? '' : 'step="any" min="0"'} value="${esc(r[c.k])}" ${c.ph ? `placeholder="${esc(c.ph)}"` : ''}></td>`
+  ).join('') + `<td class="x"><button class="sm" data-del="${path}.${i}" title="Quitar">✕</button></td></tr>`).join('');
+  return `<table class="rows"><tr>${head}</tr>${body}</table><button class="sm" style="margin-top:8px" data-add="${path}">+ ${addLabel}</button>`;
+}
+
+function formD3() {
+  return `
+  <div class="card form"><h2>Trabajo</h2>
+    <p class="hint">Usa los datos que te da tu laminador (Cura, Bambu Studio, PrusaSlicer…) para toda la tirada.</p>
+    <div class="grid">${field('Nombre / cliente', 'd3.nombre', { text: 1, ph: 'Ej. Soporte de pared' })}${field('Piezas en la tirada', 'd3.qty')}${field('Tiempo: horas', 'd3.h')}${field('Tiempo: minutos', 'd3.m')}</div>
+  </div>
+  <div class="card form"><h2>Filamento</h2>
+    <p class="hint">Gramos totales de la tirada (incluye soportes si el laminador los cuenta). Varias filas si es multicolor.</p>
+    ${rows('d3.fil', [{ k: 'n', l: 'Material / color', text: 1 }, { k: 'g', l: 'Gramos', w: '90px' }, { k: 'c', l: 'Costo por kg', w: '110px' }], 'Añadir filamento')}
+  </div>
+  <div class="card form"><h2>Mano de obra (minutos)</h2>
+    <div class="grid">${field('Preparación / laminado', 'd3.prep')}${field('Post-proceso (soportes, lijado, pintura)', 'd3.post')}${field('Empaque', 'd3.emp')}</div>
+  </div>
+  <div class="card form"><h2>Extras</h2>
+    <p class="hint">Inserts, tornillos, pintura, caja, etiquetas, imanes…</p>
+    ${rows('d3.ext', [{ k: 'n', l: 'Concepto', text: 1 }, { k: 'q', l: 'Cant.', w: '70px' }, { k: 'c', l: 'Costo unit.', w: '100px' }], 'Añadir extra')}
+  </div>`;
+}
+function formCp() {
+  return `
+  <div class="card form"><h2>Proyecto</h2>
+    <div class="grid">${field('Nombre / cliente', 'cp.nombre', { text: 1, ph: 'Ej. Mesa de centro' })}${field('Unidades iguales', 'cp.qty')}${field('Horas de maquinaria (sierra, router…)', 'cp.maqHoras')}</div>
+  </div>
+  <div class="card form"><h2>Materiales</h2>
+    <p class="hint">Madera, herrajes, barniz, lijas, pegamento. La merma se aplica automáticamente (Configuración).</p>
+    ${rows('cp.mat', [{ k: 'n', l: 'Material', text: 1 }, { k: 'q', l: 'Cant.', w: '70px' }, { k: 'u', l: 'Unidad', text: 1, w: '80px' }, { k: 'c', l: 'Costo unit.', w: '100px' }], 'Añadir material')}
+  </div>
+  <div class="card form"><h2>Mano de obra</h2>
+    <p class="hint">Deja la tarifa vacía para usar la tarifa general ($ ${num(S.cfg.labor)}/h); ponla si alguien cobra distinto.</p>
+    ${rows('cp.lab', [{ k: 'n', l: 'Tarea', text: 1 }, { k: 'h', l: 'Horas', w: '80px' }, { k: 'r', l: 'Tarifa/h', w: '100px' }], 'Añadir tarea')}
+  </div>
+  <div class="card form"><h2>Otros costos</h2>
+    ${rows('cp.otros', [{ k: 'n', l: 'Concepto', text: 1 }, { k: 'q', l: 'Cant.', w: '70px' }, { k: 'c', l: 'Costo unit.', w: '100px' }], 'Añadir costo')}
+  </div>`;
+}
+function formCfg() {
+  return `
+  <div class="card"><h2>General</h2>
+    <p class="hint">Ajusta estos valores a tu realidad: los de ejemplo son solo de partida.</p>
+    <div class="grid">${field('Símbolo de moneda', 'cfg.moneda', { text: 1 })}${field('Mano de obra ($/hora)', 'cfg.labor')}${field('Electricidad ($/kWh)', 'cfg.kwh')}
+    ${field('Margen de utilidad objetivo (%)', 'cfg.margen')}${field('Comisión de plataforma/pago (%)', 'cfg.comision')}${field('IVA (%)', 'cfg.iva')}${field('Redondear precio hacia arriba a múltiplos de', 'cfg.redondeo')}</div>
+    <p class="mut">El margen es sobre el precio de venta (utilidad ÷ precio). Un 40% de margen equivale a ganar 67% sobre el costo.</p>
+  </div>
+  <div class="card"><h2>Impresión 3D</h2>
+    <div class="grid">${field('Precio de la impresora', 'cfg.d3.precioImp')}${field('Vida útil estimada (horas)', 'cfg.d3.vidaH')}${field('Mantenimiento/refacciones ($/h)', 'cfg.d3.mantH')}${field('Consumo promedio (W)', 'cfg.d3.watts')}
+    ${field('Gastos fijos mensuales del taller', 'cfg.d3.fijos')}${field('Horas de impresión al mes', 'cfg.d3.horasMes')}${field('Impresiones fallidas (%)', 'cfg.d3.fallos')}${field('Desperdicio filamento: purga/soportes (%)', 'cfg.d3.desperdicio')}</div>
+    <div class="derived" id="der3"></div>
+  </div>
+  <div class="card"><h2>Carpintería</h2>
+    <div class="grid">${field('Maquinaria ($/hora de uso)', 'cfg.cp.maqH')}${field('Gastos fijos mensuales del taller', 'cfg.cp.fijos')}${field('Horas productivas al mes', 'cfg.cp.horasMes')}${field('Merma de material (%)', 'cfg.cp.merma')}${field('Contingencia (%)', 'cfg.cp.contingencia')}</div>
+    <div class="derived" id="derC"></div>
+    <p class="mut">Gastos fijos: renta, luz base, internet, software, seguros, herramientas, sueldo administrativo… Se reparten entre las horas productivas para saber cuánto cuesta cada hora trabajada.</p>
+  </div>
+  <div class="card"><button class="sm" id="reset">Restablecer todo a valores de ejemplo</button></div>`;
+}
+function formQuotes() {
+  const q = S.quotes;
+  if (!q.length) return `<div class="card"><h2>Cotizaciones guardadas</h2><p class="hint">Aún no hay ninguna. Calcula un trabajo y pulsa «Guardar cotización».</p></div>`;
+  return `<div class="card"><h2>Cotizaciones guardadas</h2>
+  <div style="overflow-x:auto"><table class="t"><tr><th>Fecha</th><th>Tipo</th><th>Trabajo</th><th>Uds.</th><th>Costo</th><th>Precio total</th><th>Utilidad</th><th>Margen</th><th></th></tr>
+  ${q.map((x, i) => `<tr><td>${x.fecha}</td><td>${x.tipo}</td><td>${esc(x.nombre) || '—'}</td><td>${x.qty}</td><td>${money(x.costo)}</td><td>${money(x.total)}</td><td>${money(x.utilidad)}</td><td>${pct(x.margen)}</td><td><button class="sm" data-qdel="${i}">✕</button></td></tr>`).join('')}
+  </table></div>
+  <div class="actions"><button class="sm" id="csv">Exportar CSV</button></div></div>`;
+}
+
+function render() {
+  document.getElementById('nav').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  const app = document.getElementById('app');
+  const calc = tab === 'd3' || tab === 'cp';
+  app.className = calc ? 'two' : '';
+  const form = tab === 'd3' ? formD3() : tab === 'cp' ? formCp() : tab === 'cfg' ? formCfg() : formQuotes();
+  app.innerHTML = calc ? `<div style="display:grid;gap:16px">${form}</div><div class="sticky"><div class="card" id="res"></div></div>` : form;
+  update();
+}
+
+let manual = '';
+function update() {
+  if (tab === 'cfg') return derived();
+  if (tab !== 'd3' && tab !== 'cp') return;
+  const r = tab === 'd3' ? calc3d() : calcCp();
+  const costo = r.lines.reduce((s, l) => s + l[1], 0);
+  const cu = costo / r.qty;
+  const c = S.cfg, m = num(c.margen) / 100, com = num(c.comision) / 100;
+  const pu0 = priceFor(cu, m);
+  const res = document.getElementById('res');
+  if (!isFinite(pu0)) { res.innerHTML = `<div class="warn">Margen + comisión deben sumar menos de 100%.</div>`; return; }
+  const pu = roundUp(pu0), total = pu * r.qty;
+  const util = total * (1 - com) - costo, mReal = total ? util / total : 0;
+  const conIva = total * (1 + num(c.iva) / 100);
+  const piso = cu / (1 - com);
+  const man = manual === '' ? null : num(manual);
+  const manUtil = man === null ? 0 : man * (1 - com) - cu;
+  const bar = costo ? r.lines.map((l, i) => `<div title="${esc(l[0])}" style="width:${l[1] / costo * 100}%;background:${COLORS[i % 7]}"></div>`).join('') : '';
+  res.innerHTML = `
+    <div class="price"><small>Precio sugerido${r.qty > 1 ? ' por pieza' : ''} (sin IVA)</small><b>${money(pu)}</b>
+      ${r.qty > 1 ? `<small>Total ${r.qty} pzas: ${money(total)}</small>` : ''}
+      ${num(c.iva) ? `<small>Con IVA ${num(c.iva)}%: ${money(conIva)}${r.qty > 1 ? ' (total)' : ''}</small>` : ''}</div>
+    <div class="bar">${bar}</div>
+    <div class="legend">${r.lines.map((l, i) => l[1] > 0 ? `<span><i style="background:${COLORS[i % 7]}"></i>${esc(l[0].split(' (')[0])}</span>` : '').join('')}</div>
+    ${r.lines.map(l => `<div class="line"><span>${esc(l[0])}</span><span>${money(l[1])}</span></div>`).join('')}
+    <div class="line tot"><span>Costo total</span><span>${money(costo)}</span></div>
+    ${r.qty > 1 ? `<div class="line"><span>Costo por pieza</span><span>${money(cu)}</span></div>` : ''}
+    <div class="line"><span>Precio mínimo (utilidad cero)</span><span>${money(piso)}</span></div>
+    <div class="line"><span>Utilidad${com ? ' (tras comisión)' : ''}</span><span class="${util >= 0 ? 'good' : 'bad'}">${money(util)}</span></div>
+    <div class="line"><span>Margen real / sobre costo</span><span>${pct(mReal)} / ${costo ? pct(util / costo) : '—'}</span></div>
+    <h2 style="margin-top:16px;font-size:14px">¿Y si cobro otro precio?</h2>
+    <label>Precio unitario sin IVA</label><input id="manual" type="number" step="any" min="0" value="${esc(manual)}" placeholder="${pu.toFixed(2)}">
+    ${man !== null ? `<div class="line"><span>Margen resultante</span><span class="${manUtil >= 0 ? 'good' : 'bad'}">${man ? pct(manUtil / man) : '—'}</span></div>` : ''}
+    <h2 style="margin-top:16px;font-size:14px">Precio según margen</h2>
+    <table class="t"><tr><th>Margen</th><th>Precio unit.</th><th>Utilidad unit.</th></tr>
+    ${[0.2, 0.3, 0.4, 0.5, 0.6].map(x => { const p = priceFor(cu, x); return `<tr><td>${x * 100}%</td><td>${isFinite(p) ? money(p) : '—'}</td><td>${isFinite(p) ? money(p * (1 - com) - cu) : '—'}</td></tr>`; }).join('')}</table>
+    <div class="actions noprint"><button class="pri" id="saveq">Guardar cotización</button></div>
+    <div class="actions noprint"><button class="sm" id="print">Imprimir</button></div>`;
+  res._ctx = { r, costo, pu, total, util, mReal };
+}
+function derived() {
+  const c = S.cfg, k = c.d3, p = c.cp;
+  const a = document.getElementById('der3'), b = document.getElementById('derC');
+  if (a) {
+    const dep = num(k.vidaH) ? num(k.precioImp) / num(k.vidaH) : 0, ind = num(k.horasMes) ? num(k.fijos) / num(k.horasMes) : 0, en = num(k.watts) / 1000 * num(c.kwh);
+    a.innerHTML = `Por hora de impresión: depreciación ${money(dep)} + mantenimiento ${money(num(k.mantH))} + electricidad ${money(en)} + indirectos ${money(ind)} = <b>${money(dep + num(k.mantH) + en + ind)}</b> (sin filamento ni mano de obra)`;
+  }
+  if (b) {
+    const ind = num(p.horasMes) ? num(p.fijos) / num(p.horasMes) : 0;
+    b.innerHTML = `Por hora trabajada: mano de obra ${money(num(c.labor))} + indirectos ${money(ind)} = <b>${money(num(c.labor) + ind)}</b> (sin materiales ni maquinaria)`;
+  }
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'manual') { manual = t.value; update(); document.getElementById('manual').focus(); const i = document.getElementById('manual'); i.setSelectionRange?.(i.value.length, i.value.length); return; }
+  const p = t.dataset.p; if (!p) return;
+  set(p, t.type === 'number' ? (t.value === '' ? '' : num(t.value)) : t.value);
+  save(); update();
+});
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
+  if (t.dataset.add) { get(t.dataset.add).push({ ...NEWROW[t.dataset.add] }); save(); render(); return; }
+  if (t.dataset.del) { const ks = t.dataset.del.split('.'), i = +ks.pop(); get(ks.join('.')).splice(i, 1); save(); render(); return; }
+  if (t.dataset.qdel) { S.quotes.splice(+t.dataset.qdel, 1); save(); render(); return; }
+  if (t.id === 'print') window.print();
+  if (t.id === 'reset' && confirm('¿Borrar todos tus datos y volver a los valores de ejemplo?')) { S = structuredClone(DEF); save(); render(); }
+  if (t.id === 'saveq') {
+    const x = document.getElementById('res')._ctx;
+    S.quotes.unshift({ fecha: new Date().toISOString().slice(0, 10), tipo: x.r.tipo, nombre: x.r.nombre, qty: x.r.qty, costo: x.costo, total: x.total, utilidad: x.util, margen: x.mReal });
+    save(); t.textContent = '✓ Guardada'; setTimeout(() => { t.textContent = 'Guardar cotización'; }, 1500);
+  }
+  if (t.id === 'csv') {
+    const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+    const csv = ['Fecha,Tipo,Trabajo,Unidades,Costo,Precio total,Utilidad,Margen']
+      .concat(S.quotes.map(x => [x.fecha, x.tipo, q(x.nombre), x.qty, x.costo.toFixed(2), x.total.toFixed(2), x.utilidad.toFixed(2), (x.margen * 100).toFixed(1) + '%'].join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+    a.download = 'cotizaciones.csv'; a.click();
+  }
+});
+render();
+</script>
+</body>
+</html>
