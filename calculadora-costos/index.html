@@ -271,8 +271,6 @@ function update() {
   const util = total * (1 - com) - costo, mReal = total ? util / total : 0;
   const conIva = total * (1 + num(c.iva) / 100);
   const piso = cu / (1 - com);
-  const man = manual === '' ? null : num(manual);
-  const manUtil = man === null ? 0 : man * (1 - com) - cu;
   const bar = costo ? r.lines.map((l, i) => `<div title="${esc(l[0])}" style="width:${l[1] / costo * 100}%;background:${COLORS[i % 7]}"></div>`).join('') : '';
   res.innerHTML = `
     <div class="price"><small>Precio sugerido${r.qty > 1 ? ' por pieza' : ''} (sin IVA)</small><b>${money(pu)}</b>
@@ -288,13 +286,21 @@ function update() {
     <div class="line"><span>Margen real / sobre costo</span><span>${pct(mReal)} / ${costo ? pct(util / costo) : '—'}</span></div>
     <h2 style="margin-top:16px;font-size:14px">¿Y si cobro otro precio?</h2>
     <label>Precio unitario sin IVA</label><input id="manual" type="number" step="any" min="0" value="${esc(manual)}" placeholder="${pu.toFixed(2)}">
-    ${man !== null ? `<div class="line"><span>Margen resultante</span><span class="${manUtil >= 0 ? 'good' : 'bad'}">${man ? pct(manUtil / man) : '—'}</span></div>` : ''}
+    <div id="manout"></div>
     <h2 style="margin-top:16px;font-size:14px">Precio según margen</h2>
     <table class="t"><tr><th>Margen</th><th>Precio unit.</th><th>Utilidad unit.</th></tr>
     ${[0.2, 0.3, 0.4, 0.5, 0.6].map(x => { const p = priceFor(cu, x); return `<tr><td>${x * 100}%</td><td>${isFinite(p) ? money(p) : '—'}</td><td>${isFinite(p) ? money(p * (1 - com) - cu) : '—'}</td></tr>`; }).join('')}</table>
     <div class="actions noprint"><button class="pri" id="saveq">Guardar cotización</button></div>
     <div class="actions noprint"><button class="sm" id="print">Imprimir</button></div>`;
-  res._ctx = { r, costo, pu, total, util, mReal };
+  res._ctx = { r, costo, pu, total, util, mReal, cu, com };
+  manualOut();
+}
+function manualOut() {
+  const o = document.getElementById('manout'); if (!o) return;
+  const { cu, com } = document.getElementById('res')._ctx;
+  if (manual === '') { o.innerHTML = ''; return; }
+  const man = num(manual), u = man * (1 - com) - cu;
+  o.innerHTML = `<div class="line"><span>Margen resultante</span><span class="${u >= 0 ? 'good' : 'bad'}">${man ? pct(u / man) : '—'}</span></div>`;
 }
 function derived() {
   const c = S.cfg, k = c.d3, p = c.cp;
@@ -312,7 +318,7 @@ function derived() {
 /* ---------- eventos ---------- */
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.id === 'manual') { manual = t.value; update(); document.getElementById('manual').focus(); const i = document.getElementById('manual'); i.setSelectionRange?.(i.value.length, i.value.length); return; }
+  if (t.id === 'manual') { manual = t.value; manualOut(); return; }
   const p = t.dataset.p; if (!p) return;
   set(p, t.type === 'number' ? (t.value === '' ? '' : num(t.value)) : t.value);
   save(); update();
