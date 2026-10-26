@@ -168,8 +168,8 @@ function _exigeLectura_(ses, areas) {
    y crea la orden de venta ligada a ella. Pide los mismos datos que guardarVenta
    mas: tipoEntrega, fechaCompromiso, descripcion, archivoOc (enlace al PDF de la
    orden de compra del cliente) y notas. Misma autorizacion que capturar venta. */
-function crearOrdenVenta(d) {
-  var ses = _ses_();
+function crearOrdenVenta(d, clave) {
+  var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
   if (!d) { throw new Error('No llego nada que guardar.'); }
   var tipoEntrega = _texto_(d.tipoEntrega || 'ENTREGA', 20).toUpperCase();
@@ -178,7 +178,7 @@ function crearOrdenVenta(d) {
   var archivo = _urlOpc_(d.archivoOc, 'El archivo de la orden de compra');
 
   /* 1) la venta (valida cliente, proyecto, material, vendedor, importes...) */
-  var venta = guardarVenta(d);
+  var venta = guardarVenta(d, clave);
 
   /* 2) la orden de venta ligada a esa venta */
   try {
@@ -205,8 +205,8 @@ function crearOrdenVenta(d) {
   }
 }
 
-function cancelarOrdenVenta(idOV, motivo) {
-  var ses = _ses_();
+function cancelarOrdenVenta(idOV, motivo, clave) {
+  var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
   return _conCandado_(function () {
     var t = _tablaI_('ORDENES_VENTA'), ov = _buscaI_(t, 'ID_OV', String(idOV || ''));
@@ -222,8 +222,8 @@ function cancelarOrdenVenta(idOV, motivo) {
 
 /* ===================== ORDEN DE PRODUCCION (OPERACIONES) ===================== */
 
-function crearOrdenProduccion(idOV, d) {
-  var ses = _ses_();
+function crearOrdenProduccion(idOV, d, clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   d = d || {};
   return _conCandado_(function () {
@@ -264,8 +264,8 @@ function _ligaVentaOdp_(idVenta, odp) {
   } catch (e) { _bitacora_('sistema', 'ERROR_LIGA_ODP', idVenta + ' ' + odp + ': ' + e.message); }
 }
 
-function cambiarEstatusOP(idOP, estatus) {
-  var ses = _ses_();
+function cambiarEstatusOP(idOP, estatus, clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   estatus = _texto_(estatus, 20).toUpperCase();
   return _conCandado_(function () {
@@ -285,8 +285,8 @@ function cambiarEstatusOP(idOP, estatus) {
 
 /* ===================== ORDEN DE ENTREGA / INSTALACION (OPERACIONES) ===================== */
 
-function crearOrdenEntrega(idOP, d) {
-  var ses = _ses_();
+function crearOrdenEntrega(idOP, d, clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   d = d || {};
   return _conCandado_(function () {
@@ -313,8 +313,8 @@ function crearOrdenEntrega(idOP, d) {
   });
 }
 
-function cambiarEstatusOE(idOE, estatus) {
-  var ses = _ses_();
+function cambiarEstatusOE(idOE, estatus, clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   estatus = _texto_(estatus, 20).toUpperCase();
   return _conCandado_(function () {
@@ -385,8 +385,8 @@ function trazaOrden(id, clave) {
 
 /* ===================== ACTIVIDAD COMERCIAL (llamadas, mensajes, correos) ===================== */
 
-function registrarActividad(d) {
-  var ses = _ses_();
+function registrarActividad(d, clave) {
+  var ses = _ses_(clave, true);
   _exigeEscritura_(ses, 'comercial');
   if (!d) { throw new Error('No llego nada que guardar.'); }
   var cats = _leerCatalogos_();
