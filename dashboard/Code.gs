@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.11.0',
+  version:  '1.11.1',
   liberada: '2026-10-13',
   esquema:  7
 };
@@ -396,7 +396,14 @@ function solicitarCodigo(correo) {
   if (!_correoPermitido_(c)) { _bitacora_(c, 'CODIGO_RECHAZADO', 'correo no autorizado'); return generico; }
   var codigo = _codigoAleatorio_();
   cache.put('otp_' + hc, JSON.stringify({ h: _hash_(codigo + '|' + c + '|' + _secretoSesion_()), n: 0 }), CODIGO_MINUTOS * 60);
-  _enviaCodigo_(c, codigo);
+  try {
+    _enviaCodigo_(c, codigo);
+  } catch (e) {
+    /* el detalle (por ejemplo "falta autorizar MailApp") va a la bitacora y al administrador, no al usuario */
+    cache.remove('otp_' + hc);
+    _bitacora_(c, 'ERROR_ENVIO_CODIGO', String(e && e.message ? e.message : e).slice(0, 300));
+    throw new Error('No se pudo enviar el código en este momento. Avisa al administrador de la intranet.');
+  }
   _bitacora_(c, 'CODIGO_ENVIADO', '');
   return generico;
 }
@@ -442,6 +449,17 @@ function cerrarTodasSesiones() {
   PropertiesService.getScriptProperties().setProperty('sesion_desde', String(Math.floor(new Date().getTime() / 1000) + 1));
   _bitacora_(ses.correo, 'CIERRA_TODAS_SESIONES', '');
   ui.alert('Cerrar sesiones', 'Listo.', ui.ButtonSet.OK);
+}
+
+/* EJECUTAR UNA VEZ DESDE EL EDITOR (seleccionar "autorizarCorreo" > Ejecutar): Google pide permiso para
+   enviar correos como tu cuenta. Sin ese permiso la intranet no puede mandar los codigos de acceso.
+   Despues hay que publicar una Nueva version de la implementacion. */
+function autorizarCorreo() {
+  var yo = Session.getEffectiveUser().getEmail();
+  _enviaCodigo_(yo, '000000');
+  Logger.log('Listo: se envio un correo de prueba a ' + yo + '. Cuota diaria restante: ' + MailApp.getRemainingDailyQuota() +
+             '. Ahora publica una Nueva version de la implementacion.');
+  return 'Permiso de correo OK. Correo de prueba enviado a ' + yo;
 }
 
 /* Menu: manda un codigo de PRUEBA a tu correo. La primera vez Google pide autorizar el envio de correos. */
