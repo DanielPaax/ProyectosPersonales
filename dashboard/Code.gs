@@ -39,6 +39,8 @@ var ROLES = {
   SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx'],
   /* Areas de la intranet: correos con acceso ademas de MASTER. Se llenan "mas adelante". */
   DIRECCION:   [],
+  /* Dashboard BFp es restringido: solo MASTER y los correos de esta lista (o de la hoja ACCESOS, AREAS=dashboard). */
+  DASHBOARD:   [],
   /* ACCESO POR CORREO CON CODIGO: quien NO es del Workspace del dueño (Google no entrega su
      correo) entra escribiendo su correo y un codigo de 6 digitos que recibe por email. Pueden
      pedirlo todos los correos de estos DOMINIOS y los correos sueltos de ACCESO_EXTRA (o de
@@ -68,7 +70,7 @@ var ROLES = {
 var AREAS = [
   { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
     desc: 'Producción y comercial: ventas, costos, merma y productividad.',
-    acceso: { todos: true }, vista: 'dashboard' },
+    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
   { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
     desc: 'Información estratégica y de gestión. Acceso restringido.',
     acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
@@ -103,6 +105,13 @@ var AREAS = [
 function _areaPorId_(id) {
   for (var i = 0; i < AREAS.length; i++) { if (AREAS[i].id === id) { return AREAS[i]; } }
   return null;
+}
+
+/* Los datos del tablero solo salen a quien tiene Dashboard BFp o Direccion (que lo replica en lectura). */
+function _exigeTablero_(ses) {
+  if (_accesoArea_(ses, _areaPorId_('dashboard')) || _accesoArea_(ses, _areaPorId_('direccion'))) { return; }
+  _bitacora_(ses.correo, 'ACCESO_NEGADO', 'tablero');
+  throw new Error('Sin autorizacion para esta accion.');
 }
 
 /* ¿Esta sesion entra a esta area? MASTER entra a todas. */
@@ -925,6 +934,7 @@ function _claves_(mapa, desc) {
    filtrar. Los selectores no se encogen al filtrar: se limpian con un clic. */
 function opcionesFiltros(clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   if (ses.porClave) { _bitacora_(ses.correo, 'ACCESO_SOCIO', 'consulta por enlace personal'); }
   var base = _leerBase_();
@@ -1284,6 +1294,7 @@ function _costosProd_(q, prod) {
 
 function cargarTablero(filtros, sub, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var t0 = new Date().getTime();
   var q = _fq_(filtros, ses);
@@ -1326,6 +1337,7 @@ function cargarCatalogos(clave) {
 
 function detalleSemana(semana, filtros, sub, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var s = String(semana || '');
   var q = _fq_(filtros, ses);
@@ -1869,6 +1881,7 @@ function _semanasEntre_(a, b) {
 
 function cargarComercial(filtrosGlobal, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeVenta_(ses, false);
   var t0 = new Date().getTime();
   var todas = _leerVentas_();

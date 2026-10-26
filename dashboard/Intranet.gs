@@ -28,7 +28,7 @@ var HOJAS_INTRANET = {
                         'CAPTURADO_POR', 'CAPTURADO_EN'],
   ENLACES: ['AREA', 'CATEGORIA', 'TITULO', 'URL', 'DESCRIPCION', 'ORDEN'],
   /* PERMISOS POR CORREO, sin tocar codigo: una fila por persona. AREAS = modulos que ve (separados por coma:
-     operaciones, comercial, direccion, finanzas; Dashboard y Talento Humano los ve todo el mundo).
+     dashboard, operaciones, comercial, direccion, finanzas; solo Talento Humano lo ve todo el mundo).
      VER_VENTAS = SI: ve ventas, costos y margen. CAPTURAR = SI: puede capturar trabajos y ventas. */
   ACCESOS: ['CORREO', 'AREAS', 'VER_VENTAS', 'CAPTURAR', 'NOTAS']
 };
