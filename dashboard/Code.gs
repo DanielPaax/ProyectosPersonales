@@ -2,8 +2,8 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.12.0',
-  liberada: '2026-10-13',
+  version:  '1.13.0',
+  liberada: '2026-10-26',
   esquema:  7
 };
 
@@ -80,26 +80,9 @@ var AREAS = [
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
-  { id: 'operaciones', nombre: 'Operaciones', icono: 'engrane',
-    desc: 'Producción, mantenimiento, inventario, entregas e instalaciones.',
-    acceso: { roles: [], lista: 'OPERACIONES', socios: true }, modulos: [],
-    planeados: ['Órdenes de producción', 'Bitácoras de mantenimiento', 'Bitácoras de trabajo diario',
-                'Control de inventario', 'Control de entregas', 'Control de instalaciones'] },
-  { id: 'comercial', nombre: 'Comercial', icono: 'negocio',
-    desc: 'Vendedores, órdenes de venta y órdenes de compra de clientes.',
-    acceso: { roles: [], lista: 'COMERCIAL', socios: true },
-    modulos: [
-      { id: 'dash-com', nombre: 'Dashboard comercial', estado: 'activo', destino: 'dashboard', requiere: 'venta',
-        desc: 'Ventas, ticket promedio, comparativos y cobranza en el Dashboard BFp.' },
-      { id: 'competencia', nombre: 'Tablero de competencia', estado: 'proximamente',
-        desc: 'Ranking de vendedores por ventas y actividad.' },
-      { id: 'actividad', nombre: 'Actividad comercial', estado: 'proximamente',
-        desc: 'Registro de llamadas, mensajes y correos en un formulario.' },
-      { id: 'orden-venta', nombre: 'Órdenes de venta', estado: 'proximamente',
-        desc: 'Crea la orden y registra la venta en el Dashboard.' },
-      { id: 'orden-compra', nombre: 'Órdenes de compra de clientes', estado: 'proximamente',
-        desc: 'Almacena y consulta las órdenes de compra de cada cliente.' }
-    ], planeados: [] }
+  { id: 'erp', nombre: 'ERP', icono: 'engrane',
+    desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
+    acceso: { roles: [], socios: true }, vista: 'erp' }
 ];
 
 function _areaPorId_(id) {
@@ -123,6 +106,7 @@ function _accesoArea_(ses, area) {
   if (a.roles && a.roles.indexOf(ses.rol) >= 0) { return true; }
   if (a.socios && ses.rol === 'SOCIO') { return true; }
   if (a.ventas && ses.venta) { return true; }
+  if (area.id === 'erp') { try { if (ERP.rolDe(ses)) { return true; } } catch (e) { /* hojas ERP aun no instaladas */ } }
   if (ses.extra && ses.extra.indexOf(area.id) >= 0) { return true; }
   if (!ses.porClave) { var ac = _accesoDeCorreo_(ses.correo); if (ac && ac.areas.indexOf(area.id) >= 0) { return true; } }
   if (a.lista && !ses.porClave && ses.correo && _enLista_(ROLES[a.lista] || [], ses.correo)) { return true; }
@@ -352,6 +336,7 @@ function _correoPermitido_(correo) {
   var doms = ROLES.DOMINIOS || [];
   for (var i = 0; i < doms.length; i++) { if (String(doms[i]).toLowerCase().trim() === dom) { return true; } }
   if (_accesoDeCorreo_(correo)) { return true; }   /* aparece en la hoja ACCESOS */
+  try { if (ERP.correoRegistrado(correo)) { return true; } } catch (e) { /* ERP sin instalar */ }
   var listas = ['MASTER', 'CAPTURA', 'VENTAS', 'SOCIOS', 'DIRECCION', 'FINANZAS', 'COMERCIAL', 'OPERACIONES', 'ACCESO_EXTRA'];
   for (var k = 0; k < listas.length; k++) { if (_enLista_(ROLES[listas[k]] || [], correo)) { return true; } }
   return false;
@@ -1417,6 +1402,11 @@ function _etiquetaSemana_(lunesIso, existentes) {
 function guardarTrabajo(d, clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  return _guardarTrabajoCore_(d, ses);
+}
+
+/* Escribe un renglon en BASE. Lo usan la captura del Dashboard y el ERP (que valida su propio permiso). */
+function _guardarTrabajoCore_(d, ses) {
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
   var cats = _leerCatalogos_();
@@ -2603,6 +2593,10 @@ function onOpen() {
         .addItem('Ver accesos', 'verAccesosSocios')
         .addItem('Revocar acceso', 'revocarAccesoSocio'))
       .addSeparator()
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('ERP')
+        .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
+        .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
+        .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar'))
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
@@ -2891,7 +2885,8 @@ function instalar() {
   var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
   if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
   hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
-  _instalaIntranet_(hechos);   /* hojas de la intranet (ordenes, actividad, enlaces) */
+  _instalaIntranet_(hechos);
+  try { hechos.push(ERP.instalar()); } catch (e) { hechos.push('ERP: no se pudo instalar (' + e.message + ').'); }   /* hojas de la intranet (ordenes, actividad, enlaces) */
   tar.setFrozenRows(1);
   hechos.push(_vincularOrdenes_());
 

@@ -836,6 +836,9 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
 </div>
 </div><!-- /appDash -->
 
+<!-- ============================ ERP ============================ -->
+<?!= incluir('ErpUI') ?>
+
 <script>
 /* Clave del enlace personal de un socio (?k=...); vacia para quien entra con su cuenta. Solo se
    reenvia en las consultas de LECTURA: ninguna operacion que escriba la acepta. */
@@ -2732,6 +2735,7 @@ function ptFalla(err){
 function ptEntrar(id){
   var a = (PT ? PT.areas : []).filter(function(x){ return x.id === id; })[0];
   if (!a) { return; }
+  if (a.vista === 'erp') { abrirErp(); return; }
   if (a.vista) { abrirTablero(a.vista); return; }
   ptAbrirArea(id);
 }
