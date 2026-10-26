@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.11.1',
+  version:  '1.12.0',
   liberada: '2026-10-13',
   esquema:  7
 };
@@ -60,6 +60,8 @@ var ROLES = {
      lista:  nombre de la lista de ROLES con correos autorizados
      socios: true = los socios (solo lectura) tambien entran
      ventas: true = quien tiene permiso de Venta tambien entra
+   El acceso por correo se da en la hoja ACCESOS (columna AREAS) o en las listas ROLES.*: nada se abre
+   por tener un rol de captura o de ventas; cada modulo se da de forma explicita.
    Un enlace personal puede traer areas extra (menu Produccion > Accesos por enlace).
    modulos: tarjetas dentro del area. estado: 'activo' (tiene destino), 'proximamente'.
    planeados: texto de lo que se va a construir (solo se muestra como pista). */
@@ -78,14 +80,14 @@ var AREAS = [
     acceso: { todos: true }, modulos: [], planeados: [] },
   { id: 'operaciones', nombre: 'Operaciones', icono: 'engrane',
     desc: 'Producción, mantenimiento, inventario, entregas e instalaciones.',
-    acceso: { roles: ['CAPTURA'], lista: 'OPERACIONES', socios: true }, modulos: [],
+    acceso: { roles: [], lista: 'OPERACIONES', socios: true }, modulos: [],
     planeados: ['Órdenes de producción', 'Bitácoras de mantenimiento', 'Bitácoras de trabajo diario',
                 'Control de inventario', 'Control de entregas', 'Control de instalaciones'] },
   { id: 'comercial', nombre: 'Comercial', icono: 'negocio',
     desc: 'Vendedores, órdenes de venta y órdenes de compra de clientes.',
-    acceso: { roles: ['CAPTURA'], lista: 'COMERCIAL', socios: true, ventas: true },
+    acceso: { roles: [], lista: 'COMERCIAL', socios: true },
     modulos: [
-      { id: 'dash-com', nombre: 'Dashboard comercial', estado: 'activo', destino: 'dashboard',
+      { id: 'dash-com', nombre: 'Dashboard comercial', estado: 'activo', destino: 'dashboard', requiere: 'venta',
         desc: 'Ventas, ticket promedio, comparativos y cobranza en el Dashboard BFp.' },
       { id: 'competencia', nombre: 'Tablero de competencia', estado: 'proximamente',
         desc: 'Ranking de vendedores por ventas y actividad.' },
@@ -113,6 +115,7 @@ function _accesoArea_(ses, area) {
   if (a.socios && ses.rol === 'SOCIO') { return true; }
   if (a.ventas && ses.venta) { return true; }
   if (ses.extra && ses.extra.indexOf(area.id) >= 0) { return true; }
+  if (!ses.porClave) { var ac = _accesoDeCorreo_(ses.correo); if (ac && ac.areas.indexOf(area.id) >= 0) { return true; } }
   if (a.lista && !ses.porClave && ses.correo && _enLista_(ROLES[a.lista] || [], ses.correo)) { return true; }
   return false;
 }
@@ -218,8 +221,9 @@ function portalInicio(clave) {
   var areas = [];
   for (var i = 0; i < AREAS.length; i++) {
     var a = AREAS[i];
-    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '',
-                 acceso: _accesoArea_(ses, a) });
+    /* Lo que no tienes NO se manda: ni el nombre del modulo llega al navegador. */
+    if (!_accesoArea_(ses, a)) { continue; }
+    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '', acceso: true });
   }
   return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol, porSesion: !!ses.porSesion }, areas: areas };
 }
@@ -229,12 +233,18 @@ function portalArea(id, clave) {
   var a = _areaPorId_(String(id || ''));
   if (!a) { throw new Error('Area desconocida.'); }
   if (!_accesoArea_(ses, a)) {
+    /* misma respuesta que para un area que no existe: no revela que el modulo existe */
     _bitacora_(ses.correo, 'ACCESO_NEGADO', 'area=' + a.id + ' rol=' + ses.rol);
-    throw new Error('Esta área tiene acceso restringido.');
+    throw new Error('Area desconocida.');
   }
   /* dashboard y direccion no son paginas de portal: abren el tablero; aqui solo se valida el acceso */
   if (a.vista) { return { id: a.id, vista: a.vista, nombre: a.nombre }; }
-  return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: a.modulos || [],
+  var mods = [];
+  for (var m = 0; m < (a.modulos || []).length; m++) {
+    if (a.modulos[m].requiere === 'venta' && !ses.venta) { continue; }   /* no se muestra lo que no podrias abrir */
+    mods.push(a.modulos[m]);
+  }
+  return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: mods,
            planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
 
@@ -252,6 +262,8 @@ function _rolPorCorreo_(correo) {
   if (!correo) { return null; }
   if (_enLista_(ROLES.MASTER, correo))  { return 'MASTER'; }
   if (_enLista_(ROLES.CAPTURA, correo)) { return 'CAPTURA'; }
+  var ac = _accesoDeCorreo_(correo);
+  if (ac && ac.capturar) { return 'CAPTURA'; }
   if (_enLista_(ROLES.SOCIOS, correo))  { return 'SOCIO'; }
   if (_enLista_(ROLES.VENTAS, correo))  { return 'LECTOR'; }
   return null;
@@ -288,7 +300,7 @@ function _identidad_(clave) {
   var rolCorreo = _rolPorCorreo_(correo);
   if (rolCorreo) {
     var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo) ||
-                _enLista_(ROLES.DIRECCION, correo);
+                _enLista_(ROLES.DIRECCION, correo) || _ventaPorAcceso_(correo);
     return { correo: correo, rol: rolCorreo, venta: venta, porSesion: porSesion };
   }
   if (!porSesion && clave) {
@@ -302,7 +314,13 @@ function _identidad_(clave) {
   }
   if (!correo) { return null; }
   /* Quien esta en ROLES.DIRECCION ve la informacion de Venta (solo lectura). */
-  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo), porSesion: porSesion };
+  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo) || _ventaPorAcceso_(correo), porSesion: porSesion };
+}
+
+/* Ventas, costos y margen por la hoja ACCESOS: VER_VENTAS = SI, o area Direccion. */
+function _ventaPorAcceso_(correo) {
+  var ac = _accesoDeCorreo_(correo);
+  return !!(ac && (ac.verVentas || ac.areas.indexOf('direccion') >= 0));
 }
 
 /* ===================== ACCESO POR CORREO CON CODIGO ===================== */
@@ -324,6 +342,7 @@ function _correoPermitido_(correo) {
   var dom = correo.slice(correo.lastIndexOf('@') + 1);
   var doms = ROLES.DOMINIOS || [];
   for (var i = 0; i < doms.length; i++) { if (String(doms[i]).toLowerCase().trim() === dom) { return true; } }
+  if (_accesoDeCorreo_(correo)) { return true; }   /* aparece en la hoja ACCESOS */
   var listas = ['MASTER', 'CAPTURA', 'VENTAS', 'SOCIOS', 'DIRECCION', 'FINANZAS', 'COMERCIAL', 'OPERACIONES', 'ACCESO_EXTRA'];
   for (var k = 0; k < listas.length; k++) { if (_enLista_(ROLES[listas[k]] || [], correo)) { return true; } }
   return false;
@@ -602,7 +621,7 @@ function _normCat_(t) {
 var CACHE_CATALOGOS_SEG = 300;
 
 function _limpiaCacheCatalogos_() {
-  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema, 'capacidad_v' + JG_SELLO.esquema]);
+  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema, 'capacidad_v' + JG_SELLO.esquema, 'accesos_v' + JG_SELLO.esquema]);
 }
 
 function _leerCatalogos_() {
@@ -3051,7 +3070,7 @@ function refrescarCatalogos() {
 function onEdit(e) {
   try {
     var n = (e && e.range) ? e.range.getSheet().getName() : '';
-    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS || n === CFG.HOJA_CAPACIDAD) { _limpiaCacheCatalogos_(); }
+    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS || n === CFG.HOJA_CAPACIDAD || n === 'ACCESOS') { _limpiaCacheCatalogos_(); }
   } catch (err) { /* nunca estorba la edicion */ }
 }
 
