@@ -416,6 +416,23 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
 @keyframes ptgira{to{transform:rotate(360deg)}}
 .pt-err{background:#FDECEA; color:#7A1F14; border:1px solid #F3C6C0; border-radius:16px; padding:18px 22px; font-size:14px; line-height:1.55; margin-top:30px}
 .pt-err b{display:block; margin-bottom:4px; font-size:15px}
+.pt-login{max-width:480px; margin-top:36px; background:#fff; border:1.5px solid #E1E7F4; border-radius:26px; padding:30px 30px 26px; box-shadow:0 14px 34px rgba(23,62,129,.10)}
+.pt-login h2{margin:0 0 6px; font-family:'Khand','Poppins',sans-serif; font-weight:700; font-size:32px; text-transform:uppercase; line-height:1; color:var(--indigo)}
+.pt-login p{margin:0 0 18px; font-size:14px; line-height:1.6; color:#5A6285}
+.pt-login label{display:block; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--azul-b); margin-bottom:6px}
+.pt-login input{width:100%; font:inherit; font-size:16px; padding:13px 15px; border:1.5px solid #CBD4EC; border-radius:14px; color:var(--indigo); background:#fff; transition:border-color .15s, box-shadow .15s}
+.pt-login input:focus{outline:none; border-color:var(--naranja); box-shadow:0 0 0 3px rgba(223,74,16,.18)}
+.pt-login #ptCod{letter-spacing:10px; font-size:26px; font-weight:700; text-align:center}
+.pt-btn{display:inline-flex; align-items:center; justify-content:center; gap:9px; width:100%; margin-top:16px; background:var(--naranja); color:#fff; border:none; border-radius:999px;
+  padding:13px 22px; font:inherit; font-weight:700; font-size:15px; cursor:pointer; transition:background .15s, transform .08s}
+.pt-btn:hover:not(:disabled){background:var(--naranja-d)}
+.pt-btn:disabled{opacity:.6; cursor:wait}
+.pt-link{background:none; border:none; padding:6px 2px; font:inherit; font-size:13px; font-weight:600; color:var(--azul-b); cursor:pointer; text-decoration:underline}
+.pt-link:disabled{color:#9AA2BC; cursor:default; text-decoration:none}
+.pt-msg{margin-top:14px; font-size:13px; line-height:1.55; padding:11px 14px; border-radius:12px; background:var(--azul-t); color:var(--azul)}
+.pt-msg.err{background:#FDECEA; color:#7A1F14}
+.pt-login .pt-doms{margin-top:18px; font-size:12px; color:#8A92B2}
+.pt-quien a{color:#FFC9AD; font-weight:600; margin-left:6px; text-decoration:underline; cursor:pointer}
 .pt-pie{padding:6px 32px 28px; text-align:center; font-size:12px; color:#8A92B2; position:relative; z-index:2}
 #ptToast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px); background:var(--indigo); color:#fff; padding:13px 22px; border-radius:14px;
   font-size:13.5px; opacity:0; pointer-events:none; transition:all .25s; z-index:300; max-width:90vw; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,.25)}
@@ -445,13 +462,36 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
       <div class="pt-vr" aria-hidden="true"></div>
       <div class="pt-tit">
         <h1>Bienvenido a la Intranet</h1>
-        <p class="pt-sub"><span class="pt-cuadros" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Selecciona el área</p>
+        <p class="pt-sub"><span class="pt-cuadros" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="ptSubTxt">Selecciona el área</span></p>
       </div>
     </section>
     <div id="ptInicio">
       <div class="pt-estado" id="ptCarga"><div class="pt-spin"></div>Cargando tu intranet…</div>
       <div class="pt-tiles pt-oculto" id="ptTiles"></div>
     </div>
+    <section class="pt-login pt-oculto" id="ptLogin">
+      <div id="ptPaso1">
+        <h2>Accede a tu intranet</h2>
+        <p>Escribe tu correo corporativo y te enviamos un código de 6 dígitos. No necesitas contraseña.</p>
+        <label for="ptCorreo">Correo</label>
+        <input type="email" id="ptCorreo" autocomplete="email" inputmode="email" placeholder="nombre@empresa.com" onkeydown="if(event.key==='Enter'){ptPedirCodigo()}">
+        <button type="button" class="pt-btn" id="ptBtnPedir" onclick="ptPedirCodigo()">Enviar código</button>
+      </div>
+      <div id="ptPaso2" class="pt-oculto">
+        <h2>Revisa tu correo</h2>
+        <p id="ptPaso2Txt"></p>
+        <label for="ptCod">Código</label>
+        <input type="text" id="ptCod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" onkeydown="if(event.key==='Enter'){ptVerificarCodigo()}">
+        <button type="button" class="pt-btn" id="ptBtnVer" onclick="ptVerificarCodigo()">Entrar</button>
+        <div style="display:flex; justify-content:space-between; margin-top:10px">
+          <button type="button" class="pt-link" id="ptBtnRe" onclick="ptPedirCodigo(true)">Reenviar código</button>
+          <button type="button" class="pt-link" onclick="ptCambiarCorreo()">Usar otro correo</button>
+        </div>
+      </div>
+      <div id="ptLoginMsg"></div>
+      <div class="pt-doms" id="ptDoms"></div>
+    </section>
+
     <section class="pt-oculto" id="ptArea" aria-live="polite"></section>
     <div id="ptFalla"></div>
   </main>
@@ -800,6 +840,11 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
 /* Clave del enlace personal de un socio (?k=...); vacia para quien entra con su cuenta. Solo se
    reenvia en las consultas de LECTURA: ninguna operacion que escriba la acepta. */
 var CLAVE = <?!= clave ?>;
+/* Sesion por codigo: el navegador la guarda (si puede) y no vuelve a pedir el codigo por 30 dias. */
+var SES_KEY = 'bfp_sesion_v1';
+function sesionGuardada(){ try { return window.localStorage.getItem(SES_KEY) || ''; } catch (e) { return ''; } }
+function sesionGuardar(t){ try { if (t) { window.localStorage.setItem(SES_KEY, t); } else { window.localStorage.removeItem(SES_KEY); } } catch (e) { /* sin almacenamiento: pedira codigo cada vez */ } }
+if (!CLAVE) { CLAVE = sesionGuardada(); }
 var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>;
 var MODO = 'dashboard';     /* 'dashboard' (todo) o 'direccion' (informativo, seleccion de lo anterior) */
 var DASH_LISTO = false;     /* el tablero se carga la primera vez que se entra */
@@ -1100,6 +1145,7 @@ function pintaSubBar(){
 
 /* ---------- carga ---------- */
 function fallaInicial(err){
+  if (esSesionPerdida(err)) { return sesionPerdida(); }
   overlay(false); pill(false);
   document.getElementById('btnRef').disabled = false;
   var m = (err && err.message) ? err.message : 'Error desconocido';
@@ -2012,7 +2058,7 @@ function abrirAlta(){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');
     })
-    .cargarCatalogos();
+    .cargarCatalogos(CLAVE);
 }
 function mostrarAlta(){
   opciones('f_maquina',  CATS.MAQUINA  || [], true);
@@ -2097,7 +2143,7 @@ function guardar(){
       btn.disabled = false; btn.textContent = 'Guardar trabajo';
       toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
     })
-    .guardarTrabajo(d);
+    .guardarTrabajo(d, CLAVE);
 }
 
 /* =====================================================================
@@ -2145,6 +2191,7 @@ function pedirCom(primera, silencioso){
       if (!primera && !silencioso) { toast('Comercial actualizado en ' + res.ms + ' ms', 'ok'); }
     })
     .withFailureHandler(function(err){
+      if (esSesionPerdida(err)) { return sesionPerdida(); }
       overlay(false); pill(false);
       var m = (err && err.message) ? err.message : 'Error desconocido';
       document.getElementById('bannerV').innerHTML =
@@ -2371,7 +2418,7 @@ function conCatalogosV(fn){
       pill(false);
       toast((err && err.message) ? err.message : 'No se pudieron cargar los catalogos', 'err');
     })
-    .cargarCatalogosVenta();
+    .cargarCatalogosVenta(CLAVE);
 }
 function lista(id, arr){
   var h = '';
@@ -2435,7 +2482,7 @@ function guardarV(){
       btn.disabled = false; btn.textContent = 'Guardar venta';
       toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
     })
-    .guardarVenta(d);
+    .guardarVenta(d, CLAVE);
 }
 
 /* ---------- proyectos: buscar y editar ---------- */
@@ -2531,7 +2578,7 @@ function guardarEdit(){
       btn.disabled = false; btn.textContent = 'Guardar cambios';
       toast((err && err.message) ? err.message : 'No se pudo guardar', 'err');
     })
-    .actualizarVenta(d);
+    .actualizarVenta(d, CLAVE);
 }
 
 var tRes = null;
@@ -2564,9 +2611,96 @@ var PT_EXTERNO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6
 var PT_ROL = { MASTER: 'Administrador', CAPTURA: 'Captura', SOCIO: 'Socio', LECTOR: 'Colaborador' };
 function ptToast(m){ var t = document.getElementById('ptToast'); t.textContent = m; t.className = 'on'; clearTimeout(ptToast.h); ptToast.h = setTimeout(function(){ t.className = ''; }, 3800); }
 
-function ptInicioPinta(info){
+function esSesionPerdida(err){ return !!(err && err.message && /No se pudo identificar/.test(err.message)); }
+function sesionPerdida(){
+  /* la sesion venció o se cerró: de vuelta al inicio, que pedirá el código */
+  overlay(false); pill(false);
+  sesionGuardar(''); CLAVE = '';
+  DASH_LISTO = false; D = null; CO = null; OP = null; SUB = [];
+  document.getElementById('appDash').className = 'oculto';
+  document.getElementById('appPortal').className = '';
+  ptVolver();
+  ptReinicia('Tu sesión venció. Entra de nuevo con tu correo.');
+}
+function cerrarSesion(){
+  sesionGuardar(''); CLAVE = '';
+  DASH_LISTO = false; D = null; CO = null; OP = null; SUB = [];
+  ptReinicia('');
+}
+function ptReinicia(aviso){
+  document.getElementById('ptTiles').className = 'pt-tiles pt-oculto';
+  document.getElementById('ptCarga').className = 'pt-estado';
+  document.getElementById('ptQuien').innerHTML = '';
+  google.script.run.withSuccessHandler(function(info){ ptInicioPinta(info, aviso); }).withFailureHandler(ptFalla).portalInicio(CLAVE);
+}
+
+/* ---- acceso por correo con codigo ---- */
+var LG = { correo: '', t: null };
+function ptMsg(txt, err){
+  document.getElementById('ptLoginMsg').innerHTML = txt ? '<div class="pt-msg' + (err ? ' err' : '') + '" role="status">' + esc(txt) + '</div>' : '';
+}
+function ptMostrarLogin(info, aviso){
+  document.getElementById('ptCarga').className = 'pt-oculto';
+  document.getElementById('ptTiles').className = 'pt-tiles pt-oculto';
+  document.getElementById('ptSubTxt').textContent = 'Ingresa con tu correo';
+  document.getElementById('ptLogin').className = 'pt-login';
+  document.getElementById('ptPaso1').className = '';
+  document.getElementById('ptPaso2').className = 'pt-oculto';
+  document.getElementById('ptDoms').textContent = (info.dominios && info.dominios.length)
+    ? 'Correos habilitados: ' + info.dominios.map(function(d){ return '@' + d; }).join(', ') + '. ¿Tu correo es de otro dominio? Pide que te den acceso.' : '';
+  ptMsg(aviso || '', false);
+  setTimeout(function(){ var e = document.getElementById('ptCorreo'); if (e) { e.focus(); } }, 50);
+}
+function ptPedirCodigo(reenvio){
+  var c = (reenvio ? LG.correo : document.getElementById('ptCorreo').value).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c)) { ptMsg('Escribe un correo válido.', true); return; }
+  var b1 = document.getElementById('ptBtnPedir'), b2 = document.getElementById('ptBtnRe');
+  b1.disabled = true; b2.disabled = true; b1.textContent = 'Enviando…'; ptMsg('', false);
+  google.script.run
+    .withSuccessHandler(function(r){
+      b1.disabled = false; b1.textContent = 'Enviar código';
+      LG.correo = c;
+      document.getElementById('ptPaso1').className = 'pt-oculto';
+      document.getElementById('ptPaso2').className = '';
+      document.getElementById('ptPaso2Txt').textContent = r.mensaje;
+      document.getElementById('ptCod').value = '';
+      var seg = 45; b2.disabled = true; clearInterval(LG.t);
+      LG.t = setInterval(function(){ seg--; if (seg <= 0) { clearInterval(LG.t); b2.disabled = false; b2.textContent = 'Reenviar código'; } else { b2.textContent = 'Reenviar en ' + seg + ' s'; } }, 1000);
+      setTimeout(function(){ document.getElementById('ptCod').focus(); }, 50);
+    })
+    .withFailureHandler(function(err){ b1.disabled = false; b1.textContent = 'Enviar código'; b2.disabled = false; ptMsg((err && err.message) || 'No se pudo enviar el código.', true); })
+    .solicitarCodigo(c);
+}
+function ptVerificarCodigo(){
+  var k = document.getElementById('ptCod').value.replace(/\D/g, '');
+  if (k.length !== 6) { ptMsg('Escribe los 6 dígitos del código.', true); return; }
+  var b = document.getElementById('ptBtnVer'); b.disabled = true; b.textContent = 'Verificando…'; ptMsg('', false);
+  google.script.run
+    .withSuccessHandler(function(r){
+      b.disabled = false; b.textContent = 'Entrar';
+      clearInterval(LG.t);
+      CLAVE = r.token; sesionGuardar(r.token);
+      document.getElementById('ptLogin').className = 'pt-login pt-oculto';
+      document.getElementById('ptCarga').className = 'pt-estado';
+      google.script.run.withSuccessHandler(ptInicioPinta).withFailureHandler(ptFalla).portalInicio(CLAVE);
+    })
+    .withFailureHandler(function(err){ b.disabled = false; b.textContent = 'Entrar'; ptMsg((err && err.message) || 'No se pudo verificar el código.', true); })
+    .verificarCodigo(LG.correo, k);
+}
+function ptCambiarCorreo(){
+  clearInterval(LG.t);
+  document.getElementById('ptPaso1').className = '';
+  document.getElementById('ptPaso2').className = 'pt-oculto';
+  ptMsg('', false);
+}
+
+function ptInicioPinta(info, aviso){
+  if (info.login) { ptMostrarLogin(info, typeof aviso === 'string' ? aviso : ''); return; }
+  document.getElementById('ptLogin').className = 'pt-login pt-oculto';
+  document.getElementById('ptSubTxt').textContent = 'Selecciona el área';
   PT = info;
-  document.getElementById('ptQuien').innerHTML = '<b>' + esc(info.ses.correo) + '</b>' + esc(PT_ROL[info.ses.rol] || info.ses.rol);
+  document.getElementById('ptQuien').innerHTML = '<b>' + esc(info.ses.correo) + '</b>' + esc(PT_ROL[info.ses.rol] || info.ses.rol) +
+    (info.ses.porSesion ? ' · <a onclick="cerrarSesion()" role="button">Cerrar sesión</a>' : '');
   var h = '';
   info.areas.forEach(function(a){
     var cuerpo = ptIco(a.acceso ? a.icono : 'candado') + '<h2>' + esc(a.nombre) + '</h2><p>' + esc(a.desc) + '</p>' +
@@ -2590,6 +2724,7 @@ function ptInicioPinta(info){
 }
 function ptSinAcceso(n){ ptToast('No tienes acceso a ' + n + '. Si lo necesitas, solicítalo a la administración.'); }
 function ptFalla(err){
+  if (esSesionPerdida(err)) { return sesionPerdida(); }
   var m = (err && err.message) ? err.message : 'Error desconocido';
   document.getElementById('ptCarga').className = 'pt-oculto';
   document.getElementById('ptFalla').innerHTML = '<div class="pt-err"><b>No se pudo cargar la intranet.</b>' + esc(m) + '</div>';

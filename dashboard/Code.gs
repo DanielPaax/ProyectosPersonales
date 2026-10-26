@@ -2,7 +2,7 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.10.1',
+  version:  '1.11.0',
   liberada: '2026-10-13',
   esquema:  7
 };
@@ -39,6 +39,14 @@ var ROLES = {
   SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx'],
   /* Areas de la intranet: correos con acceso ademas de MASTER. Se llenan "mas adelante". */
   DIRECCION:   [],
+  /* ACCESO POR CORREO CON CODIGO: quien NO es del Workspace del dueño (Google no entrega su
+     correo) entra escribiendo su correo y un codigo de 6 digitos que recibe por email. Pueden
+     pedirlo todos los correos de estos DOMINIOS y los correos sueltos de ACCESO_EXTRA (o de
+     cualquier lista de roles). Su rol sale de las mismas listas de arriba; sin lista = LECTOR.
+     BLOQUEADOS nunca entran. */
+  DOMINIOS:     ['gpowib.com', 'bfprint.com.mx', 'imjmedia.com.mx'],
+  ACCESO_EXTRA: [],
+  BLOQUEADOS:   [],
   /* FINANZAS: solo MASTER y los correos de esta lista (los socios NO entran, salvo que se les dé el área). */
   FINANZAS:    [],
   COMERCIAL:   [],
@@ -204,7 +212,8 @@ function doGet(e) {
 /* ---- API del portal ---- */
 
 function portalInicio(clave) {
-  var ses = _ses_(clave);
+  var ses = _identidad_(clave);
+  if (!ses) { return { login: true, dominios: (ROLES.DOMINIOS || []).slice(), sello: JG_SELLO }; }
   if (ses.porClave) { _bitacora_(ses.correo, 'ACCESO_PORTAL', 'enlace personal'); }
   var areas = [];
   for (var i = 0; i < AREAS.length; i++) {
@@ -212,7 +221,7 @@ function portalInicio(clave) {
     areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '',
                  acceso: _accesoArea_(ses, a) });
   }
-  return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol }, areas: areas };
+  return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol, porSesion: !!ses.porSesion }, areas: areas };
 }
 
 function portalArea(id, clave) {
@@ -251,15 +260,38 @@ function _rolPorCorreo_(correo) {
 /* Identidad y rol, SIEMPRE en el servidor. `clave` es el enlace personal de un
    socio; solo la reciben las consultas de LECTURA: nada que escriba la acepta,
    asi que una clave jamas permite modificar datos. */
-function _ses_(clave) {
-  var correo = _correoActual_();
+function _ses_(clave, escribe) {
+  var ses = _identidad_(clave);
+  if (!ses) {
+    /* Pasa cuando Google no entrega el correo (usuario fuera del Workspace del dueño) y no hay
+       sesion por codigo ni enlace personal. */
+    throw new Error('No se pudo identificar tu cuenta. Abre la intranet y entra con tu correo corporativo ' +
+      '(te enviamos un código), o usa el enlace personal que te enviaron.');
+  }
+  /* Un enlace personal es solo de LECTURA; la sesion por codigo escribe segun el rol de su correo. */
+  if (escribe && ses.porClave) {
+    _bitacora_(ses.correo, 'ACCESO_NEGADO', 'escritura con enlace personal');
+    throw new Error('Sin autorizacion para esta accion.');
+  }
+  return ses;
+}
+
+/* Quien eres, o null. Orden: cuenta de Google del mismo Workspace > sesion por codigo >
+   enlace personal. */
+function _identidad_(clave) {
+  var correo = _correoActual_(), porSesion = false;
+  if (!correo && clave && /^s1\./.test(String(clave))) {
+    var t = _leerToken_(clave);
+    if (t) { correo = t.e; porSesion = true; }
+  }
+  if (correo && _enLista_(ROLES.BLOQUEADOS || [], correo)) { return null; }
   var rolCorreo = _rolPorCorreo_(correo);
   if (rolCorreo) {
     var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo) ||
                 _enLista_(ROLES.DIRECCION, correo);
-    return { correo: correo, rol: rolCorreo, venta: venta };
+    return { correo: correo, rol: rolCorreo, venta: venta, porSesion: porSesion };
   }
-  if (clave) {
+  if (!porSesion && clave) {
     var socio = _socioPorClave_(clave);
     if (socio) {
       /* perfil SOCIO (ve todo, solo lectura) o LECTOR (empleado: solo produccion); a = areas extra */
@@ -268,14 +300,156 @@ function _ses_(clave) {
                venta: perfil === 'SOCIO' || (socio.a || []).indexOf('direccion') >= 0, porClave: true, extra: socio.a || [] };
     }
   }
-  if (!correo) {
-    /* Pasa cuando Google no entrega el correo: el usuario esta fuera del
-       Workspace del dueño. Sin correo ni enlace personal no hay sesion. */
-    throw new Error('No se pudo identificar tu cuenta. Si eres socio, abre el enlace personal que te enviaron ' +
-      '(termina en ?k=...). Si trabajas en la empresa, abre la aplicacion con tu cuenta del dominio.');
-  }
+  if (!correo) { return null; }
   /* Quien esta en ROLES.DIRECCION ve la informacion de Venta (solo lectura). */
-  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo) };
+  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo), porSesion: porSesion };
+}
+
+/* ===================== ACCESO POR CORREO CON CODIGO ===================== */
+/* Para quien Google no identifica (otro dominio): escribe su correo, recibe un codigo de 6
+   digitos por email, lo teclea y listo. El navegador guarda una SESION firmada (30 dias) y no
+   vuelve a pedirlo. La sesion es un testigo firmado con HMAC (sin guardar nada por usuario);
+   se revoca por correo o para todos. El rol sale de las listas de ROLES por correo. */
+var SESION_DIAS = 30;
+var CODIGO_MINUTOS = 10;
+var CODIGOS_POR_HORA_CORREO = 5;
+var CODIGOS_POR_HORA_TOTAL = 80;
+var INTENTOS_CODIGO = 5;
+
+/* ¿Este correo puede entrar por codigo? Dominio autorizado, o aparece en alguna lista. */
+function _correoPermitido_(correo) {
+  correo = String(correo || '').toLowerCase().trim();
+  if (!correo || correo.indexOf('@') < 0) { return false; }
+  if (_enLista_(ROLES.BLOQUEADOS || [], correo)) { return false; }
+  var dom = correo.slice(correo.lastIndexOf('@') + 1);
+  var doms = ROLES.DOMINIOS || [];
+  for (var i = 0; i < doms.length; i++) { if (String(doms[i]).toLowerCase().trim() === dom) { return true; } }
+  var listas = ['MASTER', 'CAPTURA', 'VENTAS', 'SOCIOS', 'DIRECCION', 'FINANZAS', 'COMERCIAL', 'OPERACIONES', 'ACCESO_EXTRA'];
+  for (var k = 0; k < listas.length; k++) { if (_enLista_(ROLES[listas[k]] || [], correo)) { return true; } }
+  return false;
+}
+
+function _secretoSesion_() {
+  var p = PropertiesService.getScriptProperties(), x = p.getProperty('sesion_secreto');
+  if (!x) { x = Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid(); p.setProperty('sesion_secreto', x); }
+  return x;
+}
+function _b64u_(bytesOTexto) { return Utilities.base64EncodeWebSafe(bytesOTexto).replace(/=+$/, ''); }
+function _firma_(texto) { return _b64u_(Utilities.computeHmacSha256Signature(texto, _secretoSesion_())); }
+
+function _crearToken_(correo) {
+  var ahora = Math.floor(new Date().getTime() / 1000);
+  var carga = _b64u_(JSON.stringify({ e: correo, i: ahora, x: ahora + SESION_DIAS * 86400 }));
+  return 's1.' + carga + '.' + _firma_('s1.' + carga);
+}
+
+/* {e, i, x} si el testigo es autentico, vigente, no revocado y su correo sigue autorizado; si no, null. */
+function _leerToken_(token) {
+  try {
+    var partes = String(token || '').split('.');
+    if (partes.length !== 3 || partes[0] !== 's1') { return null; }
+    if (_firma_('s1.' + partes[1]) !== partes[2]) { return null; }
+    var b = partes[1]; while (b.length % 4) { b += '='; }
+    var d = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(b)).getDataAsString());
+    var ahora = Math.floor(new Date().getTime() / 1000);
+    if (!d || !d.e || !(d.x > ahora)) { return null; }
+    var p = PropertiesService.getScriptProperties();
+    if (d.i < Number(p.getProperty('sesion_desde') || 0)) { return null; }
+    var rev = {}; try { rev = JSON.parse(p.getProperty('sesion_revocadas') || '{}'); } catch (e) { rev = {}; }
+    if (rev[d.e] && d.i < rev[d.e]) { return null; }
+    if (!_correoPermitido_(d.e)) { return null; }
+    return d;
+  } catch (e) { return null; }
+}
+
+function _enviaCodigo_(correo, codigo) {
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#242191">' +
+    '<div style="background:#0D3894;color:#fff;padding:16px 22px;border-radius:12px 12px 0 0;font-size:18px;font-weight:bold">Intranet BIG FOOT print</div>' +
+    '<div style="border:1px solid #E1E7F4;border-top:none;border-radius:0 0 12px 12px;padding:22px">' +
+    '<p style="margin:0 0 6px">Tu código de acceso es:</p>' +
+    '<p style="font-size:36px;letter-spacing:10px;font-weight:bold;color:#DF4A10;margin:8px 0 14px">' + codigo + '</p>' +
+    '<p style="margin:0;font-size:13px;color:#5A6285">Vale ' + CODIGO_MINUTOS + ' minutos y solo se puede usar una vez. ' +
+    'Si no lo pediste, ignora este mensaje: nadie puede entrar sin él.</p></div></div>';
+  MailApp.sendEmail({ to: correo, subject: 'Tu código de acceso a la Intranet BIG FOOT print: ' + codigo,
+    htmlBody: html, body: 'Tu código de acceso a la Intranet BIG FOOT print es ' + codigo + '. Vale ' + CODIGO_MINUTOS + ' minutos.',
+    name: 'Intranet BIG FOOT print', noReply: true });
+}
+
+function _codigoAleatorio_() {
+  var n = parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000;
+  var t = String(n); while (t.length < 6) { t = '0' + t; }
+  return t;
+}
+
+/* Publica (la llama la pantalla de acceso). Responde igual exista o no el correo: no revela quien tiene acceso. */
+function solicitarCodigo(correo) {
+  var c = String(correo || '').trim().toLowerCase();
+  if (c.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c)) { throw new Error('Escribe un correo válido.'); }
+  var generico = { ok: true, mensaje: 'Si tu correo está autorizado, te enviamos un código de 6 dígitos (revisa también spam). Vale ' + CODIGO_MINUTOS + ' minutos.' };
+  var cache = CacheService.getScriptCache(), hc = _hash_(c).slice(0, 24);
+  var nCorreo = Number(cache.get('otpn_' + hc) || 0);
+  var hora = String(Math.floor(new Date().getTime() / 3600000)), nTotal = Number(cache.get('otpt_' + hora) || 0);
+  if (nCorreo >= CODIGOS_POR_HORA_CORREO) { return generico; }
+  if (nTotal >= CODIGOS_POR_HORA_TOTAL) { throw new Error('Hay demasiadas solicitudes en este momento. Intenta de nuevo en unos minutos.'); }
+  cache.put('otpn_' + hc, String(nCorreo + 1), 3600);
+  cache.put('otpt_' + hora, String(nTotal + 1), 3600);
+  if (!_correoPermitido_(c)) { _bitacora_(c, 'CODIGO_RECHAZADO', 'correo no autorizado'); return generico; }
+  var codigo = _codigoAleatorio_();
+  cache.put('otp_' + hc, JSON.stringify({ h: _hash_(codigo + '|' + c + '|' + _secretoSesion_()), n: 0 }), CODIGO_MINUTOS * 60);
+  _enviaCodigo_(c, codigo);
+  _bitacora_(c, 'CODIGO_ENVIADO', '');
+  return generico;
+}
+
+/* Publica. Si el codigo es correcto devuelve la sesion que el navegador guarda. */
+function verificarCodigo(correo, codigo) {
+  var c = String(correo || '').trim().toLowerCase(), k = String(codigo || '').replace(/\D/g, '');
+  var cache = CacheService.getScriptCache(), hc = _hash_(c).slice(0, 24), clave = 'otp_' + hc;
+  var rec = null; try { rec = JSON.parse(cache.get(clave) || 'null'); } catch (e) { rec = null; }
+  if (!rec) { throw new Error('El código venció o no existe. Pide uno nuevo.'); }
+  if (rec.n >= INTENTOS_CODIGO) { cache.remove(clave); throw new Error('Demasiados intentos. Pide un código nuevo.'); }
+  if (_hash_(k + '|' + c + '|' + _secretoSesion_()) !== rec.h) {
+    rec.n++;
+    cache.put(clave, JSON.stringify(rec), CODIGO_MINUTOS * 60);
+    _bitacora_(c, 'CODIGO_INCORRECTO', 'intento ' + rec.n);
+    throw new Error('Código incorrecto. Te quedan ' + Math.max(INTENTOS_CODIGO - rec.n, 0) + ' intentos.');
+  }
+  cache.remove(clave);
+  if (!_correoPermitido_(c)) { throw new Error('Este correo no tiene acceso a la intranet.'); }
+  _bitacora_(c, 'LOGIN_CODIGO', 'sesion de ' + SESION_DIAS + ' dias');
+  return { ok: true, token: _crearToken_(c), correo: c, dias: SESION_DIAS };
+}
+
+/* Menu: Produccion > Acceso por correo. Solo MASTER. */
+function cerrarSesionesCorreo() {
+  var ses = _exigeMasterMenu_(), ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Cerrar sesiones', 'Correo cuya sesión quieres cerrar (en todos sus navegadores):', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) { return; }
+  var c = String(r.getResponseText() || '').trim().toLowerCase();
+  if (!c) { return; }
+  var p = PropertiesService.getScriptProperties(), rev = {};
+  try { rev = JSON.parse(p.getProperty('sesion_revocadas') || '{}'); } catch (e) { rev = {}; }
+  rev[c] = Math.floor(new Date().getTime() / 1000) + 1;
+  p.setProperty('sesion_revocadas', JSON.stringify(rev));
+  _bitacora_(ses.correo, 'CIERRA_SESIONES', c);
+  ui.alert('Cerrar sesiones', 'Listo: las sesiones de ' + c + ' dejan de funcionar. Para entrar de nuevo tendrá que pedir un código.', ui.ButtonSet.OK);
+}
+
+function cerrarTodasSesiones() {
+  var ses = _exigeMasterMenu_(), ui = SpreadsheetApp.getUi();
+  var r = ui.alert('Cerrar TODAS las sesiones', 'Todas las personas que entraron con código tendrán que pedir uno nuevo. ¿Continuar?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) { return; }
+  PropertiesService.getScriptProperties().setProperty('sesion_desde', String(Math.floor(new Date().getTime() / 1000) + 1));
+  _bitacora_(ses.correo, 'CIERRA_TODAS_SESIONES', '');
+  ui.alert('Cerrar sesiones', 'Listo.', ui.ButtonSet.OK);
+}
+
+/* Menu: manda un codigo de PRUEBA a tu correo. La primera vez Google pide autorizar el envio de correos. */
+function probarEnvioCodigo() {
+  var ses = _exigeMasterMenu_(), ui = SpreadsheetApp.getUi();
+  _enviaCodigo_(ses.correo, '000000');
+  ui.alert('Prueba de envío', 'Te mandé un correo de prueba a ' + ses.correo + ' (el código es 000000, de ejemplo). ' +
+    'Cuota diaria restante de correos: ' + MailApp.getRemainingDailyQuota() + '.', ui.ButtonSet.OK);
 }
 
 function _enLista_(lista, correo) {
@@ -1107,8 +1281,8 @@ function cargarTablero(filtros, sub, clave) {
 }
 
 
-function cargarCatalogos() {
-  var ses = _ses_();
+function cargarCatalogos(clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   return _leerCatalogos_();
 }
@@ -1191,8 +1365,8 @@ function _etiquetaSemana_(lunesIso, existentes) {
     Utilities.formatDate(fin, tz, 'dd/MM/yy');
 }
 
-function guardarTrabajo(d) {
-  var ses = _ses_();
+function guardarTrabajo(d, clave) {
+  var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
@@ -1837,8 +2011,8 @@ function _tarifaMat_(material, tar, cats) {
   return null;
 }
 
-function cargarCatalogosVenta() {
-  var ses = _ses_();
+function cargarCatalogosVenta(clave) {
+  var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
   var cats = _leerCatalogos_();
   var tar = _leerTarifas_();
@@ -1895,8 +2069,8 @@ function listarVentas(filtro, clave) {
   return { total: total, filas: res };
 }
 
-function guardarVenta(d) {
-  var ses = _ses_();
+function guardarVenta(d, clave) {
+  var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
@@ -2025,8 +2199,8 @@ function guardarVenta(d) {
 
 /* Completa el monto de un pendiente y/o la cobranza de un proyecto ya
    capturado. Solo toca estas columnas: lo demas del renglon no se edita. */
-function actualizarVenta(d) {
-  var ses = _ses_();
+function actualizarVenta(d, clave) {
+  var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
   if (!d || !d.id) { throw new Error('Falta el ID del proyecto.'); }
   var cats = _leerCatalogos_();
@@ -2370,6 +2544,10 @@ function onOpen() {
       .addItem('Revisar nombres de máquina (catalogo)', 'revisarMaquinas')
       .addItem('Renombrar máquinas (GF_Chona, HD_Mimaki…)', 'renombrarMaquinas')
       .addSeparator()
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('Acceso por correo (código)')
+        .addItem('Probar envío de código a mi correo', 'probarEnvioCodigo')
+        .addItem('Cerrar sesiones de un correo', 'cerrarSesionesCorreo')
+        .addItem('Cerrar TODAS las sesiones', 'cerrarTodasSesiones'))
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Accesos por enlace (socios / empleados)')
         .addItem('Crear acceso (enlace personal)', 'crearAccesoSocio')
         .addItem('Ver accesos', 'verAccesosSocios')
