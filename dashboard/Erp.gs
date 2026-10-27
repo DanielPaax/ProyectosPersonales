@@ -51,14 +51,14 @@ const SCHEMA = {
   CompraDetalle: ['CompraID', 'Clave', 'Cantidad', 'CostoUnit', 'Importe'],
   Pagos:         ['ID', 'Fecha', 'CompraID', 'Monto', 'Referencia', 'Usuario'],
   Cotizaciones:  ['Folio', 'Fecha', 'ClienteID', 'Cliente', 'Comercial', 'Descripcion', 'M2', 'Subtotal', 'IVA', 'Total', 'Estatus', 'ODP', 'ProximoSeguimiento', 'Notas',
-                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto'],
-  CotDetalle:    ['Folio', 'Linea', 'Descripcion', 'Ancho', 'Alto', 'Cantidad', 'M2', 'PrecioM2', 'PrecioUnit', 'Importe'],
+                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto', 'AgenteVentas', 'DescuentoPct', 'Indicaciones'],
+  CotDetalle:    ['Folio', 'Linea', 'Descripcion', 'Ancho', 'Alto', 'Cantidad', 'M2', 'PrecioM2', 'PrecioUnit', 'Importe', 'Unidad'],
   Seguimiento:   ['ID', 'Fecha', 'ClienteID', 'Cliente', 'Cotizacion', 'Comercial', 'Tipo', 'Nota', 'ProximaAccion'],
   ODP:           ['Folio', 'Fecha', 'Cotizacion', 'ClienteID', 'Cliente', 'Comercial', 'Descripcion', 'M2Vendidos', 'PrecioVenta', 'FechaEntrega', 'Estatus',
                   'Facturado', 'CostoMaterial', 'CostoTinta', 'CostoMO', 'CostoMaquila', 'CostoOtros', 'CostoTotal', 'Utilidad', 'Margen',
                   'M2Usados', 'MermaM2', 'MermaPct', 'CostoMerma', 'Factura',
                   'Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado',
-                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto'],
+                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas'],
   ODPDetalle:    ['ODP', 'Linea', 'Piezas', 'Ancho', 'Alto', 'M2', 'Material', 'Maquina', 'Archivo', 'Acabados'],
   ODPCostos:     ['ID', 'ODP', 'Fecha', 'Tipo', 'Concepto', 'Cantidad', 'CostoUnit', 'Importe', 'CompraID', 'Usuario'],
   Facturas:      ['ID', 'Fecha', 'FolioSAT', 'ClienteID', 'Cliente', 'Comercial', 'ODP', 'Subtotal', 'IVA', 'Total', 'Vencimiento', 'Cobrado', 'Saldo', 'Estatus', 'Notas'],
@@ -256,7 +256,7 @@ function a_init(u) {
       MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
       VE_COSTOS: veCostos_(u), VE_PRECIO: vePrecio_(u),
     },
-    cat: { TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
+    cat: { UNIDADES_COT: UNIDADES_COT, DESCUENTOS_COT: DESCUENTOS_COT, TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
            TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_SEG: TIPOS_SEG, ROLES_ERP: Object.keys(ROLES_ERP) },
   };
 }
@@ -613,18 +613,33 @@ function lineasDe_(hoja, k, folio) {
     .sort(function (a, b) { return num_(a.Linea) - num_(b.Linea); }).map(clean_);
 }
 
-/** Partidas de cotización: medidas en metros; si hay $/m² y medidas, el precio unitario = ancho × alto × $/m². */
+const UNIDADES_COT = ['m2', 'mtl', 'lámina', 'pz'];
+const DESCUENTOS_COT = [0, 5, 10, 15, 20, 25];
+
+/** Nombre del catalogo (CATALOGOS del Dashboard) en su forma canonica, o '' si no existe. */
+function enCatalogo_(lista, v) {
+  v = str_(v).toUpperCase();
+  return (lista || []).filter(function (x) { return String(x).toUpperCase() === v; })[0] || '';
+}
+
+/** Partidas de cotización. MATERIAL = el catalogo MATERIAL de CATALOGOS (el mismo del Dashboard y de TARIFAS).
+ *  M2 de la partida: el que capturan o, si no, ancho x alto x cantidad. Con $/m²: importe = M2 x $/m²; si no, cantidad x precio unitario. */
 function lineasCot_(arr) {
-  const out = [];
+  const out = [], mats = _leerCatalogos_().MATERIAL || [];
   (arr || []).forEach(function (l) {
     const desc = str_(l.Descripcion), an = num_(l.Ancho), al = num_(l.Alto), pm2 = num_(l.PrecioM2);
     let pu = num_(l.PrecioUnit), q = num_(l.Cantidad);
-    if (!desc && !pu && !pm2 && !an && !al) return;
-    if (!desc) throw new Error('Falta la descripción en una partida.');
+    if (!desc && !pu && !pm2 && !an && !al && !num_(l.M2)) return;
+    if (!desc) throw new Error('Falta el material en una partida.');
+    const mat = enCatalogo_(mats, desc);
+    if (!mat) throw new Error('El material "' + desc + '" no está en el catálogo MATERIAL. Elígelo de la lista.');
     if (!q) q = 1;
-    if (pm2 > 0 && an > 0 && al > 0) pu = an * al * pm2;
-    out.push({ Descripcion: desc, Ancho: an || '', Alto: al || '', Cantidad: q, M2: r4_(an * al * q), PrecioM2: pm2 || '',
-               PrecioUnit: r2_(pu), Importe: r2_(q * r2_(pu)) });
+    const m2 = num_(l.M2) > 0 ? num_(l.M2) : an * al * q;
+    const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : 'm2';
+    let imp;
+    if (pm2 > 0 && m2 > 0) { imp = r2_(m2 * pm2); pu = q ? r2_(imp / q) : imp; }
+    else { imp = r2_(q * r2_(pu)); }
+    out.push({ Descripcion: mat, Ancho: an || '', Alto: al || '', Cantidad: q, M2: r4_(m2), PrecioM2: pm2 || '', PrecioUnit: r2_(pu), Importe: imp, Unidad: uni });
   });
   return out;
 }
@@ -645,8 +660,11 @@ function a_saveCot(u, p) {
   const lineas = lineasCot_(p.lineas);
   const usaLineas = lineas.length > 0;
   const bruto = usaLineas ? r2_(sum_(lineas, 'Importe')) : r2_(num_(p.Subtotal));
-  const descu = r2_(num_(p.Descuento));
-  if (descu < 0 || descu > bruto) throw new Error('El descuento no puede ser mayor al subtotal.');
+  const pct = str_(p.DescuentoPct) === '' ? 0 : num_(p.DescuentoPct);
+  if (DESCUENTOS_COT.indexOf(pct) < 0) throw new Error('El descuento debe ser 0%, 5%, 10%, 15%, 20% o 25%.');
+  const descu = r2_(bruto * pct / 100);
+  const agente = enCatalogo_(_leerCatalogos_().VENDEDOR, req_(p.AgenteVentas, 'Agente de ventas'));
+  if (!agente) throw new Error('El agente de ventas "' + str_(p.AgenteVentas) + '" no está en el catálogo COMERCIAL de CATALOGOS.');
   const sub = r2_(bruto - descu), iva = r2_(sub * ivaRate_());
   const proyecto = str_(p.Proyecto);
   const descr = str_(p.Descripcion) || proyecto || lineas.map(function (l) { return l.Descripcion; }).join(' / ');
@@ -654,7 +672,8 @@ function a_saveCot(u, p) {
                  Descripcion: req_(descr, 'Descripción o partidas'), M2: usaLineas ? r4_(sum_(lineas, 'M2')) : num_(p.M2),
                  Subtotal: sub, IVA: iva, Total: r2_(sub + iva),
                  ProximoSeguimiento: fechaOpc_(p.ProximoSeguimiento, 'Próximo seguimiento'), Notas: str_(p.Notas),
-                 Proyecto: proyecto, TipoProyecto: str_(p.TipoProyecto), RazonSocial: str_(p.RazonSocial), Terminados: str_(p.Terminados), Descuento: descu || '' };
+                 Proyecto: proyecto, TipoProyecto: str_(p.TipoProyecto), RazonSocial: str_(p.RazonSocial), Terminados: str_(p.Terminados), Descuento: descu || '',
+                 AgenteVentas: agente, DescuentoPct: pct || '', Indicaciones: str_(p.Indicaciones) };
   let c;
   if (str_(p.Folio)) {
     c = mustFind_('Cotizaciones', 'Folio', p.Folio, 'Cotización'); ownOr_(u, c);
@@ -678,7 +697,7 @@ function a_aprobarCot(u, p) {
   if (c.Estatus === 'Rechazada') throw new Error('La cotización está rechazada.');
   const cli = find_('Clientes', 'ID', c.ClienteID) || {};
   const o = crearODP_(Object.assign(datosCliODP_(cli), {
-    Cotizacion: c.Folio, ClienteID: c.ClienteID, Cliente: c.Cliente, Comercial: c.Comercial, Descripcion: c.Descripcion, Proyecto: c.Proyecto || c.Descripcion, TipoProyecto: str_(c.TipoProyecto),
+    Cotizacion: c.Folio, ClienteID: c.ClienteID, Cliente: c.Cliente, Comercial: c.Comercial, Descripcion: c.Descripcion, Proyecto: c.Proyecto || c.Descripcion, TipoProyecto: str_(c.TipoProyecto), AgenteVentas: str_(c.AgenteVentas),
     M2Vendidos: num_(c.M2), PrecioVenta: num_(c.Subtotal), FechaEntrega: fechaOpc_(p.FechaEntrega, 'Fecha de entrega') }));
   const lin = lineasDe_('CotDetalle', 'Folio', c.Folio);
   insertMany_('ODPDetalle', lin.map(function (l, i) {
@@ -713,7 +732,7 @@ function datosCliODP_(cli) {
   return { Domicilio: str_(cli.Domicilio), Colonia: str_(cli.Colonia), Ciudad: str_(cli.Ciudad), CP: str_(cli.CP), Estado: str_(cli.Estado),
            Telefono: str_(cli.Telefono), Email: str_(cli.Email) };
 }
-const ODP_TXT = ['Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto'];
+const ODP_TXT = ['Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas'];
 
 /** Partidas de ODP: m² = piezas × ancho × alto (como en el formato). */
 function lineasODP_(arr) {
@@ -1303,9 +1322,9 @@ function ventaSyncCore_(folio) {
   const fFactura = facts.length ? facts.map(function (x) { return str_(x.Fecha); }).sort()[0] : '';
   const cobrado = facts.length > 0 && facts.every(function (x) { return num_(x.Saldo) <= 0.009; });
 
-  let vendedor = '';
+  let vendedor = enCat(cats.VENDEDOR, o.AgenteVentas);
   const us = read_('Usuarios').filter(function (x) { return str_(x.Email).toLowerCase() === str_(o.Comercial).toLowerCase(); })[0];
-  if (us) vendedor = enCat(cats.VENDEDOR, us.Nombre);
+  if (!vendedor && us) vendedor = enCat(cats.VENDEDOR, us.Nombre);
   const tipoProy = enCat(cats.TIPO_PROYECTO, o.TipoProyecto);
   const fprod = base.length ? base.map(function (b) { return b.fecha; }).sort()[0] : '';
   const cliente = str_(o.Cliente).toUpperCase().replace(/\s+/g, ' ');
