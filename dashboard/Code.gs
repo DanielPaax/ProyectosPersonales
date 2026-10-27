@@ -2,8 +2,8 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.11.0',
-  liberada: '2026-10-13',
+  version:  '1.13.0',
+  liberada: '2026-10-26',
   esquema:  7
 };
 
@@ -39,6 +39,8 @@ var ROLES = {
   SOCIOS:  ['jose.almada@gpowib.com', 'juan.almada@bfprint.com.mx', 'daniel.torres@bfprint.com.mx'],
   /* Areas de la intranet: correos con acceso ademas de MASTER. Se llenan "mas adelante". */
   DIRECCION:   [],
+  /* Dashboard BFp es restringido: solo MASTER y los correos de esta lista (o de la hoja ACCESOS, AREAS=dashboard). */
+  DASHBOARD:   [],
   /* ACCESO POR CORREO CON CODIGO: quien NO es del Workspace del dueño (Google no entrega su
      correo) entra escribiendo su correo y un codigo de 6 digitos que recibe por email. Pueden
      pedirlo todos los correos de estos DOMINIOS y los correos sueltos de ACCESO_EXTRA (o de
@@ -60,13 +62,15 @@ var ROLES = {
      lista:  nombre de la lista de ROLES con correos autorizados
      socios: true = los socios (solo lectura) tambien entran
      ventas: true = quien tiene permiso de Venta tambien entra
+   El acceso por correo se da en la hoja ACCESOS (columna AREAS) o en las listas ROLES.*: nada se abre
+   por tener un rol de captura o de ventas; cada modulo se da de forma explicita.
    Un enlace personal puede traer areas extra (menu Produccion > Accesos por enlace).
    modulos: tarjetas dentro del area. estado: 'activo' (tiene destino), 'proximamente'.
    planeados: texto de lo que se va a construir (solo se muestra como pista). */
 var AREAS = [
   { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
     desc: 'Producción y comercial: ventas, costos, merma y productividad.',
-    acceso: { todos: true }, vista: 'dashboard' },
+    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
   { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
     desc: 'Información estratégica y de gestión. Acceso restringido.',
     acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
@@ -76,31 +80,21 @@ var AREAS = [
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
-  { id: 'operaciones', nombre: 'Operaciones', icono: 'engrane',
-    desc: 'Producción, mantenimiento, inventario, entregas e instalaciones.',
-    acceso: { roles: ['CAPTURA'], lista: 'OPERACIONES', socios: true }, modulos: [],
-    planeados: ['Órdenes de producción', 'Bitácoras de mantenimiento', 'Bitácoras de trabajo diario',
-                'Control de inventario', 'Control de entregas', 'Control de instalaciones'] },
-  { id: 'comercial', nombre: 'Comercial', icono: 'negocio',
-    desc: 'Vendedores, órdenes de venta y órdenes de compra de clientes.',
-    acceso: { roles: ['CAPTURA'], lista: 'COMERCIAL', socios: true, ventas: true },
-    modulos: [
-      { id: 'dash-com', nombre: 'Dashboard comercial', estado: 'activo', destino: 'dashboard',
-        desc: 'Ventas, ticket promedio, comparativos y cobranza en el Dashboard BFp.' },
-      { id: 'competencia', nombre: 'Tablero de competencia', estado: 'proximamente',
-        desc: 'Ranking de vendedores por ventas y actividad.' },
-      { id: 'actividad', nombre: 'Actividad comercial', estado: 'proximamente',
-        desc: 'Registro de llamadas, mensajes y correos en un formulario.' },
-      { id: 'orden-venta', nombre: 'Órdenes de venta', estado: 'proximamente',
-        desc: 'Crea la orden y registra la venta en el Dashboard.' },
-      { id: 'orden-compra', nombre: 'Órdenes de compra de clientes', estado: 'proximamente',
-        desc: 'Almacena y consulta las órdenes de compra de cada cliente.' }
-    ], planeados: [] }
+  { id: 'erp', nombre: 'ERP', icono: 'engrane',
+    desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
+    acceso: { roles: [], socios: true }, vista: 'erp' }
 ];
 
 function _areaPorId_(id) {
   for (var i = 0; i < AREAS.length; i++) { if (AREAS[i].id === id) { return AREAS[i]; } }
   return null;
+}
+
+/* Los datos del tablero solo salen a quien tiene Dashboard BFp o Direccion (que lo replica en lectura). */
+function _exigeTablero_(ses) {
+  if (_accesoArea_(ses, _areaPorId_('dashboard')) || _accesoArea_(ses, _areaPorId_('direccion'))) { return; }
+  _bitacora_(ses.correo, 'ACCESO_NEGADO', 'tablero');
+  throw new Error('Sin autorizacion para esta accion.');
 }
 
 /* ¿Esta sesion entra a esta area? MASTER entra a todas. */
@@ -112,7 +106,9 @@ function _accesoArea_(ses, area) {
   if (a.roles && a.roles.indexOf(ses.rol) >= 0) { return true; }
   if (a.socios && ses.rol === 'SOCIO') { return true; }
   if (a.ventas && ses.venta) { return true; }
+  if (area.id === 'erp') { try { if (ERP.rolDe(ses)) { return true; } } catch (e) { /* hojas ERP aun no instaladas */ } }
   if (ses.extra && ses.extra.indexOf(area.id) >= 0) { return true; }
+  if (!ses.porClave) { var ac = _accesoDeCorreo_(ses.correo); if (ac && ac.areas.indexOf(area.id) >= 0) { return true; } }
   if (a.lista && !ses.porClave && ses.correo && _enLista_(ROLES[a.lista] || [], ses.correo)) { return true; }
   return false;
 }
@@ -218,8 +214,9 @@ function portalInicio(clave) {
   var areas = [];
   for (var i = 0; i < AREAS.length; i++) {
     var a = AREAS[i];
-    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '',
-                 acceso: _accesoArea_(ses, a) });
+    /* Lo que no tienes NO se manda: ni el nombre del modulo llega al navegador. */
+    if (!_accesoArea_(ses, a)) { continue; }
+    areas.push({ id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, vista: a.vista || '', acceso: true });
   }
   return { sello: JG_SELLO, ses: { correo: ses.correo, rol: ses.rol, porSesion: !!ses.porSesion }, areas: areas };
 }
@@ -229,12 +226,18 @@ function portalArea(id, clave) {
   var a = _areaPorId_(String(id || ''));
   if (!a) { throw new Error('Area desconocida.'); }
   if (!_accesoArea_(ses, a)) {
+    /* misma respuesta que para un area que no existe: no revela que el modulo existe */
     _bitacora_(ses.correo, 'ACCESO_NEGADO', 'area=' + a.id + ' rol=' + ses.rol);
-    throw new Error('Esta área tiene acceso restringido.');
+    throw new Error('Area desconocida.');
   }
   /* dashboard y direccion no son paginas de portal: abren el tablero; aqui solo se valida el acceso */
   if (a.vista) { return { id: a.id, vista: a.vista, nombre: a.nombre }; }
-  return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: a.modulos || [],
+  var mods = [];
+  for (var m = 0; m < (a.modulos || []).length; m++) {
+    if (a.modulos[m].requiere === 'venta' && !ses.venta) { continue; }   /* no se muestra lo que no podrias abrir */
+    mods.push(a.modulos[m]);
+  }
+  return { id: a.id, nombre: a.nombre, desc: a.desc, icono: a.icono, modulos: mods,
            planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
 
@@ -252,6 +255,8 @@ function _rolPorCorreo_(correo) {
   if (!correo) { return null; }
   if (_enLista_(ROLES.MASTER, correo))  { return 'MASTER'; }
   if (_enLista_(ROLES.CAPTURA, correo)) { return 'CAPTURA'; }
+  var ac = _accesoDeCorreo_(correo);
+  if (ac && ac.capturar) { return 'CAPTURA'; }
   if (_enLista_(ROLES.SOCIOS, correo))  { return 'SOCIO'; }
   if (_enLista_(ROLES.VENTAS, correo))  { return 'LECTOR'; }
   return null;
@@ -288,7 +293,7 @@ function _identidad_(clave) {
   var rolCorreo = _rolPorCorreo_(correo);
   if (rolCorreo) {
     var venta = (rolCorreo === 'MASTER' || rolCorreo === 'SOCIO') || _enLista_(ROLES.VENTAS, correo) ||
-                _enLista_(ROLES.DIRECCION, correo);
+                _enLista_(ROLES.DIRECCION, correo) || _ventaPorAcceso_(correo);
     return { correo: correo, rol: rolCorreo, venta: venta, porSesion: porSesion };
   }
   if (!porSesion && clave) {
@@ -302,7 +307,13 @@ function _identidad_(clave) {
   }
   if (!correo) { return null; }
   /* Quien esta en ROLES.DIRECCION ve la informacion de Venta (solo lectura). */
-  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo), porSesion: porSesion };
+  return { correo: correo, rol: 'LECTOR', venta: _enLista_(ROLES.DIRECCION, correo) || _ventaPorAcceso_(correo), porSesion: porSesion };
+}
+
+/* Ventas, costos y margen por la hoja ACCESOS: VER_VENTAS = SI, o area Direccion. */
+function _ventaPorAcceso_(correo) {
+  var ac = _accesoDeCorreo_(correo);
+  return !!(ac && (ac.verVentas || ac.areas.indexOf('direccion') >= 0));
 }
 
 /* ===================== ACCESO POR CORREO CON CODIGO ===================== */
@@ -324,6 +335,8 @@ function _correoPermitido_(correo) {
   var dom = correo.slice(correo.lastIndexOf('@') + 1);
   var doms = ROLES.DOMINIOS || [];
   for (var i = 0; i < doms.length; i++) { if (String(doms[i]).toLowerCase().trim() === dom) { return true; } }
+  if (_accesoDeCorreo_(correo)) { return true; }   /* aparece en la hoja ACCESOS */
+  try { if (ERP.correoRegistrado(correo)) { return true; } } catch (e) { /* ERP sin instalar */ }
   var listas = ['MASTER', 'CAPTURA', 'VENTAS', 'SOCIOS', 'DIRECCION', 'FINANZAS', 'COMERCIAL', 'OPERACIONES', 'ACCESO_EXTRA'];
   for (var k = 0; k < listas.length; k++) { if (_enLista_(ROLES[listas[k]] || [], correo)) { return true; } }
   return false;
@@ -396,7 +409,14 @@ function solicitarCodigo(correo) {
   if (!_correoPermitido_(c)) { _bitacora_(c, 'CODIGO_RECHAZADO', 'correo no autorizado'); return generico; }
   var codigo = _codigoAleatorio_();
   cache.put('otp_' + hc, JSON.stringify({ h: _hash_(codigo + '|' + c + '|' + _secretoSesion_()), n: 0 }), CODIGO_MINUTOS * 60);
-  _enviaCodigo_(c, codigo);
+  try {
+    _enviaCodigo_(c, codigo);
+  } catch (e) {
+    /* el detalle (por ejemplo "falta autorizar MailApp") va a la bitacora y al administrador, no al usuario */
+    cache.remove('otp_' + hc);
+    _bitacora_(c, 'ERROR_ENVIO_CODIGO', String(e && e.message ? e.message : e).slice(0, 300));
+    throw new Error('No se pudo enviar el código en este momento. Avisa al administrador de la intranet.');
+  }
   _bitacora_(c, 'CODIGO_ENVIADO', '');
   return generico;
 }
@@ -442,6 +462,17 @@ function cerrarTodasSesiones() {
   PropertiesService.getScriptProperties().setProperty('sesion_desde', String(Math.floor(new Date().getTime() / 1000) + 1));
   _bitacora_(ses.correo, 'CIERRA_TODAS_SESIONES', '');
   ui.alert('Cerrar sesiones', 'Listo.', ui.ButtonSet.OK);
+}
+
+/* EJECUTAR UNA VEZ DESDE EL EDITOR (seleccionar "autorizarCorreo" > Ejecutar): Google pide permiso para
+   enviar correos como tu cuenta. Sin ese permiso la intranet no puede mandar los codigos de acceso.
+   Despues hay que publicar una Nueva version de la implementacion. */
+function autorizarCorreo() {
+  var yo = Session.getEffectiveUser().getEmail();
+  _enviaCodigo_(yo, '000000');
+  Logger.log('Listo: se envio un correo de prueba a ' + yo + '. Cuota diaria restante: ' + MailApp.getRemainingDailyQuota() +
+             '. Ahora publica una Nueva version de la implementacion.');
+  return 'Permiso de correo OK. Correo de prueba enviado a ' + yo;
 }
 
 /* Menu: manda un codigo de PRUEBA a tu correo. La primera vez Google pide autorizar el envio de correos. */
@@ -584,7 +615,7 @@ function _normCat_(t) {
 var CACHE_CATALOGOS_SEG = 300;
 
 function _limpiaCacheCatalogos_() {
-  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema, 'capacidad_v' + JG_SELLO.esquema]);
+  CacheService.getScriptCache().removeAll(['catalogos_v' + JG_SELLO.esquema, 'tarifas_v' + JG_SELLO.esquema, 'capacidad_v' + JG_SELLO.esquema, 'accesos_v' + JG_SELLO.esquema]);
 }
 
 function _leerCatalogos_() {
@@ -888,6 +919,7 @@ function _claves_(mapa, desc) {
    filtrar. Los selectores no se encogen al filtrar: se limpian con un clic. */
 function opcionesFiltros(clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   if (ses.porClave) { _bitacora_(ses.correo, 'ACCESO_SOCIO', 'consulta por enlace personal'); }
   var base = _leerBase_();
@@ -1247,6 +1279,7 @@ function _costosProd_(q, prod) {
 
 function cargarTablero(filtros, sub, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var t0 = new Date().getTime();
   var q = _fq_(filtros, ses);
@@ -1289,6 +1322,7 @@ function cargarCatalogos(clave) {
 
 function detalleSemana(semana, filtros, sub, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeRol_(ses, ['LECTOR', 'SOCIO', 'CAPTURA', 'MASTER']);
   var s = String(semana || '');
   var q = _fq_(filtros, ses);
@@ -1368,6 +1402,11 @@ function _etiquetaSemana_(lunesIso, existentes) {
 function guardarTrabajo(d, clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  return _guardarTrabajoCore_(d, ses);
+}
+
+/* Escribe un renglon en BASE. Lo usan la captura del Dashboard y el ERP (que valida su propio permiso). */
+function _guardarTrabajoCore_(d, ses) {
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
   var cats = _leerCatalogos_();
@@ -1832,6 +1871,7 @@ function _semanasEntre_(a, b) {
 
 function cargarComercial(filtrosGlobal, clave) {
   var ses = _ses_(clave);
+  _exigeTablero_(ses);
   _exigeVenta_(ses, false);
   var t0 = new Date().getTime();
   var todas = _leerVentas_();
@@ -2553,6 +2593,10 @@ function onOpen() {
         .addItem('Ver accesos', 'verAccesosSocios')
         .addItem('Revocar acceso', 'revocarAccesoSocio'))
       .addSeparator()
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('ERP')
+        .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
+        .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
+        .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar'))
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
@@ -2841,7 +2885,8 @@ function instalar() {
   var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
   if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
   hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
-  _instalaIntranet_(hechos);   /* hojas de la intranet (ordenes, actividad, enlaces) */
+  _instalaIntranet_(hechos);
+  try { hechos.push(ERP.instalar()); } catch (e) { hechos.push('ERP: no se pudo instalar (' + e.message + ').'); }   /* hojas de la intranet (ordenes, actividad, enlaces) */
   tar.setFrozenRows(1);
   hechos.push(_vincularOrdenes_());
 
@@ -3033,7 +3078,7 @@ function refrescarCatalogos() {
 function onEdit(e) {
   try {
     var n = (e && e.range) ? e.range.getSheet().getName() : '';
-    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS || n === CFG.HOJA_CAPACIDAD) { _limpiaCacheCatalogos_(); }
+    if (n === CFG.HOJA_CATALOGOS || n === CFG.HOJA_TARIFAS || n === CFG.HOJA_CAPACIDAD || n === 'ACCESOS') { _limpiaCacheCatalogos_(); }
   } catch (err) { /* nunca estorba la edicion */ }
 }
 
