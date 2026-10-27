@@ -183,6 +183,7 @@ var NAV = [
   { id: 'x1', t: 'Compras y proveedores', off: true, ver: function(){ return PA(['compras', 'cxp', 'cxp_ver']); } },
   { id: 'x2', t: 'Inventario', off: true, ver: function(){ return PA(['inv', 'inv_ver', 'conteo']); } },
   { g: 'Administración' },
+  { id: 'carga', t: 'Carga de material', ver: function(){ return P('material'); } },
   { id: 'usuarios', t: 'Usuarios del ERP', ver: function(){ return P('*'); } }
 ];
 function abrirErp(){
@@ -219,7 +220,7 @@ function erpVista(v, arg){
   var m = eq('erpMain');
   m.innerHTML = '<div class="erp-vacio">Cargando…</div>';
   window.scrollTo(0, 0);
-  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, facturas: vFacturas, usuarios: vUsuarios }[v];
+  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
   if (f) { f(m, arg); }
 }
 function recargaLookups(){ return erp('lookups').then(function(l){ E.lk = l; }); }
@@ -314,27 +315,49 @@ function pintaCots(){
     rows.slice(0, 300).map(function(c){ return '<tr class="clic" onclick="cotForm(\'' + esc(c.Folio) + '\')"><td><b>' + esc(c.Folio) + '</b></td><td>' + fFecha(c.Fecha) + '</td><td>' + esc(c.Cliente) + '</td><td>' + esc(c.Proyecto || c.Descripcion) + '</td><td class="n">' + $n(c.M2) + '</td><td class="n">' + $m(c.Subtotal) + '</td><td>' + ePill(c.Estatus) + '</td><td>' + esc(c.ODP || '') + '</td></tr>'; }).join('') +
     '</tbody></table></div>' : '<div class="erp-vacio">Sin cotizaciones.</div>';
 }
+function precioDe(mat, u){ var p = (E.cat.PRECIOS || {})[mat]; return p ? p[u] : null; }
 function lineaCotHtml(l){
   l = l || {};
-  var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lámina', 'pz'];
+  var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lamina', 'pz'];
   var calc = (Number(l.Ancho) || 0) * (Number(l.Alto) || 0) * (Number(l.Cantidad) || 1);
   var man = l.M2 && Math.abs(Number(l.M2) - calc) > 0.0001 ? '1' : '';
+  var p = (E.cat.PRECIOS || {})[l.Descripcion];
+  var ops = un.map(function(u){ var na = p && p[u] == null; return '<option value="' + u + '"' + (u === (l.Unidad || 'm2') ? ' selected' : '') + (na ? ' disabled' : '') + '>' + u + (na ? ' (NA)' : '') + '</option>'; }).join('');
   return '<tr><td><input data-c="Descripcion" list="erpMats" value="' + esc(l.Descripcion || '') + '" placeholder="Escribe para buscar el material" style="min-width:230px"></td>' +
     '<td><input data-c="Ancho" type="number" step="0.01" value="' + esc(l.Ancho || '') + '"></td><td><input data-c="Alto" type="number" step="0.01" value="' + esc(l.Alto || '') + '"></td>' +
     '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad); puedes corregirlo"></td>' +
-    '<td><select data-c="Unidad">' + eOpts(un, l.Unidad || 'm2', false) + '</select></td>' +
-    '<td><input data-c="Cantidad" type="number" step="1" value="' + esc(l.Cantidad || 1) + '"></td><td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '"></td>' +
-    '<td><input data-c="PrecioUnit" type="number" step="0.01" value="' + esc(l.PrecioUnit || '') + '"></td>' +
+    '<td><select data-c="Unidad">' + ops + '</select></td>' +
+    '<td><input data-c="Cantidad" type="number" step="1" value="' + esc(l.Cantidad || 1) + '"></td>' +
+    '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioM2 ? '1' : '') + '" title="Precio por la unidad elegida: costo de TARIFAS × 1.40. Puedes corregirlo."></td>' +
+    '<td><input data-c="PrecioUnit" type="number" value="' + esc(l.PrecioUnit || '') + '" readonly title="Precio por pieza: importe ÷ cantidad"></td>' +
     '<td class="n imp">$0.00</td><td><button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tr\').remove();cotTotales()">×</button></td></tr>';
+}
+/* material elegido: habilita solo las unidades con precio (NA no aplica) y llena el precio */
+function cotMaterial(tr){
+  var mat = tr.querySelector('[data-c=Descripcion]').value, p = (E.cat.PRECIOS || {})[mat];
+  if (!p) { return; }
+  var sel = tr.querySelector('[data-c=Unidad]');
+  [].forEach.call(sel.options, function(o){ var na = p[o.value] == null; o.disabled = na; o.textContent = o.value + (na ? ' (NA)' : ''); });
+  if (p[sel.value] == null) {
+    var ok = p.cobro && p[p.cobro] != null ? p.cobro : ['m2', 'mtl', 'lamina', 'pz'].filter(function(u){ return p[u] != null; })[0];
+    if (ok) { sel.value = ok; }
+  }
+  cotPrecio(tr);
+}
+function cotPrecio(tr){
+  var mat = tr.querySelector('[data-c=Descripcion]').value, u = tr.querySelector('[data-c=Unidad]').value, pi = tr.querySelector('[data-c=PrecioM2]');
+  var v = precioDe(mat, u);
+  pi.dataset.man = ''; pi.value = v != null ? v : '';
 }
 function cotCalc(tr){
   var inp = function(c){ return tr.querySelector('[data-c=' + c + ']'); };
   var g = function(c){ return Number(inp(c).value) || 0; };
-  var an = g('Ancho'), al = g('Alto'), q = g('Cantidad') || 1, pm = g('PrecioM2'), man = inp('M2');
+  var an = g('Ancho'), al = g('Alto'), q = g('Cantidad') || 1, man = inp('M2');
   if (!man.dataset.man) { var auto = Math.round(an * al * q * 10000) / 10000; man.value = auto || ''; }
-  var m2 = Number(man.value) || 0, pu = inp('PrecioUnit'), imp;
-  if (pm > 0 && m2 > 0) { imp = Math.round(m2 * pm * 100) / 100; pu.value = (Math.round(imp / q * 100) / 100) || ''; pu.readOnly = true; pu.title = 'Se calcula: $/m² × m² ÷ cantidad'; }
-  else { pu.readOnly = false; pu.title = 'Precio por pieza (se usa cuando no hay $/m²)'; imp = q * Math.round((Number(pu.value) || 0) * 100) / 100; }
+  var m2 = Number(man.value) || 0, u = inp('Unidad').value, pr = g('PrecioM2');
+  var base = u === 'm2' ? m2 : u === 'mtl' ? (al > 0 ? al * q : q) : q;
+  var imp = Math.round(base * pr * 100) / 100;
+  inp('PrecioUnit').value = imp ? (Math.round(imp / q * 100) / 100) : '';
   return { importe: imp, m2: m2 };
 }
 function cotTotales(){
@@ -361,7 +384,7 @@ function cotForm(folio){
       selCampo('Estatus', 'Estatus', ests, c.Estatus || 'Borrador', false) + campo('Proyecto', 'Proyecto', c.Proyecto, 'text', { c2: 1 }) +
       selCampo('TipoProyecto', 'Tipo de proyecto', E.cat.TIPO_PROYECTO || [], c.TipoProyecto, '—') + campo('ProximoSeguimiento', 'Próximo seguimiento', c.ProximoSeguimiento, 'date') +
       campo('Terminados', 'Terminados / acabados', c.Terminados, 'text', { c2: 1 }) + '</div>' +
-      '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Partidas (medidas en metros)</h3><div class="erp-scroll"><table class="erp-tabla erp-lin" id="cotLin"><thead><tr><th>Material</th><th>Ancho</th><th>Alto</th><th>M2</th><th>Unidad</th><th>Cant.</th><th>$/m²</th><th>P. unit.</th><th class="n">Importe</th><th></th></tr></thead><tbody>' +
+      '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Partidas (medidas en metros)</h3><div class="erp-scroll"><table class="erp-tabla erp-lin" id="cotLin"><thead><tr><th>Material</th><th>Ancho</th><th>Alto</th><th>M2</th><th>Unidad</th><th>Cant.</th><th>Precio</th><th>P. unit.</th><th class="n">Importe</th><th></th></tr></thead><tbody>' +
       lin.map(lineaCotHtml).join('') + '</tbody></table></div>' + (bloq ? '' : '<button type="button" class="erp-btn sec chico" style="margin-top:8px" id="cotMas">+ Partida</button>') +
       '<div class="erp-form" style="margin-top:12px">' + selCampo('DescuentoPct', 'Descuento', pcts, c.DescuentoPct || 0, false) + '<div></div>' +
       '<div class="c2"><label>Descripción</label><textarea data-k="Notas">' + esc(c.Notas || '') + '</textarea></div>' +
@@ -369,7 +392,14 @@ function cotForm(folio){
       pie, true);
     if (bloq) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ i.disabled = true; }); }
     var ra = w.el.querySelector('#cotLin');
-    ra.addEventListener('input', function(ev){ if (ev.target.getAttribute('data-c') === 'M2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; } cotTotales(); });
+    ra.addEventListener('input', function(ev){
+      var c = ev.target.getAttribute('data-c'), tr = ev.target.closest('tr');
+      if (c === 'M2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
+      if (c === 'PrecioM2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
+      if (c === 'Descripcion') { cotMaterial(tr); }
+      cotTotales();
+    });
+    ra.addEventListener('change', function(ev){ if (ev.target.getAttribute('data-c') === 'Unidad') { cotPrecio(ev.target.closest('tr')); cotTotales(); } });
     w.el.querySelector('[data-k=DescuentoPct]').addEventListener('change', cotTotales);
     var mas = w.el.querySelector('#cotMas'); if (mas) { mas.onclick = function(){ ra.querySelector('tbody').insertAdjacentHTML('beforeend', lineaCotHtml()); }; }
     cotTotales();
@@ -549,6 +579,61 @@ function cobroForm(id){
   var w = ventana('Registrar cobro · ' + esc(f.FolioSAT), '<p class="erp-sub">' + esc(f.Cliente) + ' · Saldo ' + $m(f.Saldo) + '</p><div class="erp-form">' + campo('Monto', 'Monto', f.Saldo, 'number', { step: '0.01' }) + campo('Fecha', 'Fecha', hoyIso(), 'date') + campo('Referencia', 'Referencia', '', 'text', { c2: 1 }) + '</div>', '<button class="erp-btn" id="cbG">Guardar</button>');
   var b = w.el.querySelector('#cbG');
   b.onclick = function(){ var p = leer(w.el); p.FacturaID = id; eGuardar(b, function(){ return erp('registrarCobro', p); }).then(function(){ w.cerrar(); ptToast('Cobro registrado.'); vFacturas(eq('erpMain')); }, function(){}); };
+}
+
+/* ===================== CARGA DE MATERIAL (alimenta la hoja TARIFAS) ===================== */
+function calcTar(p){
+  var costo = Number(p.COSTO) || 0, an = Number(p.ANCHO) || 0, la = Number(p.LARGO) || 0, pres = p.PRESENTACION, cobro = p.COBRO_POR, m2p = an * la;
+  var c = { m2: null, mtl: null, lamina: null, pz: null };
+  if (m2p > 0) {
+    c.m2 = costo / m2p;
+    if (pres === 'rollo' || pres === 'bobina') { c.mtl = costo / la; }
+    if (pres === 'lamina' || pres === 'hoja') { c.lamina = costo; }
+    if (cobro === 'pz') { c.pz = costo; }
+  } else if (cobro && cobro !== 'otro') { c[cobro] = costo; }
+  return c;
+}
+function vCarga(m){
+  erp('tarifas').then(function(rows){
+    E.cache.tars = rows;
+    m.innerHTML = '<h2>Carga de material</h2><p class="erp-sub">Catálogo único de materiales y costos (hoja TARIFAS). Lo que cargues aquí aparece en todos los formularios y alimenta los precios de cotización. NA = no aplica cobro por esa unidad.</p>' +
+      '<div class="erp-bar"><input id="tarQ" placeholder="Buscar material o proveedor" oninput="pintaTars()" style="min-width:260px"><span class="sp"></span><button class="erp-btn nar" type="button" onclick="tarForm()">+ Nuevo material</button></div><div id="tarTabla"></div>';
+    pintaTars();
+  }, function(e){ erpError(m, e); });
+}
+function pintaTars(){
+  var q = (eq('tarQ').value || '').toLowerCase(), na = function(v){ return v == null ? '<span style="color:var(--tinta-3)">NA</span>' : $m(v); };
+  var rows = E.cache.tars.filter(function(t){ return !q || (t.material + ' ' + t.proveedor).toLowerCase().indexOf(q) >= 0; });
+  eq('tarTabla').innerHTML = rows.length ? '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Material</th><th>Proveedor</th><th>Presentación</th><th class="n">Ancho</th><th class="n">Largo</th><th class="n">Costo</th><th>Cobro por</th><th class="n">$/m²</th><th class="n">$/mtl</th><th class="n">$/lámina</th><th class="n">$/pz</th></tr></thead><tbody>' +
+    rows.slice(0, 400).map(function(t){ return '<tr class="clic" onclick="tarForm(\'' + esc(t.material).replace(/'/g, "\\'") + '\')"><td><b>' + esc(t.material) + '</b></td><td>' + esc(t.proveedor) + '</td><td>' + esc(t.presentacion) + '</td><td class="n">' + (t.ancho || '') + '</td><td class="n">' + (t.largo || '') + '</td><td class="n">' + (t.costo ? $m(t.costo) : '') + '</td><td>' + esc(t.cobroPor) + '</td><td class="n">' + na(t.costoM2) + '</td><td class="n">' + na(t.costoMtl) + '</td><td class="n">' + na(t.costoLamina) + '</td><td class="n">' + na(t.costoPz) + '</td></tr>'; }).join('') +
+    '</tbody></table></div>' + (rows.length > 400 ? '<p class="erp-sub">Mostrando 400 de ' + rows.length + '. Afina la búsqueda.</p>' : '') : '<div class="erp-vacio">Sin materiales.</div>';
+}
+function tarForm(nombre){
+  var t = nombre ? (E.cache.tars.filter(function(x){ return x.material === nombre; })[0] || {}) : {};
+  var legacy = nombre && !t.cobroPor;   // fila vieja de TARIFAS: solo tenia costo por m²
+  var provs = []; E.cache.tars.forEach(function(x){ if (x.proveedor && provs.indexOf(x.proveedor) < 0) { provs.push(x.proveedor); } });
+  var w = ventana(nombre ? 'Modificar material' : 'Nuevo material',
+    '<datalist id="erpProvs">' + provs.map(function(x){ return '<option value="' + esc(x) + '">'; }).join('') + '</datalist><div class="erp-form">' +
+    '<div class="c2"><label>Proveedor</label><input data-k="PROVEEDOR" list="erpProvs" value="' + esc(t.proveedor || '') + '"></div>' + campo('MATERIAL', 'Material', t.material, 'text', { c2: 1 }) +
+    selCampo('PRESENTACION', 'Presentación', ['lamina', 'rollo', 'hoja', 'bobina', 'otro'], t.presentacion || 'otro', false) + selCampo('COBRO_POR', 'Cobro por', ['m2', 'mtl', 'lamina', 'pz', 'otro'], t.cobroPor || 'm2', false) +
+    campo('ANCHO', 'Ancho (m)', t.ancho || '', 'number', { step: '0.01' }) + campo('LARGO', 'Largo (m)', t.largo || '', 'number', { step: '0.01' }) +
+    campo('COSTO', 'Costo', legacy ? t.costoM2 : (t.costo || ''), 'number', { step: '0.0001' }) +
+    '<div class="c2"><p class="erp-sub" style="margin:0">Con ancho y largo, el <b>costo</b> es el de la presentación (rollo, lámina…) y se calculan los costos por unidad. Sin medidas, el costo es el de la unidad de <b>cobro por</b>.' + (legacy ? ' <b>Este material solo tenía costo por m²; el costo se muestra como tal.</b>' : '') + '</p></div>' +
+    '<div class="c2" id="tarPrev"></div></div>', '<button class="erp-btn" id="tarG">Guardar</button>', true);
+  var prev = function(){
+    var p = leer(w.el), c = calcTar(p), mg = 1 + (E.init.cfg.COT_MARGEN != null ? E.init.cfg.COT_MARGEN : 0.4);
+    var f = function(v){ return v ? $m(v) + ' → <b>' + $m(v * mg) + '</b>' : '<span style="color:var(--tinta-3)">NA</span>'; };
+    eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo → precio de cotización</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · pz: ' + f(c.pz) + '</div>';
+  };
+  w.el.addEventListener('input', prev); w.el.addEventListener('change', prev); prev();
+  var b = w.el.querySelector('#tarG');
+  b.onclick = function(){
+    var p = leer(w.el); if (nombre) { p.MaterialOriginal = nombre; }
+    eGuardar(b, function(){ return erp('saveTarifa', p); }).then(function(r){
+      w.cerrar(); ptToast(r.avisoDashboard ? 'Material guardado. ' + r.avisoDashboard : 'Material guardado en TARIFAS.');
+      erp('catalogosProd').then(function(c){ E.cat = c; }); vCarga(eq('erpMain'));
+    }, function(){});
+  };
 }
 
 /* ===================== USUARIOS DEL ERP ===================== */

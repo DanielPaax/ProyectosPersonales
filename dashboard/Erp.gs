@@ -96,6 +96,7 @@ const CONFIG_DEFAULTS = [
   ['PREFIJO_COT', 'COT-', 'Prefijo de cotizaciones'],
   ['CONSEC_COT', '1', 'Siguiente número de cotización'],
   ['MERMA_ALERTA', '0.10', 'Merma a partir de la cual se marca en rojo (0.10 = 10%)'],
+  ['COT_MARGEN', '0.40', 'Margen sobre el costo para el precio de cotización (0.40 = costo × 1.40)'],
   ['MARGEN_MINIMO', '0.30', 'Margen por debajo del cual se marca en rojo (0.30 = 30%)'],
   ['COMERCIAL_VE_COSTOS', 'NO', 'SI = los comerciales ven costo y utilidad de sus ODP'],
   ['COT_TERMINOS', TERMINOS_DEF, 'Términos y condiciones que salen en el PDF de la cotización'],
@@ -145,7 +146,7 @@ const ACTIONS = {
   materiales: a_materiales, saveMaterial: a_saveMaterial, kardex: a_kardex,
   conteos: a_conteos, conteo: a_conteo,
   compras: a_compras, compraDetalle: a_compraDetalle, saveCompra: a_saveCompra, cancelarCompra: a_cancelarCompra, registrarPago: a_registrarPago,
-  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
+  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, tarifas: a_tarifas, saveTarifa: a_saveTarifa, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
   seguimiento: a_seguimiento, saveSeg: a_saveSeg,
   odps: a_odps, odpDetalle: a_odpDetalle, saveODP: a_saveODP, consumir: a_consumir, devolver: a_devolver,
   agregarCosto: a_agregarCosto, anularCosto: a_anularCosto,
@@ -253,7 +254,7 @@ function a_init(u) {
     user: u, perms: ROLES_ERP[u.rol], hoy: hoy_(),
     cfg: {
       EMPRESA: cfg_('EMPRESA', 'ERP'), IVA: ivaRate_(),
-      MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
+      COT_MARGEN: margenCot_(), MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
       VE_COSTOS: veCostos_(u), VE_PRECIO: vePrecio_(u),
     },
     cat: { UNIDADES_COT: UNIDADES_COT, DESCUENTOS_COT: DESCUENTOS_COT, TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
@@ -613,7 +614,9 @@ function lineasDe_(hoja, k, folio) {
     .sort(function (a, b) { return num_(a.Linea) - num_(b.Linea); }).map(clean_);
 }
 
-const UNIDADES_COT = ['m2', 'mtl', 'lámina', 'pz'];
+const UNIDADES_COT = ['m2', 'mtl', 'lamina', 'pz'];
+const PRESENTACIONES = ['lamina', 'rollo', 'hoja', 'bobina', 'otro'];
+const COBROS = ['m2', 'mtl', 'lamina', 'pz', 'otro'];
 const DESCUENTOS_COT = [0, 5, 10, 15, 20, 25];
 
 /** Nombre del catalogo (CATALOGOS del Dashboard) en su forma canonica, o '' si no existe. */
@@ -622,26 +625,98 @@ function enCatalogo_(lista, v) {
   return (lista || []).filter(function (x) { return String(x).toUpperCase() === v; })[0] || '';
 }
 
-/** Partidas de cotización. MATERIAL = el catalogo MATERIAL de CATALOGOS (el mismo del Dashboard y de TARIFAS).
- *  M2 de la partida: el que capturan o, si no, ancho x alto x cantidad. Con $/m²: importe = M2 x $/m²; si no, cantidad x precio unitario. */
-function lineasCot_(arr) {
-  const out = [], mats = _leerCatalogos_().MATERIAL || [];
-  (arr || []).forEach(function (l) {
-    const desc = str_(l.Descripcion), an = num_(l.Ancho), al = num_(l.Alto), pm2 = num_(l.PrecioM2);
-    let pu = num_(l.PrecioUnit), q = num_(l.Cantidad);
-    if (!desc && !pu && !pm2 && !an && !al && !num_(l.M2)) return;
-    if (!desc) throw new Error('Falta el material en una partida.');
-    const mat = enCatalogo_(mats, desc);
-    if (!mat) throw new Error('El material "' + desc + '" no está en el catálogo MATERIAL. Elígelo de la lista.');
-    if (!q) q = 1;
-    const m2 = num_(l.M2) > 0 ? num_(l.M2) : an * al * q;
-    const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : 'm2';
-    let imp;
-    if (pm2 > 0 && m2 > 0) { imp = r2_(m2 * pm2); pu = q ? r2_(imp / q) : imp; }
-    else { imp = r2_(q * r2_(pu)); }
-    out.push({ Descripcion: mat, Ancho: an || '', Alto: al || '', Cantidad: q, M2: r4_(m2), PrecioM2: pm2 || '', PrecioUnit: r2_(pu), Importe: imp, Unidad: uni });
+// ---- TARIFAS: catalogo unico de materiales, con costo por unidad (NA = no aplica cobro por esa unidad)
+function nz_(v) { const t = str_(v).toUpperCase(); if (t === '' || t === 'NA' || t === 'N/A') return null; const n = num_(v); return n > 0 ? n : null; }
+function tarHoja_() {
+  const h = _hoja_(CFG.HOJA_TARIFAS);
+  _aseguraColumnas_(h, TAR_COL_EXT + TAR_EXT.length - 1);
+  const cab = h.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).getValues()[0];
+  if (cab.some(function (x, i) { return str_(x).toUpperCase() !== TAR_EXT[i]; })) h.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).setValues([TAR_EXT]);
+  return h;
+}
+/** Todas las filas de TARIFAS con su detalle. */
+function tarifasDet_() {
+  const h = tarHoja_(), n = h.getLastRow() - 1, out = [];
+  if (n < 1) return out;
+  const v = h.getRange(2, 1, n, TAR_COL_EXT + TAR_EXT.length - 1).getValues();
+  v.forEach(function (r, i) {
+    const mat = str_(r[0]); if (!mat) return;
+    const o = TAR_COL_EXT - 1;
+    out.push({ fila: i + 2, material: mat, costoM2: nz_(r[1]), proveedor: str_(r[o]), presentacion: str_(r[o + 1]), ancho: num_(r[o + 2]), largo: num_(r[o + 3]),
+               costo: num_(r[o + 4]), cobroPor: str_(r[o + 5]), costoMtl: nz_(r[o + 6]), costoLamina: nz_(r[o + 7]), costoPz: nz_(r[o + 8]), actualizado: str_(r[o + 9]) });
   });
   return out;
+}
+function costoUnidad_(t, u) { return ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null; }
+function margenCot_() { return num_(cfg_('COT_MARGEN', '0.40')); }
+/** Precio de venta por unidad = costo de esa unidad x (1 + margen). null = NA. */
+function precioUnidad_(t, u) { const c = costoUnidad_(t, u); return c ? r2_(c * (1 + margenCot_())) : null; }
+
+/** Partidas de cotización. MATERIAL = TARIFAS (el mismo catalogo del Dashboard y de los costos).
+ *  Precio por unidad (m2, mtl, lamina, pz) = costo de TARIFAS x 1.40; se puede corregir a mano. NA = esa unidad no aplica.
+ *  Base del importe: m2 -> M2 de la partida; mtl -> alto x cantidad (metros lineales); lamina y pz -> cantidad. */
+function lineasCot_(arr) {
+  const out = [], tars = {};
+  tarifasDet_().forEach(function (t) { tars[t.material.toUpperCase()] = t; });
+  (arr || []).forEach(function (l) {
+    const desc = str_(l.Descripcion), an = num_(l.Ancho), al = num_(l.Alto);
+    if (!desc && !num_(l.PrecioM2) && !an && !al && !num_(l.M2)) return;
+    if (!desc) throw new Error('Falta el material en una partida.');
+    const t = tars[desc.toUpperCase()];
+    if (!t) throw new Error('El material "' + desc + '" no está en el catálogo (hoja TARIFAS). Elígelo de la lista.');
+    const q = num_(l.Cantidad) || 1;
+    const m2 = num_(l.M2) > 0 ? num_(l.M2) : an * al * q;
+    const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 ? t.cobroPor : 'm2');
+    let precio = num_(l.PrecioM2);
+    if (!(precio > 0)) {
+      precio = precioUnidad_(t, uni);
+      if (!precio) throw new Error('"' + t.material + '" no tiene precio por ' + uni + ' (NA). Elige otra unidad o captura el precio.');
+    }
+    const base = uni === 'm2' ? m2 : uni === 'mtl' ? (al > 0 ? al * q : q) : q;
+    const imp = r2_(base * precio);
+    out.push({ Descripcion: t.material, Ancho: an || '', Alto: al || '', Cantidad: q, M2: r4_(m2), PrecioM2: precio, PrecioUnit: r2_(imp / q), Importe: imp, Unidad: uni });
+  });
+  return out;
+}
+
+// ---- Carga de material (formulario de ADMINISTRACION) -> hoja TARIFAS
+function a_tarifas(u) { need_(u, 'material'); return tarifasDet_(); }
+
+function a_saveTarifa(u, p) {
+  need_(u, 'material');
+  const mat = req_(p.MATERIAL, 'Material').replace(/\s+/g, ' ');
+  if (mat.length > 150) throw new Error('El nombre del material es demasiado largo (máximo 150).');
+  const pres = inList_(str_(p.PRESENTACION) || 'otro', PRESENTACIONES, 'Presentación');
+  const cobro = inList_(req_(p.COBRO_POR, 'Cobro por'), COBROS, 'Cobro por');
+  const costo = num_(p.COSTO), ancho = num_(p.ANCHO), largo = num_(p.LARGO);
+  if (!(costo > 0)) throw new Error('Captura el costo (mayor que cero).');
+  if (ancho < 0 || largo < 0) throw new Error('Ancho y largo no pueden ser negativos.');
+  const todas = tarifasDet_();
+  const orig = str_(p.MaterialOriginal).toUpperCase();
+  const ex = orig ? todas.filter(function (t) { return t.material.toUpperCase() === orig; })[0] : null;
+  if (orig && !ex) throw new Error('No encuentro el material "' + p.MaterialOriginal + '" para modificarlo.');
+  const dup = todas.filter(function (t) { return t.material.toUpperCase() === mat.toUpperCase() && (!ex || t.fila !== ex.fila); })[0];
+  if (dup) throw new Error('Ya existe un material llamado "' + dup.material + '".');
+  // costos por unidad. Con medidas, COSTO es el de la presentacion (rollo, lamina...); sin medidas, es el costo de la unidad de cobro.
+  const m2pres = ancho * largo, conMedidas = m2pres > 0;
+  const c = { m2: null, mtl: null, lamina: null, pz: null };
+  if (conMedidas) {
+    c.m2 = costo / m2pres;
+    if (pres === 'rollo' || pres === 'bobina') c.mtl = costo / largo;
+    if (pres === 'lamina' || pres === 'hoja') c.lamina = costo;
+    if (cobro === 'pz') c.pz = costo;
+  } else if (cobro !== 'otro') { c[cobro] = costo; }
+  if (cobro !== 'otro' && !c[cobro]) throw new Error('Con esa presentación y medidas no se puede calcular el costo por ' + cobro + '. Revisa presentación, ancho y largo.');
+  const v = function (x) { return x ? r4_(x) : 'NA'; };
+  const h = tarHoja_(), hoy = hoy_();
+  let fila = ex ? ex.fila : h.getLastRow() + 1;
+  h.getRange(fila, 1, 1, 2).setValues([[mat, v(c.m2)]]);
+  h.getRange(fila, TAR_COL_EXT, 1, TAR_EXT.length).setValues([[str_(p.PROVEEDOR), pres, ancho || '', largo || '', costo, cobro, v(c.mtl), v(c.lamina), v(c.pz), hoy]]);
+  _limpiaCacheCatalogos_();
+  const mg = 1 + margenCot_();
+  return { fila: fila, material: mat, costoM2: v(c.m2), costoMtl: v(c.mtl), costoLamina: v(c.lamina), costoPz: v(c.pz), cobroPor: cobro,
+           precios: { m2: c.m2 ? r2_(c.m2 * mg) : 'NA', mtl: c.mtl ? r2_(c.mtl * mg) : 'NA', lamina: c.lamina ? r2_(c.lamina * mg) : 'NA', pz: c.pz ? r2_(c.pz * mg) : 'NA' },
+           avisoDashboard: c.m2 ? '' : 'Sin costo por m²: el Dashboard costeará este material en $0 por m².' };
 }
 
 function folioCot_(u) {
@@ -1230,6 +1305,13 @@ function a_catalogosProd(u) {
   const c = _leerCatalogos_(), out = {};
   ['MAQUINA', 'PROCESO', 'MATERIAL', 'UNIDAD', 'ORIGEN', 'MOTIVO_PARO', 'TURNO', 'OPERADOR', 'ACABADO', 'REIMPRESION', 'TIPO_PROYECTO', 'VENDEDOR']
     .forEach(function (k) { out[k] = c[k] || []; });
+  if (can_(u, 'crm') || can_(u, 'fin')) {   // precios de venta (costo x margen): solo quien cotiza
+    out.PRECIOS = {};
+    tarifasDet_().forEach(function (t) {
+      const cobro = UNIDADES_COT.indexOf(t.cobroPor) >= 0 ? t.cobroPor : (t.costoM2 ? 'm2' : '');
+      out.PRECIOS[t.material] = { cobro: cobro, m2: precioUnidad_(t, 'm2'), mtl: precioUnidad_(t, 'mtl'), lamina: precioUnidad_(t, 'lamina'), pz: precioUnidad_(t, 'pz') };
+    });
+  }
   return out;
 }
 
@@ -1403,7 +1485,7 @@ function resincronizar() {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
