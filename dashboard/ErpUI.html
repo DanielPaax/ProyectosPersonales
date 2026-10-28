@@ -381,7 +381,7 @@ function cotRecalc(){
         if (x.M2 != null && !g('M2').dataset.man) { g('M2').value = x.M2 || ''; }
         if (x.Precio != null && !g('PrecioM2').dataset.man) { g('PrecioM2').value = x.Precio || ''; }
         g('PrecioUnit').value = x.PrecioUnit || '';
-        tb.querySelector('.det').textContent = (x.Detalle || '') + (x.CostoMaterial != null ? '  ·  costo: material ' + $m(x.CostoMaterial) + ', tinta ' + $m(x.CostoTinta) + ', acabados ' + $m(x.CostoAcabados) : '');
+        tb.querySelector('.det').textContent = (x.Detalle || '') + (x.manual ? '  ·  precio capturado a mano (sin tinta, acabados ni margen)' : (x.CostoMaterial != null ? '  ·  costo: material ' + $m(x.CostoMaterial) + ' + tinta ' + $m(x.CostoTinta) + ' + acabados ' + $m(x.CostoAcabados) + ' = ' + $m(x.CostoMaterial + x.CostoTinta + x.CostoAcabados) + ' ÷ ' + (1 - x.margen).toFixed(2) + ' = ' + $m(x.Importe) : (x.margen ? '  ·  precio = costo ÷ ' + (1 - x.margen).toFixed(2) : '')));
       });
       tot.style.opacity = '1';
       tot.innerHTML = 'Partidas: ' + $m(r.bruto) + ' · m²: ' + $n(r.m2) + (r.descuento ? '<br>Descuento ' + (document.querySelector('[data-k=DescuentoPct]').value) + '%: -' + $m(r.descuento) : '') + '<br>Subtotal: <b>' + $m(r.subtotal) + '</b> · IVA: ' + $m(r.iva) + ' · Total: <b>' + $m(r.total) + '</b>';

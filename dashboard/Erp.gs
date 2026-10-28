@@ -657,7 +657,12 @@ function tarifasDet_() {
   return out;
 }
 function costoUnidad_(t, u) { return ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null; }
-function margenCot_() { return num_(cfg_('COT_MARGEN', '0.40')); }
+/** Margen sobre el precio (0.40). Acepta 0.4, 40 o 40%; un valor vacio, 0 o absurdo vuelve a 0.40 para no cotizar nunca a costo. */
+function margenCot_() {
+  let m = num_(cfg_('COT_MARGEN', '0.40'));
+  if (m >= 1) m = m / 100;
+  return (m > 0 && m < 0.95) ? m : 0.40;
+}
 const IMPRESIONES = ['Gran Formato', 'HD', 'UV', 'Sin impresión'];
 function sinAcentos_(t) { return str_(t).toUpperCase().replace(/[ÁÀÄ]/g, 'A').replace(/[ÉÈË]/g, 'E').replace(/[ÍÌÏ]/g, 'I').replace(/[ÓÒÖ]/g, 'O').replace(/[ÚÙÜ]/g, 'U'); }
 /** Que hace un acabado del catalogo ACABADO: por palabra clave del nombre. */
@@ -708,12 +713,12 @@ function calcPartida_(t, l, cats) {
     cTin = m2 * tintaRate_(imp) * (sobreTotal ? 1 : mult);
     cAca = ojillos * q * num_(cfg_('COT_OJILLO', '2'));
     let costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
-    const mg = num_(cfg_('COT_MARGEN', '0.40'));
+    const mg = margenCot_();
     importe = r2_(costo / (1 - mg)); precio = base ? r4_(importe / base) : 0;
   }
   const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
     return a.nombre + (a.tipo === 'ojillos' ? ' (' + a.par + ' por pieza)' : (a.tipo === 'bastilla' || a.tipo === 'bolsa') ? ' (' + (a.par > 0 ? a.par : num_(cfg_('COT_BASTILLA_CM', '5'))) + ' cm)' : ''); })).join(' · ');
-  return { Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
+  return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
            TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det, CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
 }
 
@@ -747,7 +752,7 @@ function a_cotCalcular(u, p) {
     if (!t) return { error: 'El material no está en el catálogo (TARIFAS).' };
     try {
       const r = calcPartida_(t, l, cats); bruto += r.Importe;
-      const o = { Unidad: r.Unidad, unidadesOk: r.unidadesOk, M2: r.M2, Precio: r.Precio, PrecioUnit: r.PrecioUnit, Importe: r.Importe, Detalle: r.Detalle };
+      const o = { margen: r.margen, manual: r.manual, Unidad: r.Unidad, unidadesOk: r.unidadesOk, M2: r.M2, Precio: r.Precio, PrecioUnit: r.PrecioUnit, Importe: r.Importe, Detalle: r.Detalle };
       if (vc) { o.CostoMaterial = r.CostoMaterial; o.CostoTinta = r.CostoTinta; o.CostoAcabados = r.CostoAcabados; }
       return o;
     } catch (e) {
