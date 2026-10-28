@@ -782,6 +782,17 @@ function usoMaterial_(nombre) {
   };
 }
 
+/** Reemplaza un valor en UNA columna de una hoja ERP_*, con una sola lectura y una sola escritura (rapido aunque haya miles de filas). */
+function cambiaCampo_(hoja, campo, viejo, nuevo) {
+  const h = sh_(hoja), n = h.getLastRow() - 1, i = hdr_(hoja).indexOf(campo);
+  if (n < 1 || i < 0) return 0;
+  const rg = h.getRange(2, i + 1, n, 1), v = rg.getValues();
+  let k = 0;
+  v.forEach(function (r) { if (MISMO_(r[0], viejo)) { r[0] = nuevo; k++; } });
+  if (k) { rg.setValues(v); delete _C[hoja]; }
+  return k;
+}
+
 /** Cambia el nombre del material en todos los registros. Solo cambia el TEXTO: los costos y precios ya guardados no se tocan. */
 function reemplazaMaterial_(viejo, nuevo) {
   const out = { base: 0, ventas: 0, cotizaciones: 0, odp: 0 };
@@ -793,8 +804,8 @@ function reemplazaMaterial_(viejo, nuevo) {
     if (out[clave]) rg.setValues(v);
   };
   cambia(CFG.HOJA_BASE, COL.MATERIAL, 'base'); cambia(CFG.HOJA_VENTAS, CV.MATERIAL, 'ventas');
-  read_('CotDetalle').forEach(function (l) { if (MISMO_(l.Descripcion, viejo)) { update_('CotDetalle', l, { Descripcion: nuevo }); out.cotizaciones++; } });
-  read_('ODPDetalle').forEach(function (l) { if (MISMO_(l.Material, viejo)) { update_('ODPDetalle', l, { Material: nuevo }); out.odp++; } });
+  out.cotizaciones = cambiaCampo_('CotDetalle', 'Descripcion', viejo, nuevo);
+  out.odp = cambiaCampo_('ODPDetalle', 'Material', viejo, nuevo);
   if (out.base) _limpiaCacheBase_();
   if (out.ventas) _limpiaCacheVentas_();
   return out;
@@ -1663,7 +1674,7 @@ function run(action, p, ses) {
   const fn = ACTIONS[action];
   if (!fn) throw new Error('Acción desconocida: ' + action);
   const lock = LockService.getScriptLock();
-  const usa = !SIN_CANDADO[action];
+  const usa = !SIN_CANDADO[action] && !LECTURAS[action];   // las consultas no escriben: no esperan el candado
   if (usa) lock.waitLock(30000);
   try {
     resetCache_();
