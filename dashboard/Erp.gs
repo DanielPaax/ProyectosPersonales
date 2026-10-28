@@ -59,7 +59,7 @@ const SCHEMA = {
                   'Facturado', 'CostoMaterial', 'CostoTinta', 'CostoMO', 'CostoMaquila', 'CostoOtros', 'CostoTotal', 'Utilidad', 'Margen',
                   'M2Usados', 'MermaM2', 'MermaPct', 'CostoMerma', 'Factura',
                   'Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado',
-                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas'],
+                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas', 'CostoMatFijo', 'CostoMermaFijo'],
   ODPDetalle:    ['ODP', 'Linea', 'Piezas', 'Ancho', 'Alto', 'M2', 'Material', 'Maquina', 'Archivo', 'Acabados'],
   ODPCostos:     ['ID', 'ODP', 'Fecha', 'Tipo', 'Concepto', 'Cantidad', 'CostoUnit', 'Importe', 'CompraID', 'Usuario'],
   Facturas:      ['ID', 'Fecha', 'FolioSAT', 'ClienteID', 'Cliente', 'Comercial', 'ODP', 'Subtotal', 'IVA', 'Total', 'Vencimiento', 'Cobrado', 'Saldo', 'Estatus', 'Notas'],
@@ -114,7 +114,7 @@ const CONFIG_DEFAULTS = [
   ['DIAS_CREDITO_PROV', '30', 'Días de crédito para proveedores nuevos que se dan de alta desde un XML'],
   ['RECIBE_PRODUCCION', 'ERNESTO RUIZ / CÉSAR MÁRQUEZ', 'Quién recibe en producción (sale en la ODP)'],
 ];
-const SCHEMA_VER = '6';
+const SCHEMA_VER = '7';
 
 
 
@@ -154,7 +154,7 @@ const ACTIONS = {
   materiales: a_materiales, saveMaterial: a_saveMaterial, kardex: a_kardex,
   conteos: a_conteos, conteo: a_conteo,
   compras: a_compras, compraDetalle: a_compraDetalle, saveCompra: a_saveCompra, cancelarCompra: a_cancelarCompra, registrarPago: a_registrarPago,
-  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, tarifas: a_tarifas, saveTarifa: a_saveTarifa, cotCalcular: a_cotCalcular, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
+  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, tarifas: a_tarifas, saveTarifa: a_saveTarifa, usoTarifa: a_usoTarifa, deleteTarifa: a_deleteTarifa, cotCalcular: a_cotCalcular, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
   seguimiento: a_seguimiento, saveSeg: a_saveSeg,
   odps: a_odps, odpDetalle: a_odpDetalle, saveODP: a_saveODP, consumir: a_consumir, devolver: a_devolver,
   agregarCosto: a_agregarCosto, anularCosto: a_anularCosto,
@@ -765,6 +765,84 @@ function a_cotCalcular(u, p) {
   return { lineas: lineas, bruto: r2_(bruto), descuento: desc, subtotal: sub, iva: iva, total: r2_(sub + iva), m2: r4_(lineas.reduce(function (s, x) { return s + (x.M2 || 0); }, 0)) };
 }
 
+// ---- Uso, cambio de nombre y sustitucion de materiales en los registros
+const MISMO_ = function (a, b) { return str_(a).toUpperCase() === str_(b).toUpperCase(); };
+
+/** Cuantos registros usan el material: produccion (BASE), ventas (VENTAS), partidas de cotizacion y de ODP. */
+function usoMaterial_(nombre) {
+  const col = function (hoja, c) {
+    const h = _hoja_(hoja), n = h.getLastRow() - 1;
+    return n < 1 ? [] : h.getRange(2, c, n, 1).getValues();
+  };
+  return {
+    base: col(CFG.HOJA_BASE, COL.MATERIAL).filter(function (r) { return MISMO_(r[0], nombre); }).length,
+    ventas: col(CFG.HOJA_VENTAS, CV.MATERIAL).filter(function (r) { return MISMO_(r[0], nombre); }).length,
+    cotizaciones: read_('CotDetalle').filter(function (l) { return MISMO_(l.Descripcion, nombre); }).length,
+    odp: read_('ODPDetalle').filter(function (l) { return MISMO_(l.Material, nombre); }).length,
+  };
+}
+
+/** Cambia el nombre del material en todos los registros. Solo cambia el TEXTO: los costos y precios ya guardados no se tocan. */
+function reemplazaMaterial_(viejo, nuevo) {
+  const out = { base: 0, ventas: 0, cotizaciones: 0, odp: 0 };
+  const cambia = function (hoja, c, clave) {
+    const h = _hoja_(hoja), n = h.getLastRow() - 1;
+    if (n < 1) return;
+    const rg = h.getRange(2, c, n, 1), v = rg.getValues();
+    v.forEach(function (r) { if (MISMO_(r[0], viejo)) { r[0] = nuevo; out[clave]++; } });
+    if (out[clave]) rg.setValues(v);
+  };
+  cambia(CFG.HOJA_BASE, COL.MATERIAL, 'base'); cambia(CFG.HOJA_VENTAS, CV.MATERIAL, 'ventas');
+  read_('CotDetalle').forEach(function (l) { if (MISMO_(l.Descripcion, viejo)) { update_('CotDetalle', l, { Descripcion: nuevo }); out.cotizaciones++; } });
+  read_('ODPDetalle').forEach(function (l) { if (MISMO_(l.Material, viejo)) { update_('ODPDetalle', l, { Material: nuevo }); out.odp++; } });
+  if (out.base) _limpiaCacheBase_();
+  if (out.ventas) _limpiaCacheVentas_();
+  return out;
+}
+
+function a_usoTarifa(u, p) {
+  need_(u, 'material');
+  const t = tarifasDet_().filter(function (x) { return MISMO_(x.material, p.MATERIAL); })[0];
+  if (!t) throw new Error('No encuentro el material "' + str_(p.MATERIAL) + '".');
+  const uso = usoMaterial_(t.material);
+  return { material: t.material, uso: uso, total: uso.base + uso.ventas + uso.cotizaciones + uso.odp };
+}
+
+/** Elimina el material de TARIFAS. Si hay registros que lo usan, exige otro material para sustituirlo en ellos.
+ *  Los precios y costos historicos se conservan: ventas y cotizaciones guardan sus importes; las ODP congelan el costo de material que tenian. */
+function a_deleteTarifa(u, p) {
+  need_(u, 'material');
+  const todas = tarifasDet_();
+  const t = todas.filter(function (x) { return MISMO_(x.material, p.MATERIAL); })[0];
+  if (!t) throw new Error('No encuentro el material "' + str_(p.MATERIAL) + '".');
+  const uso = usoMaterial_(t.material), total = uso.base + uso.ventas + uso.cotizaciones + uso.odp;
+  let nuevo = null, movidos = null;
+  if (total > 0) {
+    nuevo = todas.filter(function (x) { return MISMO_(x.material, p.REEMPLAZO); })[0];
+    if (!str_(p.REEMPLAZO)) throw new Error('Este material se usa en ' + total + ' registros. Elige con qué material se sustituye.');
+    if (!nuevo) throw new Error('El material de reemplazo "' + str_(p.REEMPLAZO) + '" no existe en TARIFAS.');
+    if (MISMO_(nuevo.material, t.material)) throw new Error('El reemplazo debe ser otro material.');
+    // 1) congelar el costo de material de las ODP afectadas ANTES de cambiar los nombres
+    const afectadas = {};
+    read_('ODPDetalle').forEach(function (l) { if (MISMO_(l.Material, t.material)) afectadas[str_(l.ODP)] = 1; });
+    _leerBase_().forEach(function (b) { if (MISMO_(b.material, t.material) && str_(b.orden)) afectadas[str_(b.orden)] = 1; });
+    Object.keys(afectadas).forEach(function (f) {
+      const o = find_('ODP', 'Folio', f);
+      if (o && str_(o.CostoMatFijo) === '') { const info = prodInfo_(o); update_('ODP', o, { CostoMatFijo: info.cMat, CostoMermaFijo: info.cMerma }); }
+    });
+    // 2) sustituir el nombre en los registros (los importes guardados no cambian)
+    movidos = reemplazaMaterial_(t.material, nuevo.material);
+    Object.keys(afectadas).forEach(function (f) { if (find_('ODP', 'Folio', f)) recalcODP_(f); });
+  }
+  // 3) quitar de TARIFAS (solo A:B y F:O: los parametros de D:E no se tocan) y de la lista de CATALOGOS
+  const h = tarHoja_();
+  h.getRange(t.fila, 1, 1, 2).clearContent();
+  h.getRange(t.fila, TAR_COL_EXT, 1, TAR_EXT.length).clearContent();
+  _catalogoMaterialAplica_(t.material, '');
+  _limpiaCacheCatalogos_();
+  return { eliminado: t.material, sustituidoPor: nuevo ? nuevo.material : '', movidos: movidos, uso: uso };
+}
+
 // ---- Carga de material (formulario de ADMINISTRACION) -> hoja TARIFAS
 function a_tarifas(u) { need_(u, 'material'); return tarifasDet_(); }
 
@@ -795,14 +873,24 @@ function a_saveTarifa(u, p) {
   if (cobro !== 'otro' && !c[cobro]) throw new Error('Con esa presentación y medidas no se puede calcular el costo por ' + cobro + '. Revisa presentación, ancho y largo.');
   const v = function (x) { return x ? r4_(x) : 'NA'; };
   const h = tarHoja_(), hoy = hoy_();
-  let fila = ex ? ex.fila : h.getLastRow() + 1;
+  let fila = ex ? ex.fila : 0;
+  if (!fila) {   // un material eliminado deja la fila en blanco: se reutiliza
+    const ult = h.getLastRow(), col = ult >= 2 ? h.getRange(2, 1, ult - 1, 1).getValues() : [];
+    for (let i = 0; i < col.length; i++) { if (str_(col[i][0]) === '') { fila = i + 2; break; } }
+    if (!fila) fila = ult + 1;
+  }
   h.getRange(fila, 1, 1, 2).setValues([[mat, v(c.m2)]]);
   h.getRange(fila, TAR_COL_EXT, 1, TAR_EXT.length).setValues([[str_(p.PROVEEDOR), pres, ancho || '', largo || '', costo, cobro, v(c.mtl), v(c.lamina), v(c.pz), hoy]]);
   _limpiaCacheCatalogos_();
+  let renombrados = null;
+  if (ex && ex.material !== mat) {
+    renombrados = reemplazaMaterial_(ex.material, mat);
+    _catalogoMaterialAplica_(ex.material, mat);
+  }
   const mg = 1 / (1 - margenCot_());
   return { fila: fila, material: mat, costoM2: v(c.m2), costoMtl: v(c.mtl), costoLamina: v(c.lamina), costoPz: v(c.pz), cobroPor: cobro,
            precios: { m2: c.m2 ? r2_(c.m2 * mg) : 'NA', mtl: c.mtl ? r2_(c.mtl * mg) : 'NA', lamina: c.lamina ? r2_(c.lamina * mg) : 'NA', pz: c.pz ? r2_(c.pz * mg) : 'NA' },
-           avisoDashboard: c.m2 ? '' : 'Sin costo por m²: el Dashboard costeará este material en $0 por m².' };
+           avisoDashboard: c.m2 ? '' : 'Sin costo por m²: el Dashboard costeará este material en $0 por m².', renombrados: renombrados };
 }
 
 function folioCot_(u) {
@@ -1460,6 +1548,7 @@ function prodInfo_(o) {
   if (t) { material = t.nombre; cMat = r2_(t.c * m2p); cMerma = r2_(t.c * Math.max(m2r - m2p, 0)); if (t.sinTarifa) obs.push('Material sin tarifa: costo de material y merma en cero.'); }
   else { material = '(NO REPORTADO)'; obs.push('Sin material: costo de material y merma en cero.'); }
 
+  if (str_(o.CostoMatFijo) !== '') { cMat = num_(o.CostoMatFijo); cMerma = num_(o.CostoMermaFijo); }   // costo congelado al sustituir un material
   return { cats: cats, tar: tar, base: base, propias: propias, lineas: lineas, maquina: maquina, material: material, m2p: m2p, m2r: m2r, cMat: cMat, cMerma: cMerma, obs: obs };
 }
 
@@ -1565,7 +1654,7 @@ function resincronizar() {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
