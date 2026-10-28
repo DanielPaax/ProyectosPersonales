@@ -162,6 +162,10 @@ var ENCABEZADOS_VENTAS = [
   'OBS_MIGRACION', 'VENDEDOR', 'MERMA_PCT'
 ];
 var ENCABEZADOS_TARIFAS = ['MATERIAL', 'COSTO_M2'];
+/* Columnas F a O de TARIFAS: las llena el formulario "Carga de material" del ERP. NA = no aplica cobro por esa unidad.
+   (A:B y D:E no cambian: el Dashboard sigue leyendo MATERIAL / COSTO_M2 y CARGA_M2.) */
+var TAR_EXT = ['PROVEEDOR', 'PRESENTACION', 'ANCHO', 'LARGO', 'COSTO', 'COBRO_POR', 'COSTO_MTL', 'COSTO_LAMINA', 'COSTO_PZ', 'ACTUALIZADO'];
+var TAR_COL_EXT = 6;
 
 /* Catalogos nuevos que Instalar agrega a CATALOGOS si no existen. */
 var CATALOGOS_VENTA = {
@@ -596,7 +600,7 @@ function _leerBase_() {
    capitalizacion dejaba el catalogo VACIO en los formularios, sin aviso. */
 var CAT_ALIAS = {
   MAQUINAS: 'MAQUINA', PROCESOS: 'PROCESO', MATERIALES: 'MATERIAL', UNIDADES: 'UNIDAD',
-  ORIGENES: 'ORIGEN', OPERADORES: 'OPERADOR', VENDEDORES: 'VENDEDOR', TURNOS: 'TURNO',
+  ORIGENES: 'ORIGEN', OPERADORES: 'OPERADOR', VENDEDORES: 'VENDEDOR', COMERCIAL: 'VENDEDOR', COMERCIALES: 'VENDEDOR', AGENTE_DE_VENTAS: 'VENDEDOR', TURNOS: 'TURNO',
   MOTIVO_DE_PARO: 'MOTIVO_PARO', MOTIVOS_DE_PARO: 'MOTIVO_PARO', MOTIVOS_PARO: 'MOTIVO_PARO',
   METODOS_PAGO: 'METODO_PAGO', METODO_DE_PAGO: 'METODO_PAGO', ESTATUS_DE_COBRO: 'ESTATUS_COBRO',
   TIPOS_PROYECTO: 'TIPO_PROYECTO', TIPO_DE_PROYECTO: 'TIPO_PROYECTO', ACABADOS: 'ACABADO'
@@ -643,8 +647,33 @@ function _leerCatalogos_() {
       out[nombre] = lista;
     }
   }
+  /* El catalogo de MATERIAL es la hoja TARIFAS (columna A): la misma lista y los mismos costos en la captura de
+     trabajo, la de venta, las graficas y el ERP. La lista de CATALOGOS queda solo para migrarla (instalar). */
+  try {
+    var tn = _leerTarifas_().nombres;
+    if (tn && tn.length) { out.MATERIAL_CATALOGO = out.MATERIAL || []; out.MATERIAL = tn.slice(); }
+  } catch (e) { /* sin TARIFAS: se usa la lista de CATALOGOS */ }
   try { cache.put('catalogos_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
   return out;
+}
+
+/* Agrega a TARIFAS (costo 0) los materiales de CATALOGOS que aun no estan, para no perder ninguno al pasar a TARIFAS como catalogo. */
+function _migraMaterialesATarifas_(tar) {
+  _aseguraColumnas_(tar, TAR_COL_EXT + TAR_EXT.length - 1);
+  var h1 = tar.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).getValues()[0];
+  var igual = true;
+  for (var i = 0; i < TAR_EXT.length; i++) { if (String(h1[i] || '').trim().toUpperCase() !== TAR_EXT[i]) { igual = false; } }
+  if (!igual) { tar.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).setValues([TAR_EXT]); }
+  _limpiaCacheCatalogos_();
+  var raw = _leerCatalogos_().MATERIAL_CATALOGO || [];
+  var ya = {}, nombres = _leerTarifas_().nombres;
+  for (var n = 0; n < nombres.length; n++) { ya[String(nombres[n]).toUpperCase()] = true; }
+  var faltan = [];
+  for (var r = 0; r < raw.length; r++) { if (!ya[String(raw[r]).toUpperCase()]) { faltan.push(raw[r]); } }
+  var fila = tar.getLastRow() + 1;
+  for (var f = 0; f < faltan.length; f++) { tar.getRange(fila + f, 1, 1, 2).setValues([[faltan[f], 0]]); }
+  _limpiaCacheCatalogos_();
+  return faltan.length ? 'TARIFAS: se agregaron ' + faltan.length + ' materiales de CATALOGOS con costo 0 (' + faltan.join(', ') + ').' : 'TARIFAS: ya contiene todos los materiales de CATALOGOS.';
 }
 
 /* ===================== AGREGACION ===================== */
@@ -2885,6 +2914,7 @@ function instalar() {
   var tar = ss.getSheetByName(CFG.HOJA_TARIFAS);
   if (!tar) { tar = ss.insertSheet(CFG.HOJA_TARIFAS); hechos.push('Hoja TARIFAS creada.'); }
   hechos.push(migrarEncabezados(tar, ENCABEZADOS_TARIFAS));
+  hechos.push(_migraMaterialesATarifas_(tar));
   _instalaIntranet_(hechos);
   try { hechos.push(ERP.instalar()); } catch (e) { hechos.push('ERP: no se pudo instalar (' + e.message + ').'); }   /* hojas de la intranet (ordenes, actividad, enlaces) */
   tar.setFrozenRows(1);

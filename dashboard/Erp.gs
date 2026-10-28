@@ -51,14 +51,15 @@ const SCHEMA = {
   CompraDetalle: ['CompraID', 'Clave', 'Cantidad', 'CostoUnit', 'Importe'],
   Pagos:         ['ID', 'Fecha', 'CompraID', 'Monto', 'Referencia', 'Usuario'],
   Cotizaciones:  ['Folio', 'Fecha', 'ClienteID', 'Cliente', 'Comercial', 'Descripcion', 'M2', 'Subtotal', 'IVA', 'Total', 'Estatus', 'ODP', 'ProximoSeguimiento', 'Notas',
-                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto'],
-  CotDetalle:    ['Folio', 'Linea', 'Descripcion', 'Ancho', 'Alto', 'Cantidad', 'M2', 'PrecioM2', 'PrecioUnit', 'Importe'],
+                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto', 'AgenteVentas', 'DescuentoPct', 'Indicaciones'],
+  CotDetalle:    ['Folio', 'Linea', 'Descripcion', 'Ancho', 'Alto', 'Cantidad', 'M2', 'PrecioM2', 'PrecioUnit', 'Importe', 'Unidad',
+                  'Impresion', 'TintaBlanca', 'Barniz', 'Acabado1', 'Param1', 'Acabado2', 'Param2', 'Acabado3', 'Param3', 'Detalle', 'CostoMaterial', 'CostoTinta', 'CostoAcabados', 'PrecioManual'],
   Seguimiento:   ['ID', 'Fecha', 'ClienteID', 'Cliente', 'Cotizacion', 'Comercial', 'Tipo', 'Nota', 'ProximaAccion'],
   ODP:           ['Folio', 'Fecha', 'Cotizacion', 'ClienteID', 'Cliente', 'Comercial', 'Descripcion', 'M2Vendidos', 'PrecioVenta', 'FechaEntrega', 'Estatus',
                   'Facturado', 'CostoMaterial', 'CostoTinta', 'CostoMO', 'CostoMaquila', 'CostoOtros', 'CostoTotal', 'Utilidad', 'Margen',
                   'M2Usados', 'MermaM2', 'MermaPct', 'CostoMerma', 'Factura',
                   'Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado',
-                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto'],
+                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas'],
   ODPDetalle:    ['ODP', 'Linea', 'Piezas', 'Ancho', 'Alto', 'M2', 'Material', 'Maquina', 'Archivo', 'Acabados'],
   ODPCostos:     ['ID', 'ODP', 'Fecha', 'Tipo', 'Concepto', 'Cantidad', 'CostoUnit', 'Importe', 'CompraID', 'Usuario'],
   Facturas:      ['ID', 'Fecha', 'FolioSAT', 'ClienteID', 'Cliente', 'Comercial', 'ODP', 'Subtotal', 'IVA', 'Total', 'Vencimiento', 'Cobrado', 'Saldo', 'Estatus', 'Notas'],
@@ -96,6 +97,14 @@ const CONFIG_DEFAULTS = [
   ['PREFIJO_COT', 'COT-', 'Prefijo de cotizaciones'],
   ['CONSEC_COT', '1', 'Siguiente número de cotización'],
   ['MERMA_ALERTA', '0.10', 'Merma a partir de la cual se marca en rojo (0.10 = 10%)'],
+  ['COT_MARGEN', '0.40', 'Margen sobre el PRECIO de cotización: precio = costo ÷ (1 − margen); 0.40 = costo ÷ 0.60'],
+  ['COT_TINTA_GF', '3.25', 'Costo de tinta por m² en Gran Formato'],
+  ['COT_TINTA_HD', '15.35', 'Costo de tinta por m² en HD'],
+  ['COT_TINTA_UV', '25.35', 'Costo de tinta por m² en UV'],
+  ['COT_OJILLO', '2', 'Costo por ojillo'],
+  ['COT_BASTILLA_CM', '5', 'Bastilla por defecto (cm por lado) si no se captura'],
+  ['COT_BOLSA_SELLADO_CM', '5', 'Sellado/bastilla de la bolsa (cm): cada lado suma 2 × bolsa + sellado'],
+  ['COT_MULT_SOBRE', 'TINTA', 'Los multiplicadores de UV (tinta blanca x2, barniz x2, ambos x3) se aplican a: TINTA o TOTAL'],
   ['MARGEN_MINIMO', '0.30', 'Margen por debajo del cual se marca en rojo (0.30 = 30%)'],
   ['COMERCIAL_VE_COSTOS', 'NO', 'SI = los comerciales ven costo y utilidad de sus ODP'],
   ['COT_TERMINOS', TERMINOS_DEF, 'Términos y condiciones que salen en el PDF de la cotización'],
@@ -105,7 +114,7 @@ const CONFIG_DEFAULTS = [
   ['DIAS_CREDITO_PROV', '30', 'Días de crédito para proveedores nuevos que se dan de alta desde un XML'],
   ['RECIBE_PRODUCCION', 'ERNESTO RUIZ / CÉSAR MÁRQUEZ', 'Quién recibe en producción (sale en la ODP)'],
 ];
-const SCHEMA_VER = '4';
+const SCHEMA_VER = '6';
 
 
 
@@ -145,7 +154,7 @@ const ACTIONS = {
   materiales: a_materiales, saveMaterial: a_saveMaterial, kardex: a_kardex,
   conteos: a_conteos, conteo: a_conteo,
   compras: a_compras, compraDetalle: a_compraDetalle, saveCompra: a_saveCompra, cancelarCompra: a_cancelarCompra, registrarPago: a_registrarPago,
-  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
+  cotizaciones: a_cotizaciones, cotDetalle: a_cotDetalle, saveCot: a_saveCot, tarifas: a_tarifas, saveTarifa: a_saveTarifa, cotCalcular: a_cotCalcular, aprobarCot: a_aprobarCot, pdfCot: a_pdfCot, pdfODP: a_pdfODP,
   seguimiento: a_seguimiento, saveSeg: a_saveSeg,
   odps: a_odps, odpDetalle: a_odpDetalle, saveODP: a_saveODP, consumir: a_consumir, devolver: a_devolver,
   agregarCosto: a_agregarCosto, anularCosto: a_anularCosto,
@@ -253,10 +262,10 @@ function a_init(u) {
     user: u, perms: ROLES_ERP[u.rol], hoy: hoy_(),
     cfg: {
       EMPRESA: cfg_('EMPRESA', 'ERP'), IVA: ivaRate_(),
-      MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
+      COT_MARGEN: margenCot_(), MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
       VE_COSTOS: veCostos_(u), VE_PRECIO: vePrecio_(u),
     },
-    cat: { TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
+    cat: { UNIDADES_COT: UNIDADES_COT, DESCUENTOS_COT: DESCUENTOS_COT, TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
            TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_SEG: TIPOS_SEG, ROLES_ERP: Object.keys(ROLES_ERP) },
   };
 }
@@ -605,7 +614,8 @@ function a_cotizaciones(u) { needAny_(u, ['crm', 'crm_ver']); return scope_(u, r
 function a_cotDetalle(u, p) {
   needAny_(u, ['crm', 'crm_ver']);
   const c = mustFind_('Cotizaciones', 'Folio', p.Folio, 'Cotización'); ownOr_(u, c);
-  return { cot: clean_(c), lineas: lineasDe_('CotDetalle', 'Folio', c.Folio) };
+  const vc = veCostos_(u);
+  return { cot: clean_(c), lineas: lineasDe_('CotDetalle', 'Folio', c.Folio).map(function (l) { if (!vc) { delete l.CostoMaterial; delete l.CostoTinta; delete l.CostoAcabados; } return l; }) };
 }
 
 function lineasDe_(hoja, k, folio) {
@@ -613,20 +623,181 @@ function lineasDe_(hoja, k, folio) {
     .sort(function (a, b) { return num_(a.Linea) - num_(b.Linea); }).map(clean_);
 }
 
-/** Partidas de cotización: medidas en metros; si hay $/m² y medidas, el precio unitario = ancho × alto × $/m². */
-function lineasCot_(arr) {
-  const out = [];
-  (arr || []).forEach(function (l) {
-    const desc = str_(l.Descripcion), an = num_(l.Ancho), al = num_(l.Alto), pm2 = num_(l.PrecioM2);
-    let pu = num_(l.PrecioUnit), q = num_(l.Cantidad);
-    if (!desc && !pu && !pm2 && !an && !al) return;
-    if (!desc) throw new Error('Falta la descripción en una partida.');
-    if (!q) q = 1;
-    if (pm2 > 0 && an > 0 && al > 0) pu = an * al * pm2;
-    out.push({ Descripcion: desc, Ancho: an || '', Alto: al || '', Cantidad: q, M2: r4_(an * al * q), PrecioM2: pm2 || '',
-               PrecioUnit: r2_(pu), Importe: r2_(q * r2_(pu)) });
+const UNIDADES_COT = ['m2', 'mtl', 'lamina', 'pz'];
+const PRESENTACIONES = ['lamina', 'rollo', 'hoja', 'bobina', 'otro'];
+const COBROS = ['m2', 'mtl', 'lamina', 'pz', 'otro'];
+const DESCUENTOS_COT = [0, 5, 10, 15, 20, 25];
+
+/** Nombre del catalogo (CATALOGOS del Dashboard) en su forma canonica, o '' si no existe. */
+function enCatalogo_(lista, v) {
+  v = str_(v).toUpperCase();
+  return (lista || []).filter(function (x) { return String(x).toUpperCase() === v; })[0] || '';
+}
+
+// ---- TARIFAS: catalogo unico de materiales, con costo por unidad (NA = no aplica cobro por esa unidad)
+function nz_(v) { const t = str_(v).toUpperCase(); if (t === '' || t === 'NA' || t === 'N/A') return null; const n = num_(v); return n > 0 ? n : null; }
+function tarHoja_() {
+  const h = _hoja_(CFG.HOJA_TARIFAS);
+  _aseguraColumnas_(h, TAR_COL_EXT + TAR_EXT.length - 1);
+  const cab = h.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).getValues()[0];
+  if (cab.some(function (x, i) { return str_(x).toUpperCase() !== TAR_EXT[i]; })) h.getRange(1, TAR_COL_EXT, 1, TAR_EXT.length).setValues([TAR_EXT]);
+  return h;
+}
+/** Todas las filas de TARIFAS con su detalle. */
+function tarifasDet_() {
+  const h = tarHoja_(), n = h.getLastRow() - 1, out = [];
+  if (n < 1) return out;
+  const v = h.getRange(2, 1, n, TAR_COL_EXT + TAR_EXT.length - 1).getValues();
+  v.forEach(function (r, i) {
+    const mat = str_(r[0]); if (!mat) return;
+    const o = TAR_COL_EXT - 1;
+    out.push({ fila: i + 2, material: mat, costoM2: nz_(r[1]), proveedor: str_(r[o]), presentacion: str_(r[o + 1]), ancho: num_(r[o + 2]), largo: num_(r[o + 3]),
+               costo: num_(r[o + 4]), cobroPor: str_(r[o + 5]), costoMtl: nz_(r[o + 6]), costoLamina: nz_(r[o + 7]), costoPz: nz_(r[o + 8]), actualizado: str_(r[o + 9]) });
   });
   return out;
+}
+function costoUnidad_(t, u) { return ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null; }
+function margenCot_() { return num_(cfg_('COT_MARGEN', '0.40')); }
+const IMPRESIONES = ['Gran Formato', 'HD', 'UV', 'Sin impresión'];
+function sinAcentos_(t) { return str_(t).toUpperCase().replace(/[ÁÀÄ]/g, 'A').replace(/[ÉÈË]/g, 'E').replace(/[ÍÌÏ]/g, 'I').replace(/[ÓÒÖ]/g, 'O').replace(/[ÚÙÜ]/g, 'U'); }
+/** Que hace un acabado del catalogo ACABADO: por palabra clave del nombre. */
+function tipoAcabado_(nombre) {
+  const n = sinAcentos_(nombre);
+  return n.indexOf('OJILLO') >= 0 ? 'ojillos' : n.indexOf('BASTILLA') >= 0 ? 'bastilla' : n.indexOf('BOLSA') >= 0 ? 'bolsa' : 'otro';
+}
+function tintaRate_(imp) { return imp === 'UV' ? num_(cfg_('COT_TINTA_UV', '25.35')) : imp === 'HD' ? num_(cfg_('COT_TINTA_HD', '15.35')) : imp === 'Gran Formato' ? num_(cfg_('COT_TINTA_GF', '3.25')) : 0; }
+
+/** Calculo de UNA partida. Precio = (material + tinta + acabados) / (1 - margen).
+ *  - material: costo de TARIFAS de la unidad (m2, mtl, lamina, pz) x cantidad base; m2 incluye lo que suman bastilla/bolsa.
+ *  - tinta: m2 x tarifa (GF 3.25, HD 15.35, UV 25.35); en UV, tinta blanca x2, barniz a registro x2, ambos x3.
+ *  - acabados: ojillos = $2 c/u (por pieza x cantidad); bastilla suma cm a cada lado (ancho y alto + 2 x cm);
+ *    bolsa suma 2 x cm + sellado a cada lado.
+ *  Si capturan el precio a mano (PrecioManual) el importe es cantidad base x ese precio. Lanza error si no se puede calcular. */
+function calcPartida_(t, l, cats) {
+  const an = num_(l.Ancho), al = num_(l.Alto), q = num_(l.Cantidad) || 1;
+  const imp = IMPRESIONES.indexOf(str_(l.Impresion)) >= 0 ? str_(l.Impresion) : 'Gran Formato';
+  const blanca = imp === 'UV' && /^(si|sí|1|true|on)$/i.test(str_(l.TintaBlanca)), barniz = imp === 'UV' && /^(si|sí|1|true|on)$/i.test(str_(l.Barniz));
+  // acabados
+  const acab = [], marg = [];
+  let ojillos = 0, ext = 0;
+  [1, 2, 3].forEach(function (i) {
+    const nom = str_(l['Acabado' + i]); if (!nom) return;
+    const cat = enCatalogo_((cats || {}).ACABADO, nom);
+    if (!cat) throw new Error('El acabado "' + nom + '" no está en el catálogo ACABADO.');
+    if (acab.some(function (a) { return a.nombre === cat; })) throw new Error('El acabado "' + cat + '" está repetido.');
+    const tipo = tipoAcabado_(cat), par = num_(l['Param' + i]);
+    if (tipo === 'ojillos') { if (!(par > 0)) throw new Error('Indica cuántos ojillos lleva cada pieza.'); ojillos += par; }
+    if (tipo === 'bastilla') { const cm = par > 0 ? par : num_(cfg_('COT_BASTILLA_CM', '5')); ext = Math.max(ext, cm / 100); }
+    if (tipo === 'bolsa') { if (!(par > 0)) throw new Error('Indica los cm de la bolsa.'); ext = Math.max(ext, (2 * par + num_(cfg_('COT_BOLSA_SELLADO_CM', '5'))) / 100); }
+    acab.push({ nombre: cat, tipo: tipo, par: par });
+  });
+  const anE = an + 2 * ext, alE = al + 2 * ext;
+  const m2 = num_(l.M2) > 0 ? num_(l.M2) : anE * alE * q;
+  const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 && costoUnidad_(t, t.cobroPor) ? t.cobroPor : (UNIDADES_COT.filter(function (u) { return costoUnidad_(t, u); })[0] || 'm2'));
+  const base = uni === 'm2' ? m2 : uni === 'mtl' ? (alE > 0 ? alE * q : q) : q;
+  const manual = num_(l.PrecioManual) === 1 || /^(si|sí|1|true)$/i.test(str_(l.PrecioManual));
+  const unidadesOk = {}; UNIDADES_COT.forEach(function (u) { unidadesOk[u] = !!costoUnidad_(t, u); });
+  let cMat = 0, cTin = 0, cAca = 0, importe, precio;
+  if (manual && num_(l.PrecioM2) > 0) {
+    precio = num_(l.PrecioM2); importe = r2_(base * precio);
+  } else {
+    const cu = costoUnidad_(t, uni);
+    if (!cu) throw new Error('"' + t.material + '" no tiene costo por ' + uni + ' (NA). Elige otra unidad o captura el precio.');
+    cMat = base * cu;
+    const mult = (blanca && barniz) ? 3 : (blanca || barniz) ? 2 : 1, sobreTotal = str_(cfg_('COT_MULT_SOBRE', 'TINTA')).toUpperCase() === 'TOTAL';
+    cTin = m2 * tintaRate_(imp) * (sobreTotal ? 1 : mult);
+    cAca = ojillos * q * num_(cfg_('COT_OJILLO', '2'));
+    let costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
+    const mg = num_(cfg_('COT_MARGEN', '0.40'));
+    importe = r2_(costo / (1 - mg)); precio = base ? r4_(importe / base) : 0;
+  }
+  const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
+    return a.nombre + (a.tipo === 'ojillos' ? ' (' + a.par + ' por pieza)' : (a.tipo === 'bastilla' || a.tipo === 'bolsa') ? ' (' + (a.par > 0 ? a.par : num_(cfg_('COT_BASTILLA_CM', '5'))) + ' cm)' : ''); })).join(' · ');
+  return { Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
+           TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det, CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
+}
+
+/** Partidas de cotización ya calculadas. MATERIAL = TARIFAS (catalogo unico). */
+function lineasCot_(arr) {
+  const out = [], tars = {}, cats = _leerCatalogos_();
+  tarifasDet_().forEach(function (t) { tars[t.material.toUpperCase()] = t; });
+  (arr || []).forEach(function (l) {
+    const desc = str_(l.Descripcion);
+    if (!desc && !num_(l.PrecioM2) && !num_(l.Ancho) && !num_(l.Alto) && !num_(l.M2)) return;
+    if (!desc) throw new Error('Falta el material en una partida.');
+    const t = tars[desc.toUpperCase()];
+    if (!t) throw new Error('El material "' + desc + '" no está en el catálogo (hoja TARIFAS). Elígelo de la lista.');
+    const r = calcPartida_(t, l, cats), o = { Descripcion: t.material, Ancho: num_(l.Ancho) || '', Alto: num_(l.Alto) || '', Cantidad: r.Cantidad, M2: r.M2, PrecioM2: r.Precio, PrecioUnit: r.PrecioUnit,
+      Importe: r.Importe, Unidad: r.Unidad, Impresion: r.Impresion, TintaBlanca: r.TintaBlanca, Barniz: r.Barniz, Detalle: r.Detalle, CostoMaterial: r.CostoMaterial, CostoTinta: r.CostoTinta, CostoAcabados: r.CostoAcabados, PrecioManual: r.manual ? 'SI' : '' };
+    r.acab.forEach(function (a, i) { o['Acabado' + (i + 1)] = a.nombre; o['Param' + (i + 1)] = a.par || ''; });
+    out.push(o);
+  });
+  return out;
+}
+
+/** Vista previa en vivo del formulario: calcula cada partida (sin guardar) y los totales. Un error en una partida no tumba las demas. */
+function a_cotCalcular(u, p) {
+  needAny_(u, ['crm', 'crm_ver']);
+  const tars = {}, cats = _leerCatalogos_(), vc = veCostos_(u);
+  tarifasDet_().forEach(function (t) { tars[t.material.toUpperCase()] = t; });
+  let bruto = 0;
+  const lineas = (p.lineas || []).map(function (l) {
+    const desc = str_(l.Descripcion), t = tars[desc.toUpperCase()];
+    if (!desc) return { vacia: true };
+    if (!t) return { error: 'El material no está en el catálogo (TARIFAS).' };
+    try {
+      const r = calcPartida_(t, l, cats); bruto += r.Importe;
+      const o = { Unidad: r.Unidad, unidadesOk: r.unidadesOk, M2: r.M2, Precio: r.Precio, PrecioUnit: r.PrecioUnit, Importe: r.Importe, Detalle: r.Detalle };
+      if (vc) { o.CostoMaterial = r.CostoMaterial; o.CostoTinta = r.CostoTinta; o.CostoAcabados = r.CostoAcabados; }
+      return o;
+    } catch (e) {
+      const o = { error: e.message };
+      try { const uo = {}; UNIDADES_COT.forEach(function (x) { uo[x] = !!costoUnidad_(t, x); }); o.unidadesOk = uo; } catch (_) {}
+      return o;
+    }
+  });
+  const pct = str_(p.DescuentoPct) === '' ? 0 : num_(p.DescuentoPct), desc = r2_(bruto * pct / 100), sub = r2_(bruto - desc), iva = r2_(sub * ivaRate_());
+  return { lineas: lineas, bruto: r2_(bruto), descuento: desc, subtotal: sub, iva: iva, total: r2_(sub + iva), m2: r4_(lineas.reduce(function (s, x) { return s + (x.M2 || 0); }, 0)) };
+}
+
+// ---- Carga de material (formulario de ADMINISTRACION) -> hoja TARIFAS
+function a_tarifas(u) { need_(u, 'material'); return tarifasDet_(); }
+
+function a_saveTarifa(u, p) {
+  need_(u, 'material');
+  const mat = req_(p.MATERIAL, 'Material').replace(/\s+/g, ' ');
+  if (mat.length > 150) throw new Error('El nombre del material es demasiado largo (máximo 150).');
+  const pres = inList_(str_(p.PRESENTACION) || 'otro', PRESENTACIONES, 'Presentación');
+  const cobro = inList_(req_(p.COBRO_POR, 'Cobro por'), COBROS, 'Cobro por');
+  const costo = num_(p.COSTO), ancho = num_(p.ANCHO), largo = num_(p.LARGO);
+  if (!(costo > 0)) throw new Error('Captura el costo (mayor que cero).');
+  if (ancho < 0 || largo < 0) throw new Error('Ancho y largo no pueden ser negativos.');
+  const todas = tarifasDet_();
+  const orig = str_(p.MaterialOriginal).toUpperCase();
+  const ex = orig ? todas.filter(function (t) { return t.material.toUpperCase() === orig; })[0] : null;
+  if (orig && !ex) throw new Error('No encuentro el material "' + p.MaterialOriginal + '" para modificarlo.');
+  const dup = todas.filter(function (t) { return t.material.toUpperCase() === mat.toUpperCase() && (!ex || t.fila !== ex.fila); })[0];
+  if (dup) throw new Error('Ya existe un material llamado "' + dup.material + '".');
+  // costos por unidad. Con medidas, COSTO es el de la presentacion (rollo, lamina...); sin medidas, es el costo de la unidad de cobro.
+  const m2pres = ancho * largo, conMedidas = m2pres > 0;
+  const c = { m2: null, mtl: null, lamina: null, pz: null };
+  if (conMedidas) {
+    c.m2 = costo / m2pres;
+    if (pres === 'rollo' || pres === 'bobina') c.mtl = costo / largo;
+    if (pres === 'lamina' || pres === 'hoja') c.lamina = costo;
+    if (cobro === 'pz') c.pz = costo;
+  } else if (cobro !== 'otro') { c[cobro] = costo; }
+  if (cobro !== 'otro' && !c[cobro]) throw new Error('Con esa presentación y medidas no se puede calcular el costo por ' + cobro + '. Revisa presentación, ancho y largo.');
+  const v = function (x) { return x ? r4_(x) : 'NA'; };
+  const h = tarHoja_(), hoy = hoy_();
+  let fila = ex ? ex.fila : h.getLastRow() + 1;
+  h.getRange(fila, 1, 1, 2).setValues([[mat, v(c.m2)]]);
+  h.getRange(fila, TAR_COL_EXT, 1, TAR_EXT.length).setValues([[str_(p.PROVEEDOR), pres, ancho || '', largo || '', costo, cobro, v(c.mtl), v(c.lamina), v(c.pz), hoy]]);
+  _limpiaCacheCatalogos_();
+  const mg = 1 / (1 - margenCot_());
+  return { fila: fila, material: mat, costoM2: v(c.m2), costoMtl: v(c.mtl), costoLamina: v(c.lamina), costoPz: v(c.pz), cobroPor: cobro,
+           precios: { m2: c.m2 ? r2_(c.m2 * mg) : 'NA', mtl: c.mtl ? r2_(c.mtl * mg) : 'NA', lamina: c.lamina ? r2_(c.lamina * mg) : 'NA', pz: c.pz ? r2_(c.pz * mg) : 'NA' },
+           avisoDashboard: c.m2 ? '' : 'Sin costo por m²: el Dashboard costeará este material en $0 por m².' };
 }
 
 function folioCot_(u) {
@@ -645,8 +816,11 @@ function a_saveCot(u, p) {
   const lineas = lineasCot_(p.lineas);
   const usaLineas = lineas.length > 0;
   const bruto = usaLineas ? r2_(sum_(lineas, 'Importe')) : r2_(num_(p.Subtotal));
-  const descu = r2_(num_(p.Descuento));
-  if (descu < 0 || descu > bruto) throw new Error('El descuento no puede ser mayor al subtotal.');
+  const pct = str_(p.DescuentoPct) === '' ? 0 : num_(p.DescuentoPct);
+  if (DESCUENTOS_COT.indexOf(pct) < 0) throw new Error('El descuento debe ser 0%, 5%, 10%, 15%, 20% o 25%.');
+  const descu = r2_(bruto * pct / 100);
+  const agente = enCatalogo_(_leerCatalogos_().VENDEDOR, req_(p.AgenteVentas, 'Agente de ventas'));
+  if (!agente) throw new Error('El agente de ventas "' + str_(p.AgenteVentas) + '" no está en el catálogo COMERCIAL de CATALOGOS.');
   const sub = r2_(bruto - descu), iva = r2_(sub * ivaRate_());
   const proyecto = str_(p.Proyecto);
   const descr = str_(p.Descripcion) || proyecto || lineas.map(function (l) { return l.Descripcion; }).join(' / ');
@@ -654,7 +828,8 @@ function a_saveCot(u, p) {
                  Descripcion: req_(descr, 'Descripción o partidas'), M2: usaLineas ? r4_(sum_(lineas, 'M2')) : num_(p.M2),
                  Subtotal: sub, IVA: iva, Total: r2_(sub + iva),
                  ProximoSeguimiento: fechaOpc_(p.ProximoSeguimiento, 'Próximo seguimiento'), Notas: str_(p.Notas),
-                 Proyecto: proyecto, TipoProyecto: str_(p.TipoProyecto), RazonSocial: str_(p.RazonSocial), Terminados: str_(p.Terminados), Descuento: descu || '' };
+                 Proyecto: proyecto, TipoProyecto: str_(p.TipoProyecto), RazonSocial: str_(p.RazonSocial), Terminados: str_(p.Terminados), Descuento: descu || '',
+                 AgenteVentas: agente, DescuentoPct: pct || '', Indicaciones: str_(p.Indicaciones) };
   let c;
   if (str_(p.Folio)) {
     c = mustFind_('Cotizaciones', 'Folio', p.Folio, 'Cotización'); ownOr_(u, c);
@@ -678,12 +853,12 @@ function a_aprobarCot(u, p) {
   if (c.Estatus === 'Rechazada') throw new Error('La cotización está rechazada.');
   const cli = find_('Clientes', 'ID', c.ClienteID) || {};
   const o = crearODP_(Object.assign(datosCliODP_(cli), {
-    Cotizacion: c.Folio, ClienteID: c.ClienteID, Cliente: c.Cliente, Comercial: c.Comercial, Descripcion: c.Descripcion, Proyecto: c.Proyecto || c.Descripcion, TipoProyecto: str_(c.TipoProyecto),
+    Cotizacion: c.Folio, ClienteID: c.ClienteID, Cliente: c.Cliente, Comercial: c.Comercial, Descripcion: c.Descripcion, Proyecto: c.Proyecto || c.Descripcion, TipoProyecto: str_(c.TipoProyecto), AgenteVentas: str_(c.AgenteVentas),
     M2Vendidos: num_(c.M2), PrecioVenta: num_(c.Subtotal), FechaEntrega: fechaOpc_(p.FechaEntrega, 'Fecha de entrega') }));
   const lin = lineasDe_('CotDetalle', 'Folio', c.Folio);
   insertMany_('ODPDetalle', lin.map(function (l, i) {
     return { ODP: o.Folio, Linea: i + 1, Piezas: l.Cantidad, Ancho: l.Ancho, Alto: l.Alto, M2: l.M2, Material: l.Descripcion, Maquina: '',
-             Archivo: c.Proyecto || '', Acabados: '' };
+             Archivo: c.Proyecto || '', Acabados: str_(l.Detalle) };
   }));
   update_('Cotizaciones', c, { Estatus: 'Aprobada', ODP: o.Folio });
   return { Folio: o.Folio };
@@ -713,7 +888,7 @@ function datosCliODP_(cli) {
   return { Domicilio: str_(cli.Domicilio), Colonia: str_(cli.Colonia), Ciudad: str_(cli.Ciudad), CP: str_(cli.CP), Estado: str_(cli.Estado),
            Telefono: str_(cli.Telefono), Email: str_(cli.Email) };
 }
-const ODP_TXT = ['Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto'];
+const ODP_TXT = ['Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas'];
 
 /** Partidas de ODP: m² = piezas × ancho × alto (como en el formato). */
 function lineasODP_(arr) {
@@ -1070,7 +1245,7 @@ function htmlCot_(c, lin) {
     '<td width="16%" style="' + head.replace(B, O) + '">Total</td></tr>';
   lin.forEach(function (l) {
     const td = 'style="background:#f2f2f2;padding:6px 4px;border-bottom:1px solid #fff;';
-    h += '<tr><td ' + td + '">' + h_(l.Descripcion) + '</td>' +
+    h += '<tr><td ' + td + '">' + h_(l.Descripcion) + (str_(l.Detalle) ? '<br><span style="font-size:7.5pt;color:#555">' + h_(l.Detalle) + '</span>' : '') + '</td>' +
       '<td ' + td + 'text-align:center">' + (num_(l.Ancho) && num_(l.Alto) ? cifra_(l.Ancho, 3) + ' X ' + cifra_(l.Alto, 3) : '') + '</td>' +
       '<td ' + td + 'text-align:center">' + cifra_(l.Cantidad, 2) + '</td>' +
       '<td ' + td + 'text-align:right">' + mon_(l.PrecioUnit) + '</td>' +
@@ -1211,6 +1386,7 @@ function a_catalogosProd(u) {
   const c = _leerCatalogos_(), out = {};
   ['MAQUINA', 'PROCESO', 'MATERIAL', 'UNIDAD', 'ORIGEN', 'MOTIVO_PARO', 'TURNO', 'OPERADOR', 'ACABADO', 'REIMPRESION', 'TIPO_PROYECTO', 'VENDEDOR']
     .forEach(function (k) { out[k] = c[k] || []; });
+  out.IMPRESIONES = IMPRESIONES;
   return out;
 }
 
@@ -1303,9 +1479,9 @@ function ventaSyncCore_(folio) {
   const fFactura = facts.length ? facts.map(function (x) { return str_(x.Fecha); }).sort()[0] : '';
   const cobrado = facts.length > 0 && facts.every(function (x) { return num_(x.Saldo) <= 0.009; });
 
-  let vendedor = '';
+  let vendedor = enCat(cats.VENDEDOR, o.AgenteVentas);
   const us = read_('Usuarios').filter(function (x) { return str_(x.Email).toLowerCase() === str_(o.Comercial).toLowerCase(); })[0];
-  if (us) vendedor = enCat(cats.VENDEDOR, us.Nombre);
+  if (!vendedor && us) vendedor = enCat(cats.VENDEDOR, us.Nombre);
   const tipoProy = enCat(cats.TIPO_PROYECTO, o.TipoProyecto);
   const fprod = base.length ? base.map(function (b) { return b.fecha; }).sort()[0] : '';
   const cliente = str_(o.Cliente).toUpperCase().replace(/\s+/g, ' ');
@@ -1384,7 +1560,7 @@ function resincronizar() {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
