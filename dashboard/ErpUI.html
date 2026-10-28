@@ -64,6 +64,15 @@
 .erp-form textarea{min-height:60px; resize:vertical}
 .erp-lin input,.erp-lin select{width:100%; padding:6px 7px; border:1px solid var(--linea); border-radius:6px; font:inherit; font-size:12.5px; min-width:60px}
 .erp-lin td{padding:4px}
+.erp-lin .opc td{background:#F7FAFD; padding:6px 8px 10px}
+.erp-lin .opts{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; font-size:12px}
+.erp-lin .opts label{font-weight:600; color:var(--tinta-2); margin-right:4px}
+.erp-lin .opts select,.erp-lin .opts input{width:auto; min-width:0}
+.erp-lin .opts input[type=checkbox]{width:16px; height:16px; margin:0 4px 0 0; vertical-align:middle}
+.erp-lin .opts .uvx label{display:inline-flex; align-items:center; margin-right:10px; white-space:nowrap}
+.erp-lin .opts .ac{display:inline-flex; gap:4px} .erp-lin .opts .ac input{width:120px}
+.erp-lin .opts .det{color:var(--tinta-2); flex-basis:100%} .erp-lin .opts .perr{color:var(--rojo); font-weight:600; flex-basis:100%}
+.erp-lin tbody.par{border-top:2px solid var(--linea)}
 .erp-tot{text-align:right; margin-top:8px; font-size:13px} .erp-tot b{font-size:15px}
 @media (max-width:820px){
   .erp-body{flex-direction:column}
@@ -315,56 +324,69 @@ function pintaCots(){
     rows.slice(0, 300).map(function(c){ return '<tr class="clic" onclick="cotForm(\'' + esc(c.Folio) + '\')"><td><b>' + esc(c.Folio) + '</b></td><td>' + fFecha(c.Fecha) + '</td><td>' + esc(c.Cliente) + '</td><td>' + esc(c.Proyecto || c.Descripcion) + '</td><td class="n">' + $n(c.M2) + '</td><td class="n">' + $m(c.Subtotal) + '</td><td>' + ePill(c.Estatus) + '</td><td>' + esc(c.ODP || '') + '</td></tr>'; }).join('') +
     '</tbody></table></div>' : '<div class="erp-vacio">Sin cotizaciones.</div>';
 }
-function precioDe(mat, u){ var p = (E.cat.PRECIOS || {})[mat]; return p ? p[u] : null; }
-function lineaCotHtml(l){
+/* Partidas: cada una es un <tbody class="par"> con dos renglones (datos y opciones). Los precios, M2 y unidades los calcula el
+   servidor (cotCalcular) con la tarifa de TARIFAS, la tinta, el multiplicador UV y los acabados; aqui solo se muestran. */
+function tipoAcab(n){
+  n = String(n || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return n.indexOf('OJILLO') >= 0 ? 'ojillos' : n.indexOf('BASTILLA') >= 0 ? 'bastilla' : n.indexOf('BOLSA') >= 0 ? 'bolsa' : 'otro';
+}
+function partidaHtml(l, bloq){
   l = l || {};
-  var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lamina', 'pz'];
+  var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lamina', 'pz'], imps = E.init.cat.IMPRESIONES || ['Gran Formato', 'HD', 'UV', 'Sin impresión'];
   var calc = (Number(l.Ancho) || 0) * (Number(l.Alto) || 0) * (Number(l.Cantidad) || 1);
-  var man = l.M2 && Math.abs(Number(l.M2) - calc) > 0.0001 ? '1' : '';
-  var p = (E.cat.PRECIOS || {})[l.Descripcion];
-  var ops = un.map(function(u){ var na = p && p[u] == null; return '<option value="' + u + '"' + (u === (l.Unidad || 'm2') ? ' selected' : '') + (na ? ' disabled' : '') + '>' + u + (na ? ' (NA)' : '') + '</option>'; }).join('');
-  return '<tr><td><input data-c="Descripcion" list="erpMats" value="' + esc(l.Descripcion || '') + '" placeholder="Escribe para buscar el material" style="min-width:230px"></td>' +
+  var man = l.M2 && Math.abs(Number(l.M2) - calc) > 0.0001 && !(l.Acabado1 || l.Acabado2 || l.Acabado3) ? '1' : '';
+  var imp = l.Impresion || 'Gran Formato', uv = imp === 'UV';
+  var ac = [1, 2, 3].map(function(i){
+    var n = l['Acabado' + i] || '', t = tipoAcab(n);
+    return '<span class="ac"><select data-c="Acabado' + i + '"><option value="">Acabado ' + i + '</option>' + (E.cat.ACABADO || []).map(function(x){ return '<option' + (x === n ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' +
+      '<input data-c="Param' + i + '" type="number" step="0.1" value="' + esc(l['Param' + i] || '') + '" style="' + (t === 'otro' || !n ? 'display:none' : '') + '" placeholder="' + (t === 'ojillos' ? 'ojillos por pieza' : t === 'bastilla' ? 'cm (5)' : 'cm') + '"></span>';
+  }).join('');
+  return '<tbody class="par"><tr><td><input data-c="Descripcion" list="erpMats" value="' + esc(l.Descripcion || '') + '" placeholder="Escribe para buscar el material" style="min-width:230px"></td>' +
     '<td><input data-c="Ancho" type="number" step="0.01" value="' + esc(l.Ancho || '') + '"></td><td><input data-c="Alto" type="number" step="0.01" value="' + esc(l.Alto || '') + '"></td>' +
-    '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad); puedes corregirlo"></td>' +
-    '<td><select data-c="Unidad">' + ops + '</select></td>' +
+    '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad, con lo que sumen bastilla o bolsa); puedes corregirlo"></td>' +
+    '<td><select data-c="Unidad" data-u="' + (l.Unidad ? '1' : '') + '">' + un.map(function(u){ return '<option' + (u === (l.Unidad || 'm2') ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></td>' +
     '<td><input data-c="Cantidad" type="number" step="1" value="' + esc(l.Cantidad || 1) + '"></td>' +
-    '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioM2 ? '1' : '') + '" title="Precio por la unidad elegida: costo de TARIFAS × 1.40. Puedes corregirlo."></td>' +
+    '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioManual ? '1' : '') + '" title="Precio por la unidad elegida: (material + tinta + acabados) ÷ 0.60. Si lo cambias a mano se usa tal cual."></td>' +
     '<td><input data-c="PrecioUnit" type="number" value="' + esc(l.PrecioUnit || '') + '" readonly title="Precio por pieza: importe ÷ cantidad"></td>' +
-    '<td class="n imp">$0.00</td><td><button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tr\').remove();cotTotales()">×</button></td></tr>';
+    '<td class="n imp">' + $m(l.Importe || 0) + '</td><td>' + (bloq ? '' : '<button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tbody\').remove();cotRecalc()">×</button>') + '</td></tr>' +
+    '<tr class="opc"><td colspan="10"><div class="opts"><span><label>Impresión</label><select data-c="Impresion">' + eOpts(imps, imp, false) + '</select></span>' +
+    '<span class="uvx" style="' + (uv ? '' : 'display:none') + '"><label><input type="checkbox" data-c="TintaBlanca"' + (l.TintaBlanca ? ' checked' : '') + '> Tinta blanca</label> <label><input type="checkbox" data-c="Barniz"' + (l.Barniz ? ' checked' : '') + '> Barniz a registro</label></span>' +
+    ac + '<span class="det">' + esc(l.Detalle || '') + '</span><span class="perr"></span></div></td></tr></tbody>';
 }
-/* material elegido: habilita solo las unidades con precio (NA no aplica) y llena el precio */
-function cotMaterial(tr){
-  var mat = tr.querySelector('[data-c=Descripcion]').value, p = (E.cat.PRECIOS || {})[mat];
-  if (!p) { return; }
-  var sel = tr.querySelector('[data-c=Unidad]');
-  [].forEach.call(sel.options, function(o){ var na = p[o.value] == null; o.disabled = na; o.textContent = o.value + (na ? ' (NA)' : ''); });
-  if (p[sel.value] == null) {
-    var ok = p.cobro && p[p.cobro] != null ? p.cobro : ['m2', 'mtl', 'lamina', 'pz'].filter(function(u){ return p[u] != null; })[0];
-    if (ok) { sel.value = ok; }
-  }
-  cotPrecio(tr);
+function leePartida(tb){
+  var o = {}, g = function(c){ return tb.querySelector('[data-c=' + c + ']'); };
+  ['Descripcion', 'Ancho', 'Alto', 'Cantidad', 'Impresion', 'Acabado1', 'Param1', 'Acabado2', 'Param2', 'Acabado3', 'Param3'].forEach(function(c){ o[c] = g(c).value; });
+  o.TintaBlanca = g('TintaBlanca').checked ? 'SI' : ''; o.Barniz = g('Barniz').checked ? 'SI' : '';
+  if (g('M2').dataset.man) { o.M2 = g('M2').value; }
+  if (g('Unidad').dataset.u) { o.Unidad = g('Unidad').value; }
+  if (g('PrecioM2').dataset.man) { o.PrecioM2 = g('PrecioM2').value; o.PrecioManual = 'SI'; }
+  return o;
 }
-function cotPrecio(tr){
-  var mat = tr.querySelector('[data-c=Descripcion]').value, u = tr.querySelector('[data-c=Unidad]').value, pi = tr.querySelector('[data-c=PrecioM2]');
-  var v = precioDe(mat, u);
-  pi.dataset.man = ''; pi.value = v != null ? v : '';
-}
-function cotCalc(tr){
-  var inp = function(c){ return tr.querySelector('[data-c=' + c + ']'); };
-  var g = function(c){ return Number(inp(c).value) || 0; };
-  var an = g('Ancho'), al = g('Alto'), q = g('Cantidad') || 1, man = inp('M2');
-  if (!man.dataset.man) { var auto = Math.round(an * al * q * 10000) / 10000; man.value = auto || ''; }
-  var m2 = Number(man.value) || 0, u = inp('Unidad').value, pr = g('PrecioM2');
-  var base = u === 'm2' ? m2 : u === 'mtl' ? (al > 0 ? al * q : q) : q;
-  var imp = Math.round(base * pr * 100) / 100;
-  inp('PrecioUnit').value = imp ? (Math.round(imp / q * 100) / 100) : '';
-  return { importe: imp, m2: m2 };
-}
-function cotTotales(){
-  var tot = 0, m2 = 0;
-  document.querySelectorAll('#cotLin tbody tr').forEach(function(tr){ var c = cotCalc(tr); tot += c.importe; m2 += c.m2; tr.querySelector('.imp').textContent = $m(c.importe); });
-  var pct = Number(document.querySelector('[data-k=DescuentoPct]').value) || 0, d = tot * pct / 100, sub = tot - d, iva = sub * (E.init.cfg.IVA || 0.16);
-  eq('cotTot').innerHTML = 'Partidas: ' + $m(tot) + ' · m²: ' + $n(m2) + (d ? '<br>Descuento ' + pct + '%: -' + $m(d) : '') + '<br>Subtotal: <b>' + $m(tot - d) + '</b> · IVA: ' + $m(iva) + ' · Total: <b>' + $m(sub + iva) + '</b>';
+var COT_SEQ = 0, COT_T = null;
+function cotRecalc(){
+  clearTimeout(COT_T);
+  var tot = eq('cotTot'); if (tot) { tot.style.opacity = '.5'; }
+  COT_T = setTimeout(function(){
+    var cuerpos = [].slice.call(document.querySelectorAll('#cotLin tbody.par'));
+    if (!cuerpos.length) { return; }
+    var seq = ++COT_SEQ, dp = document.querySelector('[data-k=DescuentoPct]');
+    erp('cotCalcular', { DescuentoPct: dp ? dp.value : 0, lineas: cuerpos.map(leePartida) }).then(function(r){
+      if (seq !== COT_SEQ) { return; }
+      cuerpos.forEach(function(tb, i){
+        var x = r.lineas[i] || {}, g = function(c){ return tb.querySelector('[data-c=' + c + ']'); };
+        tb.querySelector('.perr').textContent = x.error || '';
+        tb.querySelector('.imp').textContent = x.Importe != null ? $m(x.Importe) : $m(0);
+        if (x.unidadesOk) { [].forEach.call(g('Unidad').options, function(o){ var okk = x.unidadesOk[o.value]; o.disabled = !okk; o.textContent = o.value + (okk ? '' : ' (NA)'); }); }
+        if (x.Unidad && !g('Unidad').dataset.u) { g('Unidad').value = x.Unidad; }
+        if (x.M2 != null && !g('M2').dataset.man) { g('M2').value = x.M2 || ''; }
+        if (x.Precio != null && !g('PrecioM2').dataset.man) { g('PrecioM2').value = x.Precio || ''; }
+        g('PrecioUnit').value = x.PrecioUnit || '';
+        tb.querySelector('.det').textContent = (x.Detalle || '') + (x.CostoMaterial != null ? '  ·  costo: material ' + $m(x.CostoMaterial) + ', tinta ' + $m(x.CostoTinta) + ', acabados ' + $m(x.CostoAcabados) : '');
+      });
+      tot.style.opacity = '1';
+      tot.innerHTML = 'Partidas: ' + $m(r.bruto) + ' · m²: ' + $n(r.m2) + (r.descuento ? '<br>Descuento ' + (document.querySelector('[data-k=DescuentoPct]').value) + '%: -' + $m(r.descuento) : '') + '<br>Subtotal: <b>' + $m(r.subtotal) + '</b> · IVA: ' + $m(r.iva) + ' · Total: <b>' + $m(r.total) + '</b>';
+    }, function(e){ tot.style.opacity = '1'; tot.textContent = e.message; });
+  }, 350);
 }
 function cotForm(folio){
   var carga = folio ? erp('cotDetalle', { Folio: folio }) : Promise.resolve({ cot: {}, lineas: [] });
@@ -372,7 +394,7 @@ function cotForm(folio){
     var c = r.cot, bloq = !!c.ODP || !P('crm');
     var clis = (E.lk.clientes || []).map(function(x){ return { v: x.ID, t: x.Nombre }; });
     var ests = E.init.cat.EST_COT.filter(function(x){ return x !== 'Aprobada'; });
-    var lin = r.lineas.length ? r.lineas : [{}, {}];
+    var lin = r.lineas.length ? r.lineas : [{}];
     var pcts = (E.init.cat.DESCUENTOS_COT || [0, 5, 10, 15, 20, 25]).map(function(x){ return { v: x, t: x + '%' }; });
     var pie = '<button class="erp-btn sec" id="cotPdf"' + (folio ? '' : ' disabled') + '>PDF</button>' +
       (!bloq && folio ? '<button class="erp-btn nar" id="cotAprobar">Aprobar → crear ODP</button>' : '') + (!bloq ? '<button class="erp-btn" id="cotGuardar">Guardar</button>' : '');
@@ -384,28 +406,40 @@ function cotForm(folio){
       selCampo('Estatus', 'Estatus', ests, c.Estatus || 'Borrador', false) + campo('Proyecto', 'Proyecto', c.Proyecto, 'text', { c2: 1 }) +
       selCampo('TipoProyecto', 'Tipo de proyecto', E.cat.TIPO_PROYECTO || [], c.TipoProyecto, '—') + campo('ProximoSeguimiento', 'Próximo seguimiento', c.ProximoSeguimiento, 'date') +
       campo('Terminados', 'Terminados / acabados', c.Terminados, 'text', { c2: 1 }) + '</div>' +
-      '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Partidas (medidas en metros)</h3><div class="erp-scroll"><table class="erp-tabla erp-lin" id="cotLin"><thead><tr><th>Material</th><th>Ancho</th><th>Alto</th><th>M2</th><th>Unidad</th><th>Cant.</th><th>Precio</th><th>P. unit.</th><th class="n">Importe</th><th></th></tr></thead><tbody>' +
-      lin.map(lineaCotHtml).join('') + '</tbody></table></div>' + (bloq ? '' : '<button type="button" class="erp-btn sec chico" style="margin-top:8px" id="cotMas">+ Partida</button>') +
+      '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Partidas (medidas en metros)</h3><div class="erp-scroll"><table class="erp-tabla erp-lin" id="cotLin"><thead><tr><th>Material</th><th>Ancho</th><th>Alto</th><th>M2</th><th>Unidad</th><th>Cant.</th><th>Precio</th><th>P. unit.</th><th class="n">Importe</th><th></th></tr></thead>' +
+      lin.map(function(l){ return partidaHtml(l, bloq); }).join('') + '</table></div>' + (bloq ? '' : '<button type="button" class="erp-btn sec chico" style="margin-top:8px" id="cotMas">+ Partida</button>') +
       '<div class="erp-form" style="margin-top:12px">' + selCampo('DescuentoPct', 'Descuento', pcts, c.DescuentoPct || 0, false) + '<div></div>' +
       '<div class="c2"><label>Descripción</label><textarea data-k="Notas">' + esc(c.Notas || '') + '</textarea></div>' +
       '<div class="c2"><label>Indicaciones y notas</label><textarea data-k="Indicaciones">' + esc(c.Indicaciones || '') + '</textarea></div></div><div class="erp-tot" id="cotTot"></div>',
       pie, true);
-    if (bloq) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ i.disabled = true; }); }
     var ra = w.el.querySelector('#cotLin');
-    ra.addEventListener('input', function(ev){
-      var c = ev.target.getAttribute('data-c'), tr = ev.target.closest('tr');
-      if (c === 'M2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
-      if (c === 'PrecioM2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
-      if (c === 'Descripcion') { cotMaterial(tr); }
-      cotTotales();
-    });
-    ra.addEventListener('change', function(ev){ if (ev.target.getAttribute('data-c') === 'Unidad') { cotPrecio(ev.target.closest('tr')); cotTotales(); } });
-    w.el.querySelector('[data-k=DescuentoPct]').addEventListener('change', cotTotales);
-    var mas = w.el.querySelector('#cotMas'); if (mas) { mas.onclick = function(){ ra.querySelector('tbody').insertAdjacentHTML('beforeend', lineaCotHtml()); }; }
-    cotTotales();
+    if (bloq) {
+      w.el.querySelectorAll('input,select,textarea').forEach(function(i){ i.disabled = true; });
+      eq('cotTot').innerHTML = 'Subtotal: <b>' + $m(c.Subtotal) + '</b> · IVA: ' + $m(c.IVA) + ' · Total: <b>' + $m(c.Total) + '</b>';
+    } else {
+      ra.addEventListener('input', function(ev){
+        var cc = ev.target.getAttribute('data-c'), tb = ev.target.closest('tbody');
+        if (cc === 'M2' || cc === 'PrecioM2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
+        if (cc === 'Descripcion') { var u = tb.querySelector('[data-c=Unidad]'); u.dataset.u = ''; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
+        cotRecalc();
+      });
+      ra.addEventListener('change', function(ev){
+        var cc = ev.target.getAttribute('data-c'), tb = ev.target.closest('tbody');
+        if (cc === 'Unidad') { ev.target.dataset.u = '1'; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
+        if (cc === 'Impresion') { tb.querySelector('.uvx').style.display = ev.target.value === 'UV' ? '' : 'none'; }
+        if (/^Acabado\d$/.test(cc)) {
+          var t = tipoAcab(ev.target.value), pi = ev.target.parentNode.querySelector('input');
+          pi.style.display = (t === 'otro' || !ev.target.value) ? 'none' : ''; pi.value = ''; pi.placeholder = t === 'ojillos' ? 'ojillos por pieza' : t === 'bastilla' ? 'cm (5)' : 'cm';
+        }
+        cotRecalc();
+      });
+      w.el.querySelector('[data-k=DescuentoPct]').addEventListener('change', cotRecalc);
+      var mas = w.el.querySelector('#cotMas'); if (mas) { mas.onclick = function(){ ra.insertAdjacentHTML('beforeend', partidaHtml()); cotRecalc(); }; }
+      cotRecalc();
+    }
     var recoge = function(){
       var d = leer(w.el);
-      d.lineas = [].map.call(ra.querySelectorAll('tbody tr'), function(tr){ var o = {}; tr.querySelectorAll('[data-c]').forEach(function(i){ o[i.getAttribute('data-c')] = i.value; }); return o; });
+      d.lineas = [].map.call(ra.querySelectorAll('tbody.par'), leePartida);
       if (folio) { d.Folio = folio; }
       return d;
     };
@@ -621,9 +655,9 @@ function tarForm(nombre){
     '<div class="c2"><p class="erp-sub" style="margin:0">Con ancho y largo, el <b>costo</b> es el de la presentación (rollo, lámina…) y se calculan los costos por unidad. Sin medidas, el costo es el de la unidad de <b>cobro por</b>.' + (legacy ? ' <b>Este material solo tenía costo por m²; el costo se muestra como tal.</b>' : '') + '</p></div>' +
     '<div class="c2" id="tarPrev"></div></div>', '<button class="erp-btn" id="tarG">Guardar</button>', true);
   var prev = function(){
-    var p = leer(w.el), c = calcTar(p), mg = 1 + (E.init.cfg.COT_MARGEN != null ? E.init.cfg.COT_MARGEN : 0.4);
+    var p = leer(w.el), c = calcTar(p), mg = 1 / (1 - (E.init.cfg.COT_MARGEN != null ? E.init.cfg.COT_MARGEN : 0.4));
     var f = function(v){ return v ? $m(v) + ' → <b>' + $m(v * mg) + '</b>' : '<span style="color:var(--tinta-3)">NA</span>'; };
-    eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo → precio de cotización</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · pz: ' + f(c.pz) + '</div>';
+    eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo del material → precio (costo ÷ 0.60, sin tinta ni acabados)</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · pz: ' + f(c.pz) + '</div>';
   };
   w.el.addEventListener('input', prev); w.el.addEventListener('change', prev); prev();
   var b = w.el.querySelector('#tarG');
