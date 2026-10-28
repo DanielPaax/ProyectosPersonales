@@ -100,13 +100,16 @@
 /* ===================== ERP: utilidades ===================== */
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
-function erp(accion, payload){
+function erp(accion, payload, intento){
+  intento = intento || 0;
   return new Promise(function(res, rej){
     google.script.run
       .withSuccessHandler(function(t){
         var r; try { r = JSON.parse(t); } catch (x) { return rej(new Error('Respuesta inválida del servidor.')); }
         if (r.ok) { return res(r.data); }
         if (/No se pudo identificar/.test(r.error || '')) { sesionPerdida(); }
+        /* candado ocupado: la accion NO se ejecuto, es seguro reintentar */
+        if (/candado|lock/i.test(r.error || '') && intento < 2) { return setTimeout(function(){ erp(accion, payload, intento + 1).then(res, rej); }, 2500); }
         rej(new Error(r.error || 'Error'));
       })
       .withFailureHandler(function(err){ if (esSesionPerdida(err)) { sesionPerdida(); } rej(err); })
