@@ -653,18 +653,44 @@ function tarForm(nombre){
     campo('ANCHO', 'Ancho (m)', t.ancho || '', 'number', { step: '0.01' }) + campo('LARGO', 'Largo (m)', t.largo || '', 'number', { step: '0.01' }) +
     campo('COSTO', 'Costo', legacy ? t.costoM2 : (t.costo || ''), 'number', { step: '0.0001' }) +
     '<div class="c2"><p class="erp-sub" style="margin:0">Con ancho y largo, el <b>costo</b> es el de la presentación (rollo, lámina…) y se calculan los costos por unidad. Sin medidas, el costo es el de la unidad de <b>cobro por</b>.' + (legacy ? ' <b>Este material solo tenía costo por m²; el costo se muestra como tal.</b>' : '') + '</p></div>' +
-    '<div class="c2" id="tarPrev"></div></div>', '<button class="erp-btn" id="tarG">Guardar</button>', true);
+    '<div class="c2" id="tarPrev"></div></div>', (nombre ? '<button class="erp-btn rojo" id="tarDel" style="margin-right:auto">Eliminar material</button>' : '') + '<button class="erp-btn" id="tarG">Guardar</button>', true);
   var prev = function(){
     var p = leer(w.el), c = calcTar(p), mg = 1 / (1 - (E.init.cfg.COT_MARGEN != null ? E.init.cfg.COT_MARGEN : 0.4));
     var f = function(v){ return v ? $m(v) + ' → <b>' + $m(v * mg) + '</b>' : '<span style="color:var(--tinta-3)">NA</span>'; };
     eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo del material → precio (costo ÷ 0.60, sin tinta ni acabados)</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · pz: ' + f(c.pz) + '</div>';
   };
   w.el.addEventListener('input', prev); w.el.addEventListener('change', prev); prev();
+  var del = w.el.querySelector('#tarDel');
+  if (del) { del.onclick = function(){ eGuardar(del, function(){ return erp('usoTarifa', { MATERIAL: nombre }); }).then(function(r){ w.cerrar(); tarEliminar(r); }, function(){}); }; }
   var b = w.el.querySelector('#tarG');
   b.onclick = function(){
     var p = leer(w.el); if (nombre) { p.MaterialOriginal = nombre; }
     eGuardar(b, function(){ return erp('saveTarifa', p); }).then(function(r){
-      w.cerrar(); ptToast(r.avisoDashboard ? 'Material guardado. ' + r.avisoDashboard : 'Material guardado en TARIFAS.');
+      var rn = r.renombrados ? r.renombrados.base + r.renombrados.ventas + r.renombrados.cotizaciones + r.renombrados.odp : 0;
+      w.cerrar(); ptToast((r.avisoDashboard ? 'Material guardado. ' + r.avisoDashboard : 'Material guardado en TARIFAS.') + (rn ? ' Nombre actualizado en ' + rn + ' registros.' : ''));
+      erp('catalogosProd').then(function(c){ E.cat = c; }); vCarga(eq('erpMain'));
+    }, function(){});
+  };
+}
+
+function tarEliminar(r){
+  var u = r.uso, otros = E.cache.tars.map(function(x){ return x.material; }).filter(function(x){ return x !== r.material; });
+  var usa = r.total > 0;
+  var w = ventana('Eliminar material',
+    '<p><b>' + esc(r.material) + '</b></p>' + (usa
+      ? '<p class="erp-sub">Se usa en <b>' + r.total + '</b> registros: producción (BASE) ' + u.base + ', ventas ' + u.ventas + ', partidas de cotización ' + u.cotizaciones + ', partidas de ODP ' + u.odp + '.</p>' +
+        '<datalist id="erpRepl">' + otros.map(function(x){ return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
+        '<div class="erp-form"><div class="c2"><label>Material que lo sustituye en esos registros</label><input data-k="REEMPLAZO" list="erpRepl" placeholder="Escribe para buscar el material"></div></div>' +
+        '<p class="erp-sub" style="margin-top:10px">Los registros cambian de material pero <b>conservan los precios y costos que ya tenían</b>: no se recalculan con la tarifa del material nuevo.</p>'
+      : '<p class="erp-sub">Ningún registro usa este material; se elimina de TARIFAS y de todas las listas.</p>'),
+    '<button class="erp-btn sec" id="tdNo">Cancelar</button><button class="erp-btn rojo" id="tdSi">Eliminar</button>');
+  w.el.querySelector('#tdNo').onclick = w.cerrar;
+  var b = w.el.querySelector('#tdSi');
+  b.onclick = function(){
+    var p = { MATERIAL: r.material }; if (usa) { p.REEMPLAZO = (w.el.querySelector('[data-k=REEMPLAZO]').value || '').trim(); if (!p.REEMPLAZO) { ptToast('Elige el material que lo sustituye.'); return; } }
+    if (!confirm('¿Eliminar "' + r.material + '"' + (usa ? ' y pasar sus ' + r.total + ' registros a "' + p.REEMPLAZO + '"' : '') + '? No se puede deshacer.')) { return; }
+    eGuardar(b, function(){ return erp('deleteTarifa', p); }).then(function(x){
+      w.cerrar(); ptToast('Material eliminado' + (x.sustituidoPor ? ' y sustituido por ' + x.sustituidoPor : '') + '.');
       erp('catalogosProd').then(function(c){ E.cat = c; }); vCarga(eq('erpMain'));
     }, function(){});
   };

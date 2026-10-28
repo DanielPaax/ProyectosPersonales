@@ -657,6 +657,21 @@ function _leerCatalogos_() {
   return out;
 }
 
+/* Renombra (nuevo = texto) o quita (nuevo = '') un material en la lista de CATALOGOS, para que la migracion de Instalar no lo vuelva a meter en TARIFAS. */
+function _catalogoMaterialAplica_(viejo, nuevo) {
+  var h = _hoja_(CFG.HOJA_CATALOGOS), ult = h.getLastRow(), anc = h.getLastColumn();
+  if (ult < 2 || anc < 1) { return 0; }
+  var vals = h.getRange(1, 1, ult, anc).getValues(), tocadas = 0, k = String(viejo).toUpperCase().trim();
+  for (var c = 0; c < anc; c++) {
+    if (_normCat_(vals[0][c]) !== 'MATERIAL') { continue; }
+    for (var f = 1; f < ult; f++) {
+      if (String(vals[f][c] || '').toUpperCase().trim() === k) { h.getRange(f + 1, c + 1).setValue(nuevo || ''); tocadas++; }
+    }
+  }
+  _limpiaCacheCatalogos_();
+  return tocadas;
+}
+
 /* Agrega a TARIFAS (costo 0) los materiales de CATALOGOS que aun no estan, para no perder ninguno al pasar a TARIFAS como catalogo. */
 function _migraMaterialesATarifas_(tar) {
   _aseguraColumnas_(tar, TAR_COL_EXT + TAR_EXT.length - 1);
