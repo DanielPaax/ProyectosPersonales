@@ -71,7 +71,7 @@ table.t select{width:auto;padding:3px 6px;font-size:12.5px}
 <body>
 <header>
   <img id="logo" alt="TOGOMA-CO · Dream designs, applicable solutions">
-  <span>Calculadora de costos y precios<small>Impresión 3D y carpintería · datos guardados solo en este navegador</small></span>
+  <span>Calculadora de costos y precios<small id="sync" style="cursor:default">Datos guardados solo en este navegador</small></span>
 </header>
 <nav id="nav"></nav>
 <main id="app"></main>
@@ -127,6 +127,79 @@ const ESTADOS = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada'];
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const editingQ = () => S.editing ? S.quotes.find(q => q.id === S.editing && q.key === tab) : null;
 const curCtx = () => document.getElementById('res')._ctx;
+
+/* ---------- Google Sheets (solo cuando corre dentro de Apps Script) ---------- */
+const REMOTE = !!(window.google && google.script && google.script.run);
+const srv = (fn, ...args) => new Promise((ok, bad) =>
+  google.script.run.withSuccessHandler(ok).withFailureHandler(e => bad(new Error((e && e.message) || String(e))))[fn](...JSON.parse(JSON.stringify(args))));
+let sync = { st: REMOTE ? 'cargando' : 'local', msg: '' }, userEmail = '';
+function setSync(st, msg = '') {
+  sync = { st, msg };
+  const el = document.getElementById('sync'); if (!el) return;
+  el.style.color = st === 'error' ? 'var(--bad)' : '';
+  el.style.cursor = st === 'error' ? 'pointer' : 'default';
+  el.textContent = { local: 'Datos guardados solo en este navegador', cargando: 'Conectando con Google Sheets…', guardando: 'Guardando…',
+    ok: '☁ Google Sheets' + (userEmail ? ' · ' + userEmail : ''), error: '⚠ ' + msg + ' (toca para reintentar)' }[st];
+}
+const PEND = 'calc-costos-pend';
+const pendientes = () => { try { return JSON.parse(localStorage.getItem(PEND)) || []; } catch (e) { return []; } };
+const setPend = l => { try { l.length ? localStorage.setItem(PEND, JSON.stringify(l)) : localStorage.removeItem(PEND); } catch (e) {} };
+async function boot() {
+  setSync('cargando');
+  try {
+    const d = await srv('cc_cargar'), local = S.quotes.slice(), ids = new Set(d.quotes.map(q => q.id));
+    userEmail = d.user;
+    if (d.cfg) S.cfg = merge(structuredClone(DEF.cfg), d.cfg); else await srv('cc_guardarConfig', S.cfg);
+    // cotizaciones que solo existen en este navegador (las de remoto traen rev)
+    const prev = pendientes(), have = new Set(prev.map(q => q.id));
+    setPend(prev.concat(local.filter(q => q.data && !q.rev && !ids.has(q.id) && !have.has(q.id))));
+    S.quotes = d.quotes; S.folioN = d.folioN;
+    save(); setSync('ok'); render();
+  } catch (e) { setSync('error', e.message); }
+}
+async function refrescar(force) {
+  if (!REMOTE) return;
+  try {
+    const d = await srv('cc_cargar'); S.quotes = d.quotes; S.folioN = d.folioN; save(); setSync('ok');
+    const q = document.getElementById('qsearch');
+    if (tab === 'quotes' && (force || !(q && q.value))) render();
+  } catch (e) { setSync('error', e.message); }
+}
+let _cfgT;
+function pushCfg() {
+  if (!REMOTE) return;
+  clearTimeout(_cfgT); setSync('guardando');
+  _cfgT = setTimeout(() => srv('cc_guardarConfig', S.cfg).then(() => setSync('ok')).catch(e => setSync('error', e.message)), 900);
+}
+function eliminarQ(q) {
+  const fin = () => { S.quotes = S.quotes.filter(x => x !== q); if (S.editing === q.id) S.editing = null; save(); render(); };
+  if (!REMOTE) return fin();
+  setSync('guardando');
+  srv('cc_eliminar', q.id).then(() => { setSync('ok'); fin(); }).catch(e => { setSync('error', e.message); alert('No se pudo eliminar: ' + e.message); });
+}
+// crea o actualiza la cotización del formulario; devuelve true si quedó guardada
+async function guardar(asNew) {
+  const x = curCtx(), ex = asNew ? null : editingQ();
+  const base = { key: tab, tipo: x.r.tipo, nombre: x.r.nombre, cliente: S.cot.cliente, qty: x.r.qty, costo: x.costo, total: x.total, utilidad: x.util, margen: x.mReal, data: structuredClone(S[tab]), cot: structuredClone(S.cot), ctx: structuredClone(x) };
+  const flash = () => { const b = document.getElementById('saveq'); if (b) { b.textContent = '✓ Guardada'; setTimeout(() => { b.textContent = 'Actualizar cotización'; }, 1500); } };
+  if (!REMOTE) {
+    if (ex) Object.assign(ex, base, { actualizada: today() });
+    else { const q = { id: Date.now(), folio: newFolio(), fecha: today(), estado: 'Borrador', ...base }; S.folioN++; S.quotes.unshift(q); S.editing = q.id; }
+    save(); render(); flash(); return true;
+  }
+  setSync('guardando');
+  try {
+    const q = ex ? { ...ex, ...base } : { id: Date.now(), estado: 'Borrador', ...base };
+    let r = await srv('cc_guardar', q, false);
+    if (r.conflict) {
+      if (!confirm(`Alguien más modificó la cotización ${r.actual.folio} mientras la editabas.\n\n¿Guardar tus cambios encima de los suyos?`)) { setSync('ok'); return false; }
+      r = await srv('cc_guardar', q, true);
+    }
+    const i = S.quotes.findIndex(z => z.id === r.q.id);
+    if (i >= 0) S.quotes[i] = r.q; else S.quotes.unshift(r.q);
+    S.editing = r.q.id; save(); setSync('ok'); render(); flash(); return true;
+  } catch (e) { setSync('error', e.message); alert('No se pudo guardar: ' + e.message); return false; }
+}
 function merge(base, src) {
   for (const k in src) {
     if (Array.isArray(src[k])) base[k] = src[k];
@@ -281,6 +354,13 @@ function formQuotes() {
     <td class="l"><select data-qest="${x.id}">${ESTADOS.map(e => `<option${e === x.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></td>
     <td class="l" style="white-space:nowrap">${x.data ? `<button class="sm" data-qedit="${x.id}">Editar</button><button class="sm" data-qdup="${x.id}">Duplicar</button><button class="sm" data-qcli="${x.id}">PDF cliente</button><button class="sm" data-qint="${x.id}">PDF interno</button>` : '<span class="mut">formato anterior</span>'}<button class="sm" data-qdel="${x.id}" title="Eliminar">✕</button></td></tr>`).join('')}
   </table></div></div>`;
+  const pend = REMOTE ? pendientes() : [];
+  const aviso = pend.length ? `<div class="card"><h2>Cotizaciones de este navegador</h2>
+  <p class="hint">Hay ${pend.length} cotización(es) guardadas solo en este navegador. ¿Las subes a Google Sheets para que todo el equipo las vea? Se les asignarán folios nuevos.</p>
+  <div class="actions"><button class="pri" id="upload">Subir a Google Sheets</button><button class="sm" id="skipup">Ahora no</button></div></div>` : '';
+  if (REMOTE) return aviso + list + `<div class="card"><h2>Datos</h2>
+  <p class="hint">Las cotizaciones están en tu Google Sheet (hoja «Cotizaciones»). Si otra persona guarda algo, usa «Actualizar lista».</p>
+  <div class="actions"><button class="sm" id="refresh">Actualizar lista</button><button class="sm" id="csv">Exportar CSV</button></div></div>`;
   return list + `<div class="card"><h2>Respaldo</h2>
   <p class="hint">Tus cotizaciones se guardan solo en este navegador. Descarga un respaldo de vez en cuando, o para pasar tus datos a otra computadora.</p>
   <div class="actions"><button class="sm" id="csv">Exportar CSV</button><button class="sm" id="backup">Descargar respaldo</button><button class="sm" id="restore">Restaurar respaldo</button></div>
@@ -368,16 +448,17 @@ document.addEventListener('input', e => {
   const p = t.dataset.p; if (!p) return;
   set(p, t.type === 'number' ? (t.value === '' ? '' : num(t.value)) : t.value);
   save(); update();
+  if (p.startsWith('cfg.')) pushCfg();
 });
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
+  if (t.dataset.tab) { tab = t.dataset.tab; render(); if (tab === 'quotes') refrescar(); return; }
   if (t.dataset.add) { get(t.dataset.add).push({ ...NEWROW[t.dataset.add] }); save(); render(); return; }
   if (t.dataset.del) { const ks = t.dataset.del.split('.'), i = +ks.pop(); get(ks.join('.')).splice(i, 1); save(); render(); return; }
   const qid = k => +t.dataset[k], qf = k => S.quotes.find(q => q.id === qid(k));
   if (t.dataset.qdel) {
     const q = qf('qdel');
-    if (q && confirm(`¿Eliminar la cotización ${q.folio}${q.cliente ? ' de ' + q.cliente : ''}?`)) { S.quotes = S.quotes.filter(x => x !== q); if (S.editing === q.id) S.editing = null; save(); render(); }
+    if (q && confirm(`¿Eliminar la cotización ${q.folio}${q.cliente ? ' de ' + q.cliente : ''}?`)) eliminarQ(q);
     return;
   }
   if (t.dataset.qedit || t.dataset.qdup) {
@@ -389,18 +470,24 @@ document.addEventListener('click', e => {
     const q = qf(t.dataset.qcli ? 'qcli' : 'qint'); if (!q?.ctx) return;
     (t.dataset.qcli ? pdfCliente : pdfInterno)(q.ctx, q.folio, q.actualizada || q.fecha); return;
   }
-  if (t.id === 'pdfcli') pdfCliente(curCtx(), folio(), today());
-  if (t.id === 'pdfint') pdfInterno(curCtx(), folio(), today());
-  if (t.id === 'reset' && confirm('¿Borrar todos tus datos y volver a los valores de ejemplo?')) { S = structuredClone(DEF); save(); render(); }
-  if (t.id === 'saveq' || t.id === 'saveas') {
-    const x = curCtx(), ex = t.id === 'saveq' ? editingQ() : null;
-    const base = { key: tab, tipo: x.r.tipo, nombre: x.r.nombre, cliente: S.cot.cliente, qty: x.r.qty, costo: x.costo, total: x.total, utilidad: x.util, margen: x.mReal, data: structuredClone(S[tab]), cot: structuredClone(S.cot), ctx: structuredClone(x) };
-    if (ex) Object.assign(ex, base, { actualizada: today() });
-    else { const q = { id: Date.now(), folio: newFolio(), fecha: today(), estado: 'Borrador', ...base }; S.folioN++; S.quotes.unshift(q); S.editing = q.id; }
-    save(); render();
-    const b = document.getElementById('saveq'); b.textContent = '✓ Guardada'; setTimeout(() => { b.textContent = 'Actualizar cotización'; }, 1500);
+  if (t.id === 'pdfcli' || t.id === 'pdfint') {
+    const f = t.id === 'pdfcli' ? pdfCliente : pdfInterno;
+    // con Google Sheets el folio lo asigna el servidor, así que una cotización nueva se guarda antes de generar el PDF
+    (REMOTE && !editingQ() ? guardar(false) : Promise.resolve(true)).then(ok => { if (ok) f(curCtx(), folio(), today()); });
     return;
   }
+  if (t.id === 'reset') {
+    if (REMOTE) { if (confirm('¿Volver las tarifas a los valores de ejemplo? El cambio aplica para todo el equipo.')) { S.cfg = structuredClone(DEF.cfg); save(); pushCfg(); render(); } }
+    else if (confirm('¿Borrar todos tus datos y volver a los valores de ejemplo?')) { S = structuredClone(DEF); save(); render(); }
+  }
+  if (t.id === 'refresh') refrescar(true);
+  if (t.id === 'skipup') { setPend([]); render(); }
+  if (t.id === 'upload') {
+    setSync('guardando');
+    srv('cc_importar', pendientes()).then(sub => { S.quotes = sub.concat(S.quotes).sort((a, b) => b.id - a.id); setPend([]); save(); setSync('ok'); render(); })
+      .catch(e => { setSync('error', e.message); alert('No se pudieron subir: ' + e.message); });
+  }
+  if (t.id === 'saveq' || t.id === 'saveas') { guardar(t.id === 'saveas'); return; }
   if (t.id === 'newq') {
     if (!confirm('¿Limpiar el formulario para una cotización nueva? Lo que no hayas guardado se perderá.')) return;
     S[tab] = structuredClone(DEF[tab]); S.cot = structuredClone(DEF.cot); S.editing = null; manual = ''; save(); render(); return;
@@ -418,7 +505,13 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.qest) { const q = S.quotes.find(x => x.id === +t.dataset.qest); if (q) { q.estado = t.value; save(); } }
+  if (t.dataset.qest) {
+    const q = S.quotes.find(x => x.id === +t.dataset.qest); if (!q) return;
+    if (!REMOTE) { q.estado = t.value; save(); return; }
+    setSync('guardando');
+    srv('cc_estado', q.id, t.value).then(nq => { Object.assign(q, nq); save(); setSync('ok'); })
+      .catch(e => { setSync('error', e.message); alert('No se pudo cambiar el estado: ' + e.message); refrescar(true); });
+  }
   if (t.id === 'rfile' && t.files[0]) {
     t.files[0].text().then(txt => {
       const d = JSON.parse(txt);
@@ -606,7 +699,9 @@ function pdfInterno(x, fol, fecha) {
   download(p.blob(), `Desglose-interno-${fol}.pdf`);
 }
 
+document.getElementById('sync').addEventListener('click', () => { if (sync.st === 'error') boot(); });
 render();
+if (REMOTE) boot();
 </script>
 </body>
 </html>
