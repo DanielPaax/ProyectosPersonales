@@ -34,8 +34,19 @@ function onOpen() {
     .addToUi();
 }
 
+// Nombres aceptados para el archivo HTML (por si al crearlo se escribió con extensión o con otro nombre)
+const CC_NOMBRES_HTML = ['Calculadora', 'Calculadora.html', 'calculadora', 'index', 'Index', 'index.html'];
+
+function htmlCalculadora_() {
+  for (let i = 0; i < CC_NOMBRES_HTML.length; i++) {
+    try { return HtmlService.createHtmlOutputFromFile(CC_NOMBRES_HTML[i]); } catch (e) { /* probar el siguiente nombre */ }
+  }
+  throw new Error('Falta el archivo HTML de la calculadora. En el editor de Apps Script: «+» → HTML, ponle el nombre Calculadora '
+    + '(sin escribir .html) y pega ahí todo el contenido de index.html. Luego guarda y publica una versión nueva.');
+}
+
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Calculadora')
+  return htmlCalculadora_()
     .setTitle('Calculadora de costos · TOGOMA-CO')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
