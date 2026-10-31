@@ -14,6 +14,15 @@ Calculadora para impresión 3D y carpintería: costos, precio con margen, cotiza
 - **Suelto** (doble clic en el archivo): guarda en el navegador. Sirve para una sola persona y un solo equipo.
 - **Dentro de Apps Script**: guarda en Google Sheets, compartido con el equipo. Detecta solo en cuál está.
 
+## Cómo se arma una cotización
+
+1. En **Impresión 3D** o **Carpintería** calcula un producto y pulsa **Agregar a la cotización**. Repite con todos los productos que necesites (puedes mezclar 3D y carpintería).
+2. En **Cotización actual** ves la lista con precio unitario e importe de cada producto, y el subtotal, IVA y total. Ahí capturas el cliente y las notas, y puedes **Editar**, **Duplicar** o quitar productos.
+3. **Guardar cotización** la manda a la lista de **Guardadas**, donde puedes volver a abrirla, duplicarla, cambiarle el estado y regenerar sus PDF.
+4. **PDF para el cliente**: productos, cantidades, precios, subtotal, IVA y total. **PDF de desglose interno**: costo, utilidad y margen de cada producto y de toda la cotización.
+
+El precio de cada producto queda fijo con las tarifas del momento en que lo agregaste. Si cambias tus tarifas y quieres recalcularlo, abre el producto con **Editar** y vuelve a agregarlo.
+
 ## Instalación con Google Sheets
 
 1. Crea un Google Sheet **nuevo** (por ejemplo «Cotizaciones TOGOMA-CO») y abre **Extensiones → Apps Script**. Usa un Sheet aparte de otros proyectos, porque `Code.gs` define `doGet` y `onOpen`.
@@ -40,5 +49,5 @@ Cuando cambies `index.html`, vuelve a pegarlo en `Calculadora` y publica una **n
 
 ## Límites
 
-- Una cotización completa debe pesar menos de ~45,000 caracteres (una celda de Sheets admite 50,000). Una cotización normal usa unos 3,000.
+- Una cotización completa debe pesar menos de ~45,000 caracteres (una celda de Sheets admite 50,000). Cada producto ocupa cerca de 1,000, así que caben unos 40 productos por cotización.
 - El PDF de una cotización nueva la guarda primero, para que el folio del documento sea el definitivo.

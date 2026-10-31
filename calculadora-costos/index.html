@@ -62,6 +62,7 @@ table.t th{color:var(--muted);font-weight:500;font-size:12px}
 .actions .sm{flex:1}
 .derived{background:var(--soft);padding:8px 10px;border-radius:8px;font-size:13px;margin-top:10px}
 table.t td.l,table.t th.l{text-align:left}
+table.t td:not(.l){white-space:nowrap}
 table.t .sm{padding:3px 7px;font-size:12px;margin:1px}
 table.t select{width:auto;padding:3px 6px;font-size:12.5px}
 .edit{background:var(--soft);border-left:4px solid var(--orange);padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px}
@@ -96,6 +97,7 @@ const DEF = {
         lab: [{ n: 'Diseño / despiece', h: 1, r: '' }, { n: 'Corte y armado', h: 3, r: '' }, { n: 'Lijado y acabado', h: 2, r: '' }],
         otros: [{ n: 'Flete / instalación', q: 1, c: 0 }] },
   cot: { cliente: '', notas: '' },
+  cart: [], itemEditing: null,
   quotes: [], folioN: 0, editing: null
 };
 const NEWROW = {
@@ -116,6 +118,8 @@ function load() {
 // cotizaciones guardadas con el formato anterior: les damos id, folio y estado
 function fix(s) {
   if (!s.folioN) s.folioN = s.quotes.length;
+  s.quotes.forEach(normQ);
+  if (!s.cart.length) s.editing = null;
   s.quotes.forEach((q, i) => {
     q.id ??= Date.now() + i;
     q.folio ??= 'COT-' + String(q.fecha || '').replace(/-/g, '') + '-' + String(s.quotes.length - i).padStart(3, '0');
@@ -123,10 +127,21 @@ function fix(s) {
   });
   return s;
 }
+// formato anterior (un solo producto con data/ctx) -> formato con lista de productos (items)
+function normQ(q) {
+  if (!q.items && q.data) {
+    const { snap, ...ic } = q.ctx || {};
+    q.items = [{ id: q.id, key: q.key, nombre: q.nombre, tipo: q.tipo, qty: q.qty, data: q.data, ctx: ic }];
+    q.snap = snap;
+    delete q.data; delete q.ctx; delete q.key;
+  }
+  return q;
+}
 const ESTADOS = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada'];
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
-const editingQ = () => S.editing ? S.quotes.find(q => q.id === S.editing && q.key === tab) : null;
-const curCtx = () => document.getElementById('res')._ctx;
+const editingQ = () => S.editing ? S.quotes.find(q => q.id === S.editing) : null;
+const editingItem = () => S.itemEditing ? S.cart.find(i => i.id === S.itemEditing && i.key === tab) : null;
+const uid = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
 /* ---------- Google Sheets (solo cuando corre dentro de Apps Script) ---------- */
 const REMOTE = !!(window.google && google.script && google.script.run);
@@ -152,15 +167,15 @@ async function boot() {
     if (d.cfg) S.cfg = merge(structuredClone(DEF.cfg), d.cfg); else await srv('cc_guardarConfig', S.cfg);
     // cotizaciones que solo existen en este navegador (las de remoto traen rev)
     const prev = pendientes(), have = new Set(prev.map(q => q.id));
-    setPend(prev.concat(local.filter(q => q.data && !q.rev && !ids.has(q.id) && !have.has(q.id))));
-    S.quotes = d.quotes; S.folioN = d.folioN;
+    setPend(prev.concat(local.filter(q => q.items && !q.rev && !ids.has(q.id) && !have.has(q.id))));
+    S.quotes = d.quotes.map(normQ); S.folioN = d.folioN;
     save(); setSync('ok'); render();
   } catch (e) { setSync('error', e.message); }
 }
 async function refrescar(force) {
   if (!REMOTE) return;
   try {
-    const d = await srv('cc_cargar'); S.quotes = d.quotes; S.folioN = d.folioN; save(); setSync('ok');
+    const d = await srv('cc_cargar'); S.quotes = d.quotes.map(normQ); S.folioN = d.folioN; save(); setSync('ok');
     const q = document.getElementById('qsearch');
     if (tab === 'quotes' && (force || !(q && q.value))) render();
   } catch (e) { setSync('error', e.message); }
@@ -177,13 +192,19 @@ function eliminarQ(q) {
   setSync('guardando');
   srv('cc_eliminar', q.id).then(() => { setSync('ok'); fin(); }).catch(e => { setSync('error', e.message); alert('No se pudo eliminar: ' + e.message); });
 }
-// crea o actualiza la cotización del formulario; devuelve true si quedó guardada
+// crea o actualiza la cotización actual (todos sus productos); devuelve true si quedó guardada
 async function guardar(asNew) {
-  const x = curCtx(), ex = asNew ? null : editingQ();
-  const base = { key: tab, tipo: x.r.tipo, nombre: x.r.nombre, cliente: S.cot.cliente, qty: x.r.qty, costo: x.costo, total: x.total, utilidad: x.util, margen: x.mReal, data: structuredClone(S[tab]), cot: structuredClone(S.cot), ctx: structuredClone(x) };
+  if (!S.cart.length) { alert('Agrega al menos un producto a la cotización.'); return false; }
+  const x = cartCtx(), ex = asNew ? null : editingQ(), n = S.cart.length;
+  const base = {
+    cliente: S.cot.cliente, nombre: (S.cart[0].nombre || S.cart[0].tipo) + (n > 1 ? ` +${n - 1} más` : ''),
+    tipo: [...new Set(S.cart.map(i => i.tipo))].join(' + '), qty: S.cart.reduce((a, i) => a + i.qty, 0),
+    costo: x.costo, total: x.total, utilidad: x.util, margen: x.mReal,
+    items: structuredClone(S.cart), snap: structuredClone(x.snap), cot: structuredClone(S.cot)
+  };
   const flash = () => { const b = document.getElementById('saveq'); if (b) { b.textContent = '✓ Guardada'; setTimeout(() => { b.textContent = 'Actualizar cotización'; }, 1500); } };
   if (!REMOTE) {
-    if (ex) Object.assign(ex, base, { actualizada: today() });
+    if (ex) { Object.assign(ex, base, { actualizada: today() }); }
     else { const q = { id: Date.now(), folio: newFolio(), fecha: today(), estado: 'Borrador', ...base }; S.folioN++; S.quotes.unshift(q); S.editing = q.id; }
     save(); render(); flash(); return true;
   }
@@ -258,8 +279,23 @@ function priceFor(costoUnit, margen) {
 }
 function roundUp(p) { const r = num(S.cfg.redondeo); return r > 0 ? Math.ceil(p / r - 1e-9) * r : p; }
 
+// precio de un producto con la configuración actual
+function priced(r) {
+  const c = S.cfg, com = num(c.comision) / 100;
+  const costo = r.lines.reduce((s, l) => s + l[1], 0), cu = costo / r.qty;
+  const pu0 = priceFor(cu, num(c.margen) / 100);
+  if (!isFinite(pu0)) return null;
+  const pu = roundUp(pu0), total = pu * r.qty, util = total * (1 - com) - costo;
+  return { r, costo, cu, com, pu, total, util, mReal: total ? util / total : 0, piso: cu / (1 - com) };
+}
+const liveSnap = () => ({ iva: num(S.cfg.iva), comision: num(S.cfg.comision), margen: num(S.cfg.margen), emp: { ...S.cfg.emp }, cliente: S.cot.cliente, notas: S.cot.notas });
+function cartCtx(items = S.cart, snap = liveSnap()) {
+  const its = items.map(i => i.ctx), sum = k => its.reduce((a, c) => a + c[k], 0), total = sum('total'), util = sum('util');
+  return { items: its, costo: sum('costo'), total, util, mReal: total ? util / total : 0, snap };
+}
+const quoteCtx = q => cartCtx(q.items, q.snap);
+
 /* ---------- UI ---------- */
-const TABS = [['d3', 'Impresión 3D'], ['cp', 'Carpintería'], ['cfg', 'Configuración'], ['quotes', 'Cotizaciones']];
 
 function field(label, path, opts = {}) {
   const v = get(path);
@@ -295,7 +331,7 @@ function formD3() {
   <div class="card form"><h2>Extras</h2>
     <p class="hint">Inserts, tornillos, pintura, caja, etiquetas, imanes…</p>
     ${rows('d3.ext', [{ k: 'n', l: 'Concepto', text: 1 }, { k: 'q', l: 'Cant.', w: '70px' }, { k: 'c', l: 'Costo unit.', w: '100px' }], 'Añadir extra')}
-  </div>${formCot()}`;
+  </div>`;
 }
 function formCp() {
   return `
@@ -312,6 +348,17 @@ function formCp() {
   </div>
   <div class="card form"><h2>Otros costos</h2>
     ${rows('cp.otros', [{ k: 'n', l: 'Concepto', text: 1 }, { k: 'q', l: 'Cant.', w: '70px' }, { k: 'c', l: 'Costo unit.', w: '100px' }], 'Añadir costo')}
+  </div>`;
+}
+function formCart() {
+  const eq = editingQ();
+  const filas = S.cart.map((it, i) => `<tr><td class="l">${i + 1}</td><td class="l">${esc(it.nombre || it.tipo)}<br><span class="mut">${it.tipo}</span></td><td>${it.qty}</td><td>${money(it.ctx.pu)}</td><td>${money(it.ctx.total)}</td>
+    <td class="l" style="white-space:nowrap"><button class="sm" data-iedit="${it.id}">Editar</button><button class="sm" data-idup="${it.id}">Duplicar</button><button class="sm" data-idel="${it.id}" title="Quitar">✕</button></td></tr>`).join('');
+  return `${eq ? `<div class="edit">Editando la cotización <b>${esc(eq.folio)}</b> (${esc(eq.estado)})<small>Guardada con total ${money(eq.total)} sin IVA</small></div>` : ''}
+  <div class="card form"><h2>Productos de la cotización</h2>
+    <p class="hint">Cada producto se calcula en las pestañas de Impresión 3D o Carpintería y se agrega aquí. Su precio queda fijo con las tarifas del momento; para recalcularlo usa Editar.</p>
+    ${S.cart.length ? `<div style="overflow-x:auto"><table class="t"><tr><th class="l">#</th><th class="l">Producto</th><th>Cant.</th><th>P. unit.</th><th>Importe</th><th class="l"></th></tr>${filas}</table></div>` : '<p class="mut">Aún no hay productos. Arma uno y pulsa «Agregar a la cotización».</p>'}
+    <div class="actions"><button class="sm" data-tab="d3">+ Producto de Impresión 3D</button><button class="sm" data-tab="cp">+ Producto de Carpintería</button></div>
   </div>${formCot()}`;
 }
 function formCfg() {
@@ -349,10 +396,10 @@ function formQuotes() {
   <div style="overflow-x:auto"><table class="t"><tr><th class="l">Folio</th><th class="l">Fecha</th><th class="l">Cliente</th><th class="l">Trabajo</th><th>Total s/IVA</th><th>Margen</th><th class="l">Estado</th><th class="l"></th></tr>
   ${q.map(x => `<tr data-s="${esc((x.folio + ' ' + x.cliente + ' ' + x.nombre + ' ' + x.estado + ' ' + x.tipo).toLowerCase())}">
     <td class="l">${esc(x.folio)}</td><td class="l">${x.fecha}${x.actualizada ? `<br><span class="mut">act. ${x.actualizada}</span>` : ''}</td>
-    <td class="l">${esc(x.cliente) || '—'}</td><td class="l">${esc(x.nombre) || '—'}<br><span class="mut">${x.tipo} · ${x.qty} pza${x.qty > 1 ? 's' : ''}</span></td>
+    <td class="l">${esc(x.cliente) || '—'}</td><td class="l">${esc(x.nombre) || '—'}<br><span class="mut">${x.items?.length > 1 ? x.items.length + ' productos' : x.tipo + ' · ' + x.qty + ' pza' + (x.qty > 1 ? 's' : '')}</span></td>
     <td>${money(x.total)}</td><td>${pct(x.margen)}</td>
     <td class="l"><select data-qest="${x.id}">${ESTADOS.map(e => `<option${e === x.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></td>
-    <td class="l" style="white-space:nowrap">${x.data ? `<button class="sm" data-qedit="${x.id}">Editar</button><button class="sm" data-qdup="${x.id}">Duplicar</button><button class="sm" data-qcli="${x.id}">PDF cliente</button><button class="sm" data-qint="${x.id}">PDF interno</button>` : '<span class="mut">formato anterior</span>'}<button class="sm" data-qdel="${x.id}" title="Eliminar">✕</button></td></tr>`).join('')}
+    <td class="l" style="white-space:nowrap">${x.items ? `<button class="sm" data-qedit="${x.id}">Editar</button><button class="sm" data-qdup="${x.id}">Duplicar</button><button class="sm" data-qcli="${x.id}">PDF cliente</button><button class="sm" data-qint="${x.id}">PDF interno</button>` : '<span class="mut">formato anterior</span>'}<button class="sm" data-qdel="${x.id}" title="Eliminar">✕</button></td></tr>`).join('')}
   </table></div></div>`;
   const pend = REMOTE ? pendientes() : [];
   const aviso = pend.length ? `<div class="card"><h2>Cotizaciones de este navegador</h2>
@@ -368,34 +415,47 @@ function formQuotes() {
 }
 
 function render() {
-  document.getElementById('nav').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  const tabs = [['d3', 'Impresión 3D'], ['cp', 'Carpintería'], ['cot', 'Cotización actual' + (S.cart.length ? ` (${S.cart.length})` : '')], ['cfg', 'Configuración'], ['quotes', 'Guardadas']];
+  document.getElementById('nav').innerHTML = tabs.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
   const app = document.getElementById('app');
-  const calc = tab === 'd3' || tab === 'cp';
+  const calc = tab === 'd3' || tab === 'cp' || tab === 'cot';
   app.className = calc ? 'two' : '';
-  const form = tab === 'd3' ? formD3() : tab === 'cp' ? formCp() : tab === 'cfg' ? formCfg() : formQuotes();
+  const form = tab === 'd3' ? formD3() : tab === 'cp' ? formCp() : tab === 'cot' ? formCart() : tab === 'cfg' ? formCfg() : formQuotes();
   app.innerHTML = calc ? `<div style="display:grid;gap:16px">${form}</div><div class="sticky"><div class="card" id="res"></div></div>` : form;
   update();
 }
 
 let manual = '';
+function updateCot() {
+  const res = document.getElementById('res'), x = cartCtx(), iva = num(S.cfg.iva), ivaAmt = x.total * iva / 100, eq = editingQ();
+  if (!S.cart.length) { res.innerHTML = '<h2>Total de la cotización</h2><p class="mut">Agrega productos para ver el total.</p><div class="actions"><button class="sm" id="newq">Empezar de cero</button></div>'; return; }
+  res.innerHTML = `
+    <div class="price"><small>Total${iva ? ' con IVA' : ''}</small><b>${money(x.total + ivaAmt)}</b><small>${S.cart.length} producto${S.cart.length > 1 ? 's' : ''}</small></div>
+    <div class="line"><span>Subtotal (sin IVA)</span><span>${money(x.total)}</span></div>
+    ${iva ? `<div class="line"><span>IVA ${iva}%</span><span>${money(ivaAmt)}</span></div>` : ''}
+    <div class="line tot"><span>Total</span><span>${money(x.total + ivaAmt)}</span></div>
+    <h2 style="margin-top:16px;font-size:14px">Solo para ti</h2>
+    <div class="line"><span>Costo total</span><span>${money(x.costo)}</span></div>
+    <div class="line"><span>Utilidad${num(S.cfg.comision) ? ' (tras comisión)' : ''}</span><span class="${x.util >= 0 ? 'good' : 'bad'}">${money(x.util)}</span></div>
+    <div class="line"><span>Margen real / sobre costo</span><span>${pct(x.mReal)} / ${x.costo ? pct(x.util / x.costo) : '—'}</span></div>
+    <div class="actions"><button class="pri" id="saveq">${eq ? 'Actualizar cotización' : 'Guardar cotización'}</button></div>
+    <div class="actions">${eq ? '<button class="sm" id="saveas">Guardar como nueva</button>' : ''}<button class="sm" id="newq">Nueva cotización</button></div>
+    <h2 style="margin-top:16px;font-size:14px">Documentos en PDF</h2>
+    <div class="actions"><button class="dl" id="pdfcli">⬇ Para el cliente</button><button class="dl" id="pdfint" style="background:var(--red)">⬇ Desglose interno</button></div>
+    <p class="mut" style="margin:6px 0 0">El del cliente solo muestra productos, precios, subtotal e IVA; el desglose de costos es solo para ti.</p>`;
+}
 function update() {
   if (tab === 'cfg') return derived();
+  if (tab === 'cot') return updateCot();
   if (tab !== 'd3' && tab !== 'cp') return;
   const r = tab === 'd3' ? calc3d() : calcCp();
-  const costo = r.lines.reduce((s, l) => s + l[1], 0);
-  const cu = costo / r.qty;
-  const c = S.cfg, m = num(c.margen) / 100, com = num(c.comision) / 100;
-  const pu0 = priceFor(cu, m);
-  const res = document.getElementById('res');
-  if (!isFinite(pu0)) { res.innerHTML = `<div class="warn">Margen + comisión deben sumar menos de 100%.</div>`; return; }
-  const pu = roundUp(pu0), total = pu * r.qty;
-  const util = total * (1 - com) - costo, mReal = total ? util / total : 0;
-  const conIva = total * (1 + num(c.iva) / 100);
-  const piso = cu / (1 - com);
-  const eq = editingQ();
+  const res = document.getElementById('res'), P = priced(r);
+  if (!P) { res.innerHTML = `<div class="warn">Margen + comisión deben sumar menos de 100%.</div>`; return; }
+  const { costo, cu, com, pu, total, util, mReal, piso } = P, c = S.cfg;
+  const conIva = total * (1 + num(c.iva) / 100), ie = editingItem();
   const bar = costo ? r.lines.map((l, i) => `<div title="${esc(l[0])}" style="width:${l[1] / costo * 100}%;background:${COLORS[i % 7]}"></div>`).join('') : '';
   res.innerHTML = `
-    ${eq ? `<div class="edit">Editando <b>${esc(eq.folio)}</b> (${esc(eq.estado)})<small>Guardada con total ${money(eq.total)} sin IVA${Math.abs(eq.total - total) > 0.005 ? ` · con los valores de ahora: ${money(total)}` : ''}</small></div>` : ''}
+    ${ie ? `<div class="edit">Editando un producto de la cotización<small>Guardado con total ${money(ie.ctx.total)} sin IVA${Math.abs(ie.ctx.total - total) > 0.005 ? ` · con los valores de ahora: ${money(total)}` : ''}</small></div>` : ''}
     <div class="price"><small>Precio sugerido${r.qty > 1 ? ' por pieza' : ''} (sin IVA)</small><b>${money(pu)}</b>
       ${r.qty > 1 ? `<small>Total ${r.qty} pzas: ${money(total)}</small>` : ''}
       ${num(c.iva) ? `<small>Con IVA ${num(c.iva)}%: ${money(conIva)}${r.qty > 1 ? ' (total)' : ''}</small>` : ''}</div>
@@ -413,12 +473,9 @@ function update() {
     <h2 style="margin-top:16px;font-size:14px">Precio según margen</h2>
     <table class="t"><tr><th>Margen</th><th>Precio unit.</th><th>Utilidad unit.</th></tr>
     ${[0.2, 0.3, 0.4, 0.5, 0.6].map(x => { const p = priceFor(cu, x); return `<tr><td>${x * 100}%</td><td>${isFinite(p) ? money(p) : '—'}</td><td>${isFinite(p) ? money(p * (1 - com) - cu) : '—'}</td></tr>`; }).join('')}</table>
-    <div class="actions"><button class="pri" id="saveq">${eq ? 'Actualizar cotización' : 'Guardar cotización'}</button></div>
-    <div class="actions">${eq ? '<button class="sm" id="saveas">Guardar como nueva</button>' : ''}<button class="sm" id="newq">Nueva cotización</button></div>
-    <h2 style="margin-top:16px;font-size:14px">Documentos en PDF</h2>
-    <div class="actions"><button class="dl" id="pdfcli">⬇ Para el cliente</button><button class="dl" id="pdfint" style="background:var(--red)">⬇ Desglose interno</button></div>
-    <p class="mut" style="margin:6px 0 0">El del cliente solo muestra producto, precio, subtotal e IVA; el desglose de costos es solo para ti.</p>`;
-  res._ctx = { r, costo, pu, total, util, mReal, cu, com, piso, snap: { iva: num(c.iva), comision: num(c.comision), margen: num(c.margen), emp: { ...c.emp }, cliente: S.cot.cliente, notas: S.cot.notas } };
+    <div class="actions"><button class="pri" id="additem">${ie ? 'Actualizar producto' : 'Agregar a la cotización'}</button></div>
+    <div class="actions">${ie ? '<button class="sm" id="cancelitem">Cancelar edición</button>' : ''}<button class="sm" data-tab="cot">Ver cotización (${S.cart.length})</button></div>`;
+  res._ctx = P;
   manualOut();
 }
 function manualOut() {
@@ -462,18 +519,36 @@ document.addEventListener('click', e => {
     return;
   }
   if (t.dataset.qedit || t.dataset.qdup) {
-    const q = qf(t.dataset.qedit ? 'qedit' : 'qdup'); if (!q?.data) return;
-    S[q.key] = structuredClone(q.data); S.cot = structuredClone(q.cot);
-    S.editing = t.dataset.qedit ? q.id : null; tab = q.key; manual = ''; save(); render(); return;
+    const q = qf(t.dataset.qedit ? 'qedit' : 'qdup'); if (!q?.items) return;
+    S.cart = structuredClone(q.items); S.cot = structuredClone(q.cot);
+    S.editing = t.dataset.qedit ? q.id : null; S.itemEditing = null; tab = 'cot'; manual = ''; save(); render(); return;
   }
   if (t.dataset.qcli || t.dataset.qint) {
-    const q = qf(t.dataset.qcli ? 'qcli' : 'qint'); if (!q?.ctx) return;
-    (t.dataset.qcli ? pdfCliente : pdfInterno)(q.ctx, q.folio, q.actualizada || q.fecha); return;
+    const q = qf(t.dataset.qcli ? 'qcli' : 'qint'); if (!q?.items) return;
+    (t.dataset.qcli ? pdfCliente : pdfInterno)(quoteCtx(q), q.folio, q.actualizada || q.fecha); return;
   }
+  const iid = k => +t.dataset[k], itf = k => S.cart.find(i => i.id === iid(k));
+  if (t.dataset.iedit) { const it = itf('iedit'); if (it) { S[it.key] = structuredClone(it.data); S.itemEditing = it.id; tab = it.key; manual = ''; save(); render(); } return; }
+  if (t.dataset.idup) { const it = itf('idup'); if (it) { const n = structuredClone(it); n.id = uid(); S.cart.splice(S.cart.indexOf(it) + 1, 0, n); save(); render(); } return; }
+  if (t.dataset.idel) {
+    const it = itf('idel');
+    if (it && confirm(`¿Quitar «${it.nombre || it.tipo}» de la cotización?`)) { S.cart = S.cart.filter(i => i !== it); if (S.itemEditing === it.id) S.itemEditing = null; save(); render(); }
+    return;
+  }
+  if (t.id === 'additem') {
+    const r = tab === 'd3' ? calc3d() : calcCp(), P = priced(r), ie = editingItem();
+    if (!P) { alert('Margen + comisión deben sumar menos de 100%.'); return; }
+    const item = { id: ie ? ie.id : uid(), key: tab, nombre: r.nombre, tipo: r.tipo, qty: r.qty, data: structuredClone(S[tab]), ctx: JSON.parse(JSON.stringify(P)) };
+    if (ie) S.cart[S.cart.indexOf(ie)] = item; else S.cart.push(item);
+    S.itemEditing = null; S[tab] = structuredClone(DEF[tab]); manual = ''; save(); render();
+    const b = document.getElementById('additem'); if (b) { b.textContent = `✓ Agregado (${S.cart.length} en la cotización)`; setTimeout(() => { b.textContent = 'Agregar a la cotización'; }, 1800); }
+    return;
+  }
+  if (t.id === 'cancelitem') { S.itemEditing = null; S[tab] = structuredClone(DEF[tab]); manual = ''; save(); render(); return; }
   if (t.id === 'pdfcli' || t.id === 'pdfint') {
     const f = t.id === 'pdfcli' ? pdfCliente : pdfInterno;
     // con Google Sheets el folio lo asigna el servidor, así que una cotización nueva se guarda antes de generar el PDF
-    (REMOTE && !editingQ() ? guardar(false) : Promise.resolve(true)).then(ok => { if (ok) f(curCtx(), folio(), today()); });
+    (REMOTE && !editingQ() ? guardar(false) : Promise.resolve(true)).then(ok => { if (ok) f(cartCtx(), folio(), today()); });
     return;
   }
   if (t.id === 'reset') {
@@ -484,13 +559,13 @@ document.addEventListener('click', e => {
   if (t.id === 'skipup') { setPend([]); render(); }
   if (t.id === 'upload') {
     setSync('guardando');
-    srv('cc_importar', pendientes()).then(sub => { S.quotes = sub.concat(S.quotes).sort((a, b) => b.id - a.id); setPend([]); save(); setSync('ok'); render(); })
+    srv('cc_importar', pendientes().map(normQ)).then(sub => { S.quotes = sub.map(normQ).concat(S.quotes).sort((a, b) => b.id - a.id); setPend([]); save(); setSync('ok'); render(); })
       .catch(e => { setSync('error', e.message); alert('No se pudieron subir: ' + e.message); });
   }
   if (t.id === 'saveq' || t.id === 'saveas') { guardar(t.id === 'saveas'); return; }
   if (t.id === 'newq') {
-    if (!confirm('¿Limpiar el formulario para una cotización nueva? Lo que no hayas guardado se perderá.')) return;
-    S[tab] = structuredClone(DEF[tab]); S.cot = structuredClone(DEF.cot); S.editing = null; manual = ''; save(); render(); return;
+    if (!confirm('¿Empezar una cotización nueva? Lo que no hayas guardado se perderá.')) return;
+    S.cart = []; S.cot = structuredClone(DEF.cot); S.editing = null; S.itemEditing = null; manual = ''; save(); render(); return;
   }
   if (t.id === 'backup') download(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }), `respaldo-calculadora-${today()}.json`);
   if (t.id === 'restore') document.getElementById('rfile').click();
@@ -509,7 +584,7 @@ document.addEventListener('change', e => {
     const q = S.quotes.find(x => x.id === +t.dataset.qest); if (!q) return;
     if (!REMOTE) { q.estado = t.value; save(); return; }
     setSync('guardando');
-    srv('cc_estado', q.id, t.value).then(nq => { Object.assign(q, nq); save(); setSync('ok'); })
+    srv('cc_estado', q.id, t.value).then(nq => { Object.assign(q, normQ(nq)); save(); setSync('ok'); })
       .catch(e => { setSync('error', e.message); alert('No se pudo cambiar el estado: ' + e.message); refrescar(true); });
   }
   if (t.id === 'rfile' && t.files[0]) {
@@ -557,10 +632,14 @@ function pdfStr(s) {
   return o;
 }
 function newPdf() {
-  const W = 612, H = 792, ops = [];
+  const W = 612, H = 792, pages = [[]];
+  let ops = pages[0];
   const col = (h, op) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255].map(x => (x / 255).toFixed(3)).join(' ') + ' ' + op; };
   return {
     W, H,
+    get n() { return pages.length; },
+    addPage() { ops = []; pages.push(ops); },
+    setPage(i) { ops = pages[i]; },
     rect(x, y, w, h, f) { ops.push(`${col(f, 'rg')} ${x} ${H - y - h} ${w} ${h} re f`); },
     line(x1, y1, x2, y2, c, wd = 1) { ops.push(`${col(c, 'RG')} ${wd} w ${x1} ${H - y1} m ${x2} ${H - y2} l S`); },
     text(s, x, y, o = {}) {
@@ -570,23 +649,27 @@ function newPdf() {
     },
     image(x, y, w, h) { ops.push(`q ${w} 0 0 ${h} ${x} ${H - y - h} cm /Im1 Do Q`); },
     blob() {
-      const content = ops.join('\n'), img = Uint8Array.from(atob(LOGO.b64), c => c.charCodeAt(0));
+      const img = Uint8Array.from(atob(LOGO.b64), c => c.charCodeAt(0));
       const parts = [], offs = []; let len = 0;
       const push = b => { if (typeof b === 'string') { const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i) & 255; b = a; } parts.push(b); len += b.length; };
       const obj = (n, body) => { offs[n] = len; push(`${n} 0 obj\n${body}\nendobj\n`); };
+      const first = 6, total = first + 2 * pages.length;
       push('%PDF-1.4\n');
       obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-      obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-      obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 4 0 R >>`);
-      obj(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
-      obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
-      obj(6, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
-      offs[7] = len;
-      push(`7 0 obj\n<< /Type /XObject /Subtype /Image /Width ${LOGO.w} /Height ${LOGO.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`);
+      obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${first + 2 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
+      obj(3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+      obj(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+      offs[5] = len;
+      push(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${LOGO.w} /Height ${LOGO.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`);
       push(img); push('\nendstream\nendobj\n');
-      const xr = len; let x = 'xref\n0 8\n0000000000 65535 f \n';
-      for (let i = 1; i <= 7; i++) x += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
-      push(x + `trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+      pages.forEach((o, i) => {
+        const content = o.join('\n'), n = first + 2 * i;
+        obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents ${n + 1} 0 R >>`);
+        obj(n + 1, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+      });
+      const xr = len; let x = `xref\n0 ${total}\n0000000000 65535 f \n`;
+      for (let i = 1; i < total; i++) x += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+      push(x + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
       return new Blob(parts, { type: 'application/pdf' });
     }
   };
@@ -616,29 +699,42 @@ function pdfFoot(p, e) {
   p.text('Dream designs, applicable solutions', 306, contacto ? 767 : 756, { size: 9, bold: true, color: BR.teal, align: 'center' });
   p.rect(0, p.H - 8, p.W, 8, BR.orange);
 }
+function pdfFin(p, emp) {
+  const n = p.n;
+  for (let i = 0; i < n; i++) {
+    p.setPage(i); pdfFoot(p, emp);
+    if (n > 1) p.text(`Página ${i + 1} de ${n}`, 572, 728, { size: 8, color: BR.gray, align: 'right' });
+  }
+}
 function pdfCliente(x, fol, fecha) {
-  const r = x.r, sn = x.snap, e = sn.emp;
-  const p = newPdf(), y0 = pdfHead(p, 'COTIZACIÓN', fol, fecha);
+  const sn = x.snap, e = sn.emp, p = newPdf(), T = 'COTIZACIÓN';
+  const y0 = pdfHead(p, T, fol, fecha);
   p.text('CLIENTE', 40, y0 + 28, { size: 8, bold: true, color: BR.gray });
   p.text(sn.cliente || '—', 40, y0 + 44, { size: 13, bold: true });
   p.text('VIGENCIA', 572, y0 + 28, { size: 8, bold: true, color: BR.gray, align: 'right' });
   p.text(num(e.vigencia) + ' días naturales', 572, y0 + 44, { size: 11, align: 'right' });
   let y = y0 + 66;
-  p.rect(40, y, 532, 22, BR.teal);
-  p.text('DESCRIPCIÓN', 48, y + 15, { size: 9, bold: true, color: '#ffffff' });
-  p.text('CANT.', 380, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
-  p.text('P. UNITARIO', 470, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
-  p.text('IMPORTE', 564, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
-  y += 22;
-  const lines = wrap(r.nombre || r.tipo, 280, 11, true);
-  const rowH = lines.length * 14 + (r.nombre ? 14 : 0) + 12;
-  lines.forEach((l, i) => p.text(l, 48, y + 18 + i * 14, { size: 11, bold: true }));
-  if (r.nombre) p.text(r.tipo, 48, y + 18 + lines.length * 14, { size: 9, color: BR.gray });
-  p.text(String(r.qty), 380, y + 18, { size: 11, align: 'right' });
-  p.text(money(x.pu), 470, y + 18, { size: 11, align: 'right' });
-  p.text(money(x.total), 564, y + 18, { size: 11, align: 'right' });
-  y += rowH; p.line(40, y, 572, y, '#d9d9d9', 0.7);
+  const thead = () => {
+    p.rect(40, y, 532, 22, BR.teal);
+    p.text('DESCRIPCIÓN', 48, y + 15, { size: 9, bold: true, color: '#ffffff' });
+    p.text('CANT.', 380, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
+    p.text('P. UNITARIO', 470, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
+    p.text('IMPORTE', 564, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
+    y += 22;
+  };
+  thead();
+  x.items.forEach(c => {
+    const r = c.r, lines = wrap(r.nombre || r.tipo, 270, 11, true), rowH = lines.length * 14 + (r.nombre ? 14 : 0) + 12;
+    if (y + rowH > 700) { p.addPage(); y = pdfHead(p, T, fol, fecha) + 18; thead(); }
+    lines.forEach((l, i) => p.text(l, 48, y + 18 + i * 14, { size: 11, bold: true }));
+    if (r.nombre) p.text(r.tipo, 48, y + 18 + lines.length * 14, { size: 9, color: BR.gray });
+    p.text(String(r.qty), 380, y + 18, { size: 11, align: 'right' });
+    p.text(money(c.pu), 470, y + 18, { size: 11, align: 'right' });
+    p.text(money(c.total), 564, y + 18, { size: 11, align: 'right' });
+    y += rowH; p.line(40, y, 572, y, '#d9d9d9', 0.7);
+  });
   const iva = num(sn.iva), ivaAmt = x.total * iva / 100;
+  if (y + 120 > 700) { p.addPage(); y = pdfHead(p, T, fol, fecha) + 10; }
   y += 24;
   p.text('Subtotal', 470, y, { size: 11, color: BR.gray, align: 'right' }); p.text(money(x.total), 564, y, { size: 11, align: 'right' });
   if (iva) { y += 20; p.text(`IVA ${iva}%`, 470, y, { size: 11, color: BR.gray, align: 'right' }); p.text(money(ivaAmt), 564, y, { size: 11, align: 'right' }); }
@@ -648,44 +744,82 @@ function pdfCliente(x, fol, fecha) {
   y += 62;
   const notas = [e.condiciones, sn.notas].filter(Boolean).join('\n');
   if (notas) {
+    const ls = wrap(notas, 520, 10);
+    if (y + 16 + ls.length * 13 > 712) { p.addPage(); y = pdfHead(p, T, fol, fecha) + 24; }
     p.text('CONDICIONES Y NOTAS', 40, y, { size: 8, bold: true, color: BR.teal });
-    wrap(notas, 520, 10).forEach((l, i) => p.text(l, 40, y + 16 + i * 13, { size: 10, color: '#333333' }));
+    ls.forEach((l, i) => p.text(l, 40, y + 16 + i * 13, { size: 10, color: '#333333' }));
   }
-  pdfFoot(p, sn.emp);
+  pdfFin(p, e);
   download(p.blob(), `Cotizacion-${fol}${sn.cliente ? '-' + sn.cliente.replace(/[^\w]+/g, '_').slice(0, 30) : ''}.pdf`);
 }
 function pdfInterno(x, fol, fecha) {
-  const r = x.r, sn = x.snap;
-  const p = newPdf(), y0 = pdfHead(p, 'DESGLOSE DE COSTOS', fol, fecha);
-  p.rect(40, y0 + 12, 532, 20, BR.red);
-  p.text('USO INTERNO · NO ENTREGAR AL CLIENTE', 306, y0 + 26, { size: 10, bold: true, color: '#ffffff', align: 'center' });
-  let y = y0 + 54;
-  p.text('TRABAJO', 40, y, { size: 8, bold: true, color: BR.gray }); p.text('CLIENTE', 330, y, { size: 8, bold: true, color: BR.gray });
-  const tl = wrap(`${r.nombre || '—'} (${r.tipo}, ${r.qty} ${r.qty > 1 ? 'piezas' : 'pieza'})`, 270, 11, true), cl = wrap(sn.cliente || '—', 230, 11, true);
-  tl.forEach((l, i) => p.text(l, 40, y + 15 + i * 13, { size: 11, bold: true }));
-  cl.forEach((l, i) => p.text(l, 330, y + 15 + i * 13, { size: 11, bold: true }));
-  y += Math.max(tl.length, cl.length) * 13 - 13;
-  y += 36;
-  p.rect(40, y, 532, 22, BR.teal);
-  p.text('CONCEPTO', 48, y + 15, { size: 9, bold: true, color: '#ffffff' });
-  p.text('MONTO', 480, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
-  p.text('% DEL COSTO', 564, y + 15, { size: 9, bold: true, color: '#ffffff', align: 'right' });
-  y += 22;
-  r.lines.forEach(l => {
-    p.text(l[0], 48, y + 16, { size: 10.5, color: l[1] ? '#000000' : '#999999' });
-    p.text(money(l[1]), 480, y + 16, { size: 10.5, align: 'right', color: l[1] ? '#000000' : '#999999' });
-    p.text(x.costo ? (l[1] / x.costo * 100).toFixed(1) + '%' : '—', 564, y + 16, { size: 10.5, align: 'right', color: BR.gray });
-    y += 23; p.line(40, y, 572, y, '#e3e3e3', 0.6);
+  const sn = x.snap, p = newPdf(), T = 'DESGLOSE DE COSTOS', G = '#999999';
+  const head = () => {
+    const y0 = pdfHead(p, T, fol, fecha);
+    p.rect(40, y0 + 12, 532, 20, BR.red);
+    p.text('USO INTERNO · NO ENTREGAR AL CLIENTE', 306, y0 + 26, { size: 10, bold: true, color: '#ffffff', align: 'center' });
+    return y0 + 46;
+  };
+  let y = head();
+  const need = h => { if (y + h > 712) { p.addPage(); y = head(); return true; } return false; };
+  p.text('CLIENTE', 40, y, { size: 8, bold: true, color: BR.gray });
+  p.text(sn.cliente || '—', 40, y + 15, { size: 12, bold: true });
+  y += 40;
+  // resumen por producto
+  p.text('RESUMEN POR PRODUCTO', 40, y, { size: 8, bold: true, color: BR.teal }); y += 8;
+  const th = () => {
+    p.rect(40, y, 532, 20, BR.teal);
+    p.text('PRODUCTO', 48, y + 14, { size: 8.5, bold: true, color: '#ffffff' });
+    [['CANT.', 262], ['COSTO', 340], ['VENTA', 420], ['UTILIDAD', 496], ['MARGEN', 564]].forEach(([t, xx]) => p.text(t, xx, y + 14, { size: 8.5, bold: true, color: '#ffffff', align: 'right' }));
+    y += 20;
+  };
+  th();
+  const utilColor = u => u >= 0 ? '#1f8f55' : '#c0392b';
+  x.items.forEach(c => {
+    const r = c.r, ls = wrap(r.nombre || r.tipo, 195, 9.5, true), h = ls.length * 12 + 8;
+    if (need(h)) th();
+    ls.forEach((l, i) => p.text(l, 48, y + 13 + i * 12, { size: 9.5, bold: true }));
+    p.text(String(r.qty), 262, y + 13, { size: 9.5, align: 'right' });
+    p.text(money(c.costo), 340, y + 13, { size: 9.5, align: 'right' });
+    p.text(money(c.total), 420, y + 13, { size: 9.5, align: 'right' });
+    p.text(money(c.util), 496, y + 13, { size: 9.5, align: 'right', color: utilColor(c.util) });
+    p.text(pct(c.mReal), 564, y + 13, { size: 9.5, align: 'right' });
+    y += h; p.line(40, y, 572, y, '#e3e3e3', 0.6);
   });
-  p.rect(40, y, 532, 24, BR.soft);
-  p.text('COSTO TOTAL', 48, y + 16, { size: 11, bold: true }); p.text(money(x.costo), 480, y + 16, { size: 11, bold: true, align: 'right' });
+  need(24);
+  p.rect(40, y, 532, 22, BR.soft);
+  p.text('TOTAL', 48, y + 15, { size: 10, bold: true });
+  p.text(money(x.costo), 340, y + 15, { size: 10, bold: true, align: 'right' });
+  p.text(money(x.total), 420, y + 15, { size: 10, bold: true, align: 'right' });
+  p.text(money(x.util), 496, y + 15, { size: 10, bold: true, align: 'right', color: utilColor(x.util) });
+  p.text(pct(x.mReal), 564, y + 15, { size: 10, bold: true, align: 'right' });
   y += 44;
+  // detalle de costos por producto
+  need(40);
+  p.text('DETALLE DE COSTOS POR PRODUCTO', 40, y, { size: 8, bold: true, color: BR.teal }); y += 10;
+  x.items.forEach((c, i) => {
+    const r = c.r;
+    need(86 + r.lines.length * 15);
+    p.rect(40, y, 532, 20, BR.soft);
+    p.text(`${i + 1}. ${wrap(r.nombre || r.tipo, 330, 10, true)[0]}`, 48, y + 14, { size: 10, bold: true });
+    p.text(`${r.tipo} · ${r.qty} ${r.qty > 1 ? 'piezas' : 'pieza'}`, 564, y + 14, { size: 9, color: BR.gray, align: 'right' });
+    y += 20;
+    r.lines.forEach(l => {
+      y += 15;
+      p.text(l[0], 48, y - 4, { size: 9.5, color: l[1] ? '#000000' : G });
+      p.text(money(l[1]), 480, y - 4, { size: 9.5, align: 'right', color: l[1] ? '#000000' : G });
+      p.text(c.costo ? (l[1] / c.costo * 100).toFixed(1) + '%' : '—', 564, y - 4, { size: 9.5, align: 'right', color: BR.gray });
+      p.line(40, y, 572, y, '#eeeeee', 0.6);
+    });
+    y += 17; p.text('Costo total', 48, y - 4, { size: 9.5, bold: true }); p.text(money(c.costo), 480, y - 4, { size: 9.5, bold: true, align: 'right' });
+    y += 15; p.text(`Costo por pieza ${money(c.cu)}  ·  precio mínimo ${money(c.piso)}  ·  precio de venta por pieza ${money(c.pu)}`, 48, y - 4, { size: 9, color: BR.gray });
+    y += 15; p.text(`Venta ${money(c.total)}  ·  utilidad ${money(c.util)} (${pct(c.mReal)} del precio)`, 48, y - 4, { size: 9, color: BR.gray });
+    y += 18;
+  });
+  // totales
   const com = num(sn.comision), comAmt = x.total * com / 100, iva = num(sn.iva);
   const sum = [
-    ['Costo por pieza', money(x.cu)],
-    ['Precio mínimo por pieza (utilidad cero)', money(x.piso)],
-    [`Margen objetivo`, num(sn.margen) + '%'],
-    ['Precio de venta por pieza (sin IVA)', money(x.pu)],
+    ['Costo total', money(x.costo)],
     ['Total de venta (sin IVA)', money(x.total)],
     ...(com ? [[`Comisión de plataforma/pago (${com}%)`, '- ' + money(comAmt)]] : []),
     ['Utilidad', money(x.util)],
@@ -693,9 +827,10 @@ function pdfInterno(x, fol, fecha) {
     ['Utilidad sobre el costo (markup)', x.costo ? pct(x.util / x.costo) : '—'],
     ...(iva ? [[`Total al cliente con IVA ${iva}%`, money(x.total * (1 + iva / 100))]] : [])
   ];
-  p.text('RESUMEN DE PRECIO Y UTILIDAD', 40, y, { size: 8, bold: true, color: BR.teal }); y += 10;
-  sum.forEach(([a, b]) => { y += 19; p.text(a, 48, y, { size: 10.5, color: '#333333' }); p.text(b, 564, y, { size: 10.5, bold: true, align: 'right', color: a === 'Utilidad' ? (x.util >= 0 ? '#1f8f55' : '#c0392b') : '#000000' }); p.line(40, y + 5, 572, y + 5, '#eeeeee', 0.6); });
-  pdfFoot(p, sn.emp);
+  need(30 + sum.length * 19);
+  p.text('TOTALES DE LA COTIZACIÓN', 40, y, { size: 8, bold: true, color: BR.teal }); y += 10;
+  sum.forEach(([a, b]) => { y += 19; p.text(a, 48, y, { size: 10.5, color: '#333333' }); p.text(b, 564, y, { size: 10.5, bold: true, align: 'right', color: a === 'Utilidad' ? utilColor(x.util) : '#000000' }); p.line(40, y + 5, 572, y + 5, '#eeeeee', 0.6); });
+  pdfFin(p, sn.emp);
   download(p.blob(), `Desglose-interno-${fol}.pdf`);
 }
 
