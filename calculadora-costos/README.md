@@ -7,16 +7,31 @@ Calculadora para impresión 3D y carpintería: costos, precio con margen, cotiza
 | Archivo | Qué es |
 |---|---|
 | `index.html` | La calculadora completa (una sola página, sin dependencias). |
-| `Code.gs` | Script de Google Apps Script que guarda cotizaciones y tarifas en un Google Sheet. |
+| `Code.gs` | Script de Google Apps Script que guarda cotizaciones, tarifas y el inventario en un Google Sheet. |
 
 `index.html` funciona de dos maneras:
 
 - **Suelto** (doble clic en el archivo): guarda en el navegador. Sirve para una sola persona y un solo equipo.
 - **Dentro de Apps Script**: guarda en Google Sheets, compartido con el equipo. Detecta solo en cuál está.
 
+## Inventario de materiales
+
+La pestaña **Inventario** es el catálogo de materiales: se agregan, modifican y eliminan ahí. Con Google Sheets, el catálogo vive en la hoja **Materiales** y también puedes escribir o pegar filas directo en el Sheet (la calculadora les asigna su ID al abrirla).
+
+| Campo | Qué es |
+|---|---|
+| Material / Marca / Proveedor | Datos para identificarlo. |
+| Presentación | Cuánto trae lo que compras: `1000` si la bobina es de 1000 g, `1` si es una hoja de triplay, `4` si es una cubeta de 4 l. |
+| Unidad | g, kg, hoja, l, m, pza… |
+| Costo presentación | Lo que pagas por esa presentación. |
+| Costo por unidad | Se calcula solo: costo de la presentación ÷ presentación. |
+| Área | 3D, Carpintería o Ambos: define en qué listas aparece. |
+
+En **Impresión 3D**, cada fila de filamento se elige del inventario (solo materiales con unidad g o kg) y se capturan los **gramos**: el costo sale de gramos × costo por unidad, convertido a kg si el material está en kg. En **Carpintería**, cada material se elige del inventario y se captura la cantidad en su unidad (por ejemplo, 2 hojas). También puedes dejar «Manual / otro» y escribir el costo a mano. Si cambias un precio en el inventario, el cálculo se actualiza; las partidas ya agregadas a una cotización conservan su precio hasta que las edites.
+
 ## Cómo se arma una cotización
 
-1. En **Impresión 3D** o **Carpintería** calcula un producto y pulsa **Agregar a la cotización**. Repite con todos los productos que necesites (puedes mezclar 3D y carpintería).
+1. En **Impresión 3D** o **Carpintería** calcula un producto (tiempo, gramos o materiales, mano de obra, extras) y pulsa **Agregar a la cotización**. Cada producto es una partida con su propio precio; si quieres fijarlo tú, captura el «Precio de venta por pieza» y no se usará el sugerido. Repite con todos los productos que necesites (puedes mezclar 3D y carpintería).
 2. En **Cotización actual** ves la lista con precio unitario e importe de cada producto, y el subtotal, IVA y total. Ahí capturas el cliente y las notas, y puedes **Editar**, **Duplicar** o quitar productos.
 3. **Guardar cotización** la manda a la lista de **Guardadas**, donde puedes volver a abrirla, duplicarla, cambiarle el estado y regenerar sus PDF.
 4. **PDF para el cliente**: productos, cantidades, precios, subtotal, IVA y total. **PDF de desglose interno**: costo, utilidad y margen de cada producto y de toda la cotización.
@@ -36,11 +51,12 @@ El precio de cada producto queda fijo con las tarifas del momento en que lo agre
 
 Quien no tenga acceso al Sheet no puede ver ni guardar nada: los costos y márgenes quedan protegidos por los permisos del Sheet.
 
-Cuando cambies `index.html`, vuelve a pegarlo en `Calculadora` y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
+Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Código.gs`), corre **🧮 Calculadora → Preparar hojas** (crea la hoja `Materiales` si falta) y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
 
 ## Qué se guarda y dónde
 
 - **Hoja `Cotizaciones`**: una fila por cotización (folio, fecha, cliente, trabajo, costo, total, utilidad, margen, estado, quién la creó y modificó). Sirve para filtrar y hacer tablas dinámicas. La cotización completa vive en la columna oculta «Datos»: **no la edites ni borres columnas**. El **Estado** sí se puede cambiar a mano en el Sheet.
+- **Hoja `Materiales`**: el inventario (ver arriba).
 - **Hoja `Config`**: tarifas (mano de obra, kWh, margen, IVA, datos de la empresa…) y contador de folios. Todo el equipo usa las mismas tarifas.
 - **Folios**: los asigna el servidor (`COT-AAAAMMDD-001`…), así que no se repiten aunque dos personas guarden a la vez.
 - **Ediciones simultáneas**: si dos personas editan la misma cotización, la segunda que guarde recibe un aviso antes de pisar los cambios de la primera.

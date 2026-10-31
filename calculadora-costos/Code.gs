@@ -9,11 +9,16 @@
  *   Cotizaciones  una fila por cotización. Las columnas de la A a la N son para leer y filtrar;
  *                 la cotización completa vive en la columna "Datos" (oculta). Solo la columna
  *                 Estado se puede cambiar a mano en el Sheet.
+ *   Materiales    catálogo / inventario de materiales (se edita desde la calculadora o a mano en el Sheet).
  *   Config        tarifas compartidas y contador de folios.
  */
 
 const CC_HOJA_COT = 'Cotizaciones';
 const CC_HOJA_CFG = 'Config';
+const CC_HOJA_MAT = 'Materiales';
+const CC_MAT_ENC = ['Material', 'Marca', 'Presentación', 'Unidad', 'Proveedor', 'Costo presentación', 'Costo por unidad', 'Área', 'ID', 'Actualizado'];
+const CC_MCOL = { ID: 9 };
+const CC_AREAS = ['Ambos', '3D', 'Carpintería'];
 const CC_ENCABEZADO = ['Folio', 'Fecha', 'Actualizada', 'Cliente', 'Trabajo', 'Tipo', 'Piezas', 'Costo',
   'Total sin IVA', 'Utilidad', 'Margen', 'Estado', 'Creó', 'Modificó', 'ID', 'Rev', 'Datos (no editar)'];
 const CC_COL = { ESTADO: 12, ID: 15, REV: 16, JSON: 17 };
@@ -45,7 +50,7 @@ function abrirCalculadora() {
 }
 
 function prepararHojas() {
-  hojaCot_(); hojaCfg_();
+  hojaCot_(); hojaCfg_(); hojaMat_();
   SpreadsheetApp.getActive().toast('Hojas listas', 'Calculadora');
 }
 
@@ -56,7 +61,45 @@ function cc_cargar() {
   let cfg = null;
   try { cfg = kv.cfg ? JSON.parse(kv.cfg) : null; } catch (e) { cfg = null; }
   const quotes = leerCotizaciones_().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
-  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0 };
+  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0, mats: leerMateriales_() };
+}
+
+/* ---------- catálogo de materiales (inventario) ---------- */
+
+function cc_materiales() { return leerMateriales_(); }
+
+function cc_guardarMaterial(m) {
+  validarMat_(m);
+  return conBloqueo_(function () {
+    const sh = hojaMat_();
+    const id = m.id || Date.now() * 1000;
+    const fila = buscarFila_(sh, id, CC_MCOL.ID) || (sh.getLastRow() + 1);
+    escribirMat_(sh, fila, m, id);
+    return matDeFila_(sh.getRange(fila, 1, 1, CC_MAT_ENC.length).getValues()[0]);
+  });
+}
+
+function cc_eliminarMaterial(id) {
+  return conBloqueo_(function () {
+    const sh = hojaMat_(), fila = buscarFila_(sh, id, CC_MCOL.ID);
+    if (fila) sh.deleteRow(fila);
+    return true;
+  });
+}
+
+/** Alta masiva (por ejemplo, los materiales de ejemplo). */
+function cc_importarMateriales(lista) {
+  if (!Array.isArray(lista)) throw new Error('Datos no válidos');
+  lista.forEach(validarMat_);
+  return conBloqueo_(function () {
+    const sh = hojaMat_(), out = [];
+    lista.forEach(function (m, i) {
+      const fila = sh.getLastRow() + 1;
+      escribirMat_(sh, fila, m, Date.now() * 1000 + i);
+      out.push(matDeFila_(sh.getRange(fila, 1, 1, CC_MAT_ENC.length).getValues()[0]));
+    });
+    return out;
+  });
 }
 
 /**
@@ -146,6 +189,25 @@ function hojaCot_() {
   return sh;
 }
 
+function hojaMat_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(CC_HOJA_MAT);
+  if (sh) return sh;
+  sh = ss.insertSheet(CC_HOJA_MAT);
+  sh.getRange(1, 1, 1, CC_MAT_ENC.length).setValues([CC_MAT_ENC])
+    .setFontWeight('bold').setBackground('#316966').setFontColor('#ffffff');
+  sh.setFrozenRows(1);
+  sh.getRange('C:C').setNumberFormat('#,##0.##');
+  sh.getRange('F:F').setNumberFormat('#,##0.00');
+  sh.getRange('G:G').setNumberFormat('#,##0.0000');
+  sh.getRange('I:I').setNumberFormat('0');
+  sh.getRange('J:J').setNumberFormat('@');
+  sh.getRange('H2:H').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(CC_AREAS, true).setAllowInvalid(false).build());
+  sh.hideColumns(CC_MCOL.ID, 1);
+  return sh;
+}
+
 function hojaCfg_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(CC_HOJA_CFG);
@@ -190,10 +252,10 @@ function leerCotizaciones_() {
   return out;
 }
 
-function buscarFila_(sh, id) {
+function buscarFila_(sh, id, col) {
   const n = sh.getLastRow();
   if (n < 2) return 0;
-  const ids = sh.getRange(2, CC_COL.ID, n - 1, 1).getValues();
+  const ids = sh.getRange(2, col || CC_COL.ID, n - 1, 1).getValues();
   for (let i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) return i + 2;
   return 0;
 }
@@ -206,6 +268,54 @@ function escribirFila_(sh, fila, q) {
     q.folio, q.fecha, q.actualizada || '', q.cliente || '', q.nombre || '', q.tipo || '', n(q.qty), n(q.costo),
     n(q.total), n(q.utilidad), n(q.margen), q.estado || 'Borrador', q.creo || '', q.modifico || '', q.id, n(q.rev), txt
   ]]);
+}
+
+function leerMateriales_() {
+  const sh = hojaMat_(), n = sh.getLastRow();
+  if (n < 2) return [];
+  let v = sh.getRange(2, 1, n - 1, CC_MAT_ENC.length).getValues();
+  const falta = function (r) { return String(r[0]).trim() && !r[CC_MCOL.ID - 1]; };
+  if (v.some(falta)) { // filas escritas a mano en el Sheet: les damos ID y la fórmula del costo por unidad
+    conBloqueo_(function () {
+      const hoy = hoy_();
+      v = sh.getRange(2, 1, n - 1, CC_MAT_ENC.length).getValues();
+      v.forEach(function (r, i) {
+        if (!falta(r)) return;
+        const fila = i + 2;
+        sh.getRange(fila, CC_MCOL.ID).setValue(Date.now() * 1000 + i);
+        sh.getRange(fila, 7).setFormula('=IF(C' + fila + '>0,F' + fila + '/C' + fila + ',0)');
+        sh.getRange(fila, 10).setValue(hoy);
+      });
+    });
+    v = sh.getRange(2, 1, n - 1, CC_MAT_ENC.length).getValues();
+  }
+  return v.filter(function (r) { return String(r[0]).trim(); }).map(matDeFila_);
+}
+
+function matDeFila_(r) {
+  const pres = Number(r[2]) || 0, costo = Number(r[5]) || 0;
+  return {
+    id: r[CC_MCOL.ID - 1], material: String(r[0]).trim(), marca: String(r[1] || '').trim(), presentacion: pres,
+    unidad: String(r[3] || '').trim(), proveedor: String(r[4] || '').trim(), costoPres: costo,
+    costoUnidad: pres > 0 ? costo / pres : 0, area: CC_AREAS.indexOf(r[7]) >= 0 ? r[7] : 'Ambos', actualizado: String(r[9] || '')
+  };
+}
+
+function escribirMat_(sh, fila, m, id) {
+  const area = CC_AREAS.indexOf(m.area) >= 0 ? m.area : 'Ambos';
+  sh.getRange(fila, 1, 1, CC_MAT_ENC.length).setValues([[
+    String(m.material).trim(), String(m.marca || '').trim(), Number(m.presentacion), String(m.unidad).trim(),
+    String(m.proveedor || '').trim(), Number(m.costoPres), '', area, id, hoy_()
+  ]]);
+  sh.getRange(fila, 7).setFormula('=IF(C' + fila + '>0,F' + fila + '/C' + fila + ',0)');
+}
+
+function validarMat_(m) {
+  if (!m || typeof m !== 'object') throw new Error('Material no válido');
+  if (!String(m.material || '').trim() || String(m.material).length > 120) throw new Error('Escribe el nombre del material.');
+  if (!String(m.unidad || '').trim()) throw new Error('Falta la unidad.');
+  if (!(Number(m.presentacion) > 0)) throw new Error('La presentación debe ser mayor que 0.');
+  if (!isFinite(Number(m.costoPres)) || Number(m.costoPres) < 0) throw new Error('El costo de la presentación no es válido.');
 }
 
 function validar_(q) {
