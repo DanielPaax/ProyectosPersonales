@@ -10,6 +10,7 @@
  *                 la cotización completa vive en la columna "Datos" (oculta). Solo la columna
  *                 Estado se puede cambiar a mano en el Sheet.
  *   Materiales    catálogo / inventario de materiales (se edita desde la calculadora o a mano en el Sheet).
+ *   Clientes      catálogo de clientes (nombre, RFC, dirección, datos de cuenta).
  *   Config        tarifas compartidas y contador de folios.
  */
 
@@ -19,6 +20,9 @@ const CC_HOJA_MAT = 'Materiales';
 const CC_MAT_ENC = ['Material', 'Marca', 'Presentación', 'Unidad', 'Proveedor', 'Costo presentación', 'Costo por unidad', 'Área', 'ID', 'Actualizado'];
 const CC_MCOL = { ID: 9 };
 const CC_AREAS = ['Ambos', '3D', 'Carpintería'];
+const CC_HOJA_CLI = 'Clientes';
+const CC_CLI_ENC = ['Nombre', 'RFC', 'Dirección', 'Datos de cuenta', 'ID', 'Actualizado'];
+const CC_CCOL = { ID: 5 };
 const CC_ENCABEZADO = ['Folio', 'Fecha', 'Actualizada', 'Cliente', 'Trabajo', 'Tipo', 'Piezas', 'Costo',
   'Total sin IVA', 'Utilidad', 'Margen', 'Estado', 'Creó', 'Modificó', 'ID', 'Rev', 'Datos (no editar)'];
 const CC_COL = { ESTADO: 12, ID: 15, REV: 16, JSON: 17 };
@@ -61,7 +65,7 @@ function abrirCalculadora() {
 }
 
 function prepararHojas() {
-  hojaCot_(); hojaCfg_(); hojaMat_();
+  hojaCot_(); hojaCfg_(); hojaMat_(); hojaCli_();
   SpreadsheetApp.getActive().toast('Hojas listas', 'Calculadora');
 }
 
@@ -72,7 +76,45 @@ function cc_cargar() {
   let cfg = null;
   try { cfg = kv.cfg ? JSON.parse(kv.cfg) : null; } catch (e) { cfg = null; }
   const quotes = leerCotizaciones_().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
-  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0, mats: leerMateriales_() };
+  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0, mats: leerMateriales_(), clientes: leerClientes_() };
+}
+
+/* ---------- catálogo de clientes ---------- */
+
+function cc_clientes() { return leerClientes_(); }
+
+function cc_guardarCliente(c) {
+  validarCli_(c);
+  return conBloqueo_(function () {
+    const sh = hojaCli_();
+    const id = c.id || Date.now() * 1000;
+    const fila = buscarFila_(sh, id, CC_CCOL.ID) || (sh.getLastRow() + 1);
+    escribirCli_(sh, fila, c, id);
+    return cliDeFila_(sh.getRange(fila, 1, 1, CC_CLI_ENC.length).getValues()[0]);
+  });
+}
+
+function cc_eliminarCliente(id) {
+  return conBloqueo_(function () {
+    const sh = hojaCli_(), fila = buscarFila_(sh, id, CC_CCOL.ID);
+    if (fila) sh.deleteRow(fila);
+    return true;
+  });
+}
+
+/** Alta masiva (clientes que estaban solo en un navegador). Conserva sus ID. */
+function cc_importarClientes(lista) {
+  if (!Array.isArray(lista)) throw new Error('Datos no válidos');
+  lista.forEach(validarCli_);
+  return conBloqueo_(function () {
+    const sh = hojaCli_(), out = [];
+    lista.forEach(function (c, i) {
+      const fila = sh.getLastRow() + 1;
+      escribirCli_(sh, fila, c, c.id || Date.now() * 1000 + i);
+      out.push(cliDeFila_(sh.getRange(fila, 1, 1, CC_CLI_ENC.length).getValues()[0]));
+    });
+    return out;
+  });
 }
 
 /* ---------- catálogo de materiales (inventario) ---------- */
@@ -106,7 +148,7 @@ function cc_importarMateriales(lista) {
     const sh = hojaMat_(), out = [];
     lista.forEach(function (m, i) {
       const fila = sh.getLastRow() + 1;
-      escribirMat_(sh, fila, m, Date.now() * 1000 + i);
+      escribirMat_(sh, fila, m, m.id || Date.now() * 1000 + i);
       out.push(matDeFila_(sh.getRange(fila, 1, 1, CC_MAT_ENC.length).getValues()[0]));
     });
     return out;
@@ -219,6 +261,20 @@ function hojaMat_() {
   return sh;
 }
 
+function hojaCli_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(CC_HOJA_CLI);
+  if (sh) return sh;
+  sh = ss.insertSheet(CC_HOJA_CLI);
+  sh.getRange(1, 1, 1, CC_CLI_ENC.length).setValues([CC_CLI_ENC])
+    .setFontWeight('bold').setBackground('#316966').setFontColor('#ffffff');
+  sh.setFrozenRows(1);
+  sh.getRange('E:E').setNumberFormat('0');
+  sh.getRange('F:F').setNumberFormat('@');
+  sh.hideColumns(CC_CCOL.ID, 1);
+  return sh;
+}
+
 function hojaCfg_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(CC_HOJA_CFG);
@@ -279,6 +335,42 @@ function escribirFila_(sh, fila, q) {
     q.folio, q.fecha, q.actualizada || '', q.cliente || '', q.nombre || '', q.tipo || '', n(q.qty), n(q.costo),
     n(q.total), n(q.utilidad), n(q.margen), q.estado || 'Borrador', q.creo || '', q.modifico || '', q.id, n(q.rev), txt
   ]]);
+}
+
+function leerClientes_() {
+  const sh = hojaCli_(), n = sh.getLastRow();
+  if (n < 2) return [];
+  let v = sh.getRange(2, 1, n - 1, CC_CLI_ENC.length).getValues();
+  const falta = function (r) { return String(r[0]).trim() && !r[CC_CCOL.ID - 1]; };
+  if (v.some(falta)) { // filas escritas a mano en el Sheet: les damos ID
+    conBloqueo_(function () {
+      const hoy = hoy_();
+      v = sh.getRange(2, 1, n - 1, CC_CLI_ENC.length).getValues();
+      v.forEach(function (r, i) {
+        if (!falta(r)) return;
+        sh.getRange(i + 2, CC_CCOL.ID).setValue(Date.now() * 1000 + i);
+        sh.getRange(i + 2, 6).setValue(hoy);
+      });
+    });
+    v = sh.getRange(2, 1, n - 1, CC_CLI_ENC.length).getValues();
+  }
+  return v.filter(function (r) { return String(r[0]).trim(); }).map(cliDeFila_);
+}
+
+function cliDeFila_(r) {
+  return { id: r[CC_CCOL.ID - 1], nombre: String(r[0]).trim(), rfc: String(r[1] || '').trim(), direccion: String(r[2] || '').trim(),
+    cuenta: String(r[3] || '').trim(), actualizado: String(r[5] || '') };
+}
+
+function escribirCli_(sh, fila, c, id) {
+  sh.getRange(fila, 1, 1, CC_CLI_ENC.length).setValues([[
+    String(c.nombre).trim(), String(c.rfc || '').trim(), String(c.direccion || '').trim(), String(c.cuenta || '').trim(), id, hoy_()
+  ]]);
+}
+
+function validarCli_(c) {
+  if (!c || typeof c !== 'object') throw new Error('Cliente no válido');
+  if (!String(c.nombre || '').trim() || String(c.nombre).length > 150) throw new Error('Escribe el nombre del cliente.');
 }
 
 function leerMateriales_() {

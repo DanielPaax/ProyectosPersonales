@@ -31,12 +31,26 @@ En **Impresión 3D**, cada fila de filamento se elige del inventario (solo mater
 
 ## Cómo se arma una cotización
 
-1. En **Impresión 3D** o **Carpintería** calcula un producto (tiempo, gramos o materiales, mano de obra, extras) y pulsa **Agregar a la cotización**. Cada producto es una partida con su propio precio; si quieres fijarlo tú, captura el «Precio de venta por pieza» y no se usará el sugerido. Repite con todos los productos que necesites (puedes mezclar 3D y carpintería).
-2. En **Cotización actual** ves la lista con precio unitario e importe de cada producto, y el subtotal, IVA y total. Ahí capturas el cliente y las notas, y puedes **Editar**, **Duplicar** o quitar productos.
-3. **Guardar cotización** la manda a la lista de **Guardadas**, donde puedes volver a abrirla, duplicarla, cambiarle el estado y regenerar sus PDF.
-4. **PDF para el cliente**: productos, cantidades, precios, subtotal, IVA y total. **PDF de desglose interno**: costo, utilidad y margen de cada producto y de toda la cotización.
+Todo se hace en una sola pantalla, la pestaña **Cotización**, en este orden:
 
-El precio de cada producto queda fijo con las tarifas del momento en que lo agregaste. Si cambias tus tarifas y quieres recalcularlo, abre el producto con **Editar** y vuelve a agregarlo.
+1. **Cliente**: elige uno de tu catálogo (se llenan solos nombre, RFC, dirección y datos de cuenta) o captura los datos. El botón de abajo guarda o actualiza ese cliente en el catálogo.
+2. **Productos (partidas)**: cada partida junta el trabajo y su material: nombre del producto, piezas, tiempo (horas y minutos), precio de venta opcional y el filamento (3D) o los materiales (carpintería) elegidos del inventario. Con **+ Añadir partida** agregas más, y cada una se puede duplicar o quitar.
+3. **Mano de obra**: tareas con horas, minutos y tarifa. Se suma **una sola vez** a la cotización.
+4. **Extras**: inserts, caja, flete, instalación… También se suman **una sola vez**.
+
+La mano de obra y los extras no se le suman completos a cada partida: se **reparten en proporción a las horas de trabajo** de cada una. Ejemplo: si un producto lleva 2 h y otro 6 h, el primero absorbe 25% y el segundo 75%. Si ninguna partida tiene horas, se reparten por partes iguales. Los gastos de taller (indirectos), la electricidad, el desgaste de la máquina y la reserva por fallos se siguen calculando por las horas de cada partida.
+
+A la derecha ves el total (con IVA), la lista de productos con su precio, el costo, la utilidad, el desglose de cada producto y cómo se repartió la mano de obra y los extras.
+
+- **Guardar cotización** la manda a **Guardadas**, donde puedes reabrirla, duplicarla, cambiarle el estado y volver a bajar sus PDF.
+- **PDF para el cliente**: datos del cliente, productos, cantidades, precios, subtotal, IVA y total.
+- **Desglose interno**: costo, utilidad y margen de cada producto, el detalle de materiales, y el reparto de mano de obra y extras.
+
+Al reabrir una cotización guardada, todo se recalcula con tus tarifas e inventario de ese momento; si el total cambió, se te avisa.
+
+## Catálogo de clientes
+
+La pestaña **Clientes** permite agregar, modificar y eliminar clientes (nombre, RFC, dirección y datos de cuenta). Con Google Sheets vive en la hoja **Clientes**, y también puedes escribir filas directo en el Sheet. Borrar un cliente del catálogo no cambia las cotizaciones ya guardadas.
 
 ## Instalación con Google Sheets
 
@@ -51,12 +65,13 @@ El precio de cada producto queda fijo con las tarifas del momento en que lo agre
 
 Quien no tenga acceso al Sheet no puede ver ni guardar nada: los costos y márgenes quedan protegidos por los permisos del Sheet.
 
-Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Código.gs`), corre **🧮 Calculadora → Preparar hojas** (crea la hoja `Materiales` si falta) y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
+Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Código.gs`), corre **🧮 Calculadora → Preparar hojas** (crea las hojas `Materiales` y `Clientes` si faltan) y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
 
 ## Qué se guarda y dónde
 
 - **Hoja `Cotizaciones`**: una fila por cotización (folio, fecha, cliente, trabajo, costo, total, utilidad, margen, estado, quién la creó y modificó). Sirve para filtrar y hacer tablas dinámicas. La cotización completa vive en la columna oculta «Datos»: **no la edites ni borres columnas**. El **Estado** sí se puede cambiar a mano en el Sheet.
 - **Hoja `Materiales`**: el inventario (ver arriba).
+- **Hoja `Clientes`**: el catálogo de clientes.
 - **Hoja `Config`**: tarifas (mano de obra, kWh, margen, IVA, datos de la empresa…) y contador de folios. Todo el equipo usa las mismas tarifas.
 - **Folios**: los asigna el servidor (`COT-AAAAMMDD-001`…), así que no se repiten aunque dos personas guarden a la vez.
 - **Ediciones simultáneas**: si dos personas editan la misma cotización, la segunda que guarde recibe un aviso antes de pisar los cambios de la primera.
@@ -65,5 +80,5 @@ Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Có
 
 ## Límites
 
-- Una cotización completa debe pesar menos de ~45,000 caracteres (una celda de Sheets admite 50,000). Cada producto ocupa cerca de 1,000, así que caben unos 40 productos por cotización.
+- Una cotización completa debe pesar menos de ~45,000 caracteres (una celda de Sheets admite 50,000). Cada partida ocupa entre 1,500 y 2,000, así que caben unas 20 partidas por cotización.
 - El PDF de una cotización nueva la guarda primero, para que el folio del documento sea el definitivo.
