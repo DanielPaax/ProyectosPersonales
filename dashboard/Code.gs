@@ -2,9 +2,9 @@ var JG_SELLO = {
   producto: 'dashboard-produccion-gran-formato',
   nombre:   'TABLERO BIG FOOT print',
   intranet: 'Intranet BIG FOOT print',
-  version:  '1.13.0',
-  liberada: '2026-10-26',
-  esquema:  7
+  version:  '1.14.0',
+  liberada: '2026-11-03',
+  esquema:  8
 };
 
 /* ===================== CONFIGURACION ===================== */
@@ -125,15 +125,18 @@ var COL = {
   CELDA_ORIGEN: 16, OBS_MIGRACION: 17,
   TURNO: 18, OPERADOR: 19, REIMPRESION: 20,
   ORDEN: 21, ACABADOS_1: 22, ACABADOS_2: 23, ACABADOS_3: 24,
-  USO_MAQ: 25   /* %_USO_MAQ: formula (esquema 7) */
+  USO_MAQ: 25,  /* %_USO_MAQ: formula (esquema 7) */
+  /* Esquema 8: costos y factura por renglon de produccion. Son los MISMOS datos que VENTAS (por ID), no se suman a ellos. */
+  MANO_OBRA: 26, HORAS_EXTRAS: 27, OTROS_COSTOS: 28, INSTALACION: 29, FACTURA: 30
 };
-var COL_N = 25;
+var COL_N = 30;
 
 var ENCABEZADOS_BASE = [
   'ID', 'FECHA', 'SEM_INICIO', 'SEMANA', 'MAQUINA', 'PROCESO', 'MATERIAL',
   'UNIDAD', 'CANTIDAD', 'ORIGEN', 'CLIENTE_OT', 'HORAS_MAQ', 'MERMA_MT2',
   'MOTIVO_PARO', 'NOTA', 'CELDA_ORIGEN', 'OBS_MIGRACION',
-  'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN', 'ACABADOS_1', 'ACABADOS_2', 'ACABADOS_3', '%_USO_MAQ'
+  'TURNO', 'OPERADOR', 'REIMPRESION', 'ORDEN', 'ACABADOS_1', 'ACABADOS_2', 'ACABADOS_3', '%_USO_MAQ',
+  'MANO DE OBRA', 'HORAS EXTRAS', 'OTROS COSTOS', 'INSTALACIÓN', 'FACTURA'
 ];
 var ENCABEZADOS_BITACORA = ['TIMESTAMP', 'CORREO', 'ACCION', 'DETALLE'];
 
@@ -562,21 +565,25 @@ function _leerBase_() {
   for (var i = 0; i < vals.length; i++) {
     var r = vals[i];
     if (!r[COL.SEMANA - 1] && !r[COL.MAQUINA - 1] && !r[COL.CANTIDAD - 1]) { continue; }
+    var maq = String(r[COL.MAQUINA - 1] || '').trim(), cant = _num_(r[COL.CANTIDAD - 1]);
+    var procRaw = String(r[COL.PROCESO - 1] || ''), uniRaw = String(r[COL.UNIDAD - 1] || ''), oriRaw = String(r[COL.ORIGEN - 1] || '');
+    var proc = _normProceso_(procRaw, maq), uni = _normUnidad_(uniRaw, proc, cant), ori = _normOrigen_(oriRaw, maq);
     out.push({
       fila:     i + 2,
       id:       _num_(r[COL.ID - 1]),
       fecha:    _fecha_(r[COL.FECHA - 1]),
       semIni:   _fecha_(r[COL.SEM_INICIO - 1]),
       semana:   String(r[COL.SEMANA - 1] || ''),
-      maquina:  String(r[COL.MAQUINA - 1] || ''),
-      proceso:  String(r[COL.PROCESO - 1] || ''),
+      maquina:  maq,
+      proceso:  proc,
       material: String(r[COL.MATERIAL - 1] || ''),
-      unidad:   String(r[COL.UNIDAD - 1] || ''),
-      cant:     _num_(r[COL.CANTIDAD - 1]),
-      origen:   String(r[COL.ORIGEN - 1] || ''),
+      unidad:   uni,
+      cant:     cant,
+      origen:   ori,
       cliente:  String(r[COL.CLIENTE_OT - 1] || ''),
       horas:    _num_(r[COL.HORAS_MAQ - 1]),
-      merma:    _num_(r[COL.MERMA_MT2 - 1]),
+      /* una merma negativa no existe (la hoja la trae asi en renglones de reserva de almacen o por redondeo): cuenta como 0 */
+      merma:    Math.max(0, _num_(r[COL.MERMA_MT2 - 1])),
       paro:     String(r[COL.MOTIVO_PARO - 1] || ''),
       nota:     String(r[COL.NOTA - 1] || ''),
       obs:      String(r[COL.OBS_MIGRACION - 1] || ''),
@@ -586,12 +593,86 @@ function _leerBase_() {
       orden:    String(r[COL.ORDEN - 1] || '').trim(),
       ac1:      String(r[COL.ACABADOS_1 - 1] || '').trim(),
       ac2:      String(r[COL.ACABADOS_2 - 1] || '').trim(),
-      ac3:      String(r[COL.ACABADOS_3 - 1] || '').trim()
+      ac3:      String(r[COL.ACABADOS_3 - 1] || '').trim(),
+      /* lo que la hoja trae tal cual (para el diagnostico de la calidad del dato) */
+      procRaw:  procRaw, uniRaw: uniRaw, oriRaw: oriRaw, mermaRaw: _num_(r[COL.MERMA_MT2 - 1]),
+      /* costos y factura por renglon (esquema 8); en pesos */
+      cMO:      _num_(r[COL.MANO_OBRA - 1]),
+      cHE:      _num_(r[COL.HORAS_EXTRAS - 1]),
+      cOtros:   _num_(r[COL.OTROS_COSTOS - 1]),
+      cInst:    _num_(r[COL.INSTALACION - 1]),
+      factura:  String(r[COL.FACTURA - 1] || '').trim()
     });
   }
+  /* Renglones sin fecha: si VENTAS tiene el mismo ID y el mismo cliente/proyecto, se toma su fecha de produccion. */
+  var faltaFecha = false;
+  for (var q = 0; q < out.length; q++) { if (!out[q].fecha) { faltaFecha = true; break; } }
+  if (faltaFecha) { try { _fechasDesdeVentas_(out); } catch (e) { /* VENTAS aun no migrada: queda sin fecha */ } }
   /* cache.put tiene tope de 100 KB por entrada: si no cabe, se relee. */
   try { cache.put(clave, JSON.stringify(out), CFG.CACHE_SEG); } catch (e) {}
   return out;
+}
+
+function _mismoTexto_(a, b) { return _sinAc_(a) !== '' && _sinAc_(a) === _sinAc_(b); }
+
+/* La fecha de produccion de VENTAS (mismo ID y mismo cliente o proyecto) completa a los renglones de BASE que no la traen.
+   Con la fecha se calculan SEM_INICIO y SEMANA como en el resto de la hoja. */
+function _fechasDesdeVentas_(filas) {
+  var ventas = _leerVentas_(), porId = {};
+  for (var v = 0; v < ventas.length; v++) { porId[ventas[v].id] = ventas[v]; }
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    if (f.fecha) { continue; }
+    var vt = porId[f.id];
+    if (!vt || !(_mismoTexto_(f.cliente, vt.cliente) || _mismoTexto_(f.cliente, vt.proyecto))) { continue; }
+    var d = vt.fprod || vt.fecha;
+    if (!d) { continue; }
+    f.fecha = d; f.semIni = _semanaDe_(d); f.semana = _etiquetaSemana_(f.semIni, filas); f.fechaDeVentas = true;
+  }
+}
+
+/* ===================== NORMALIZACION DE BASE (al leer; no se toca la hoja) =====================
+   La hoja mezcla escrituras distintas de lo mismo ("Impresión", "PZ", renglones sin UNIDAD ni ORIGEN). El tablero
+   las lee con UNA sola convencion, asi MT2 PROPIOS y lo demas cuadra con lo que se ve en el Sheet. */
+function _sinAc_(t) {
+  return String(t === null || t === undefined ? '' : t).trim().toUpperCase()
+    .replace(/[ÁÀÂÄ]/g, 'A').replace(/[ÉÈÊË]/g, 'E').replace(/[ÍÌÎÏ]/g, 'I').replace(/[ÓÒÔÖ]/g, 'O').replace(/[ÚÙÛÜ]/g, 'U').replace(/Ñ/g, 'N');
+}
+
+/* PROCESO: sin acentos ni mayusculas. Un "Impresión" generico se clasifica por la MAQUINA (GF_, HD_, UV_);
+   el plotter es corte; "NO APLICA" o una maquina de maquila no es produccion propia de impresion. */
+function _normProceso_(proceso, maquina) {
+  var p = _sinAc_(proceso), m = _sinAc_(maquina);
+  if (!p) { return /^PLOTTER/.test(m) ? 'CORTE DE VINIL' : ''; }
+  if (/^SERIGRAF/.test(p)) { return 'SERIGRAFIA'; }
+  if (p.indexOf('IMPRESION') === 0) {
+    if (PROCESOS_IMPRESION.indexOf(p) >= 0) { return p; }
+    if (/^PLOTTER/.test(m)) { return 'CORTE DE VINIL'; }
+    if (/^SERIGRAF/.test(m)) { return 'SERIGRAFIA'; }
+    if (/^HD/.test(m)) { return 'IMPRESION HD'; }
+    if (/^UV/.test(m)) { return 'IMPRESION UV'; }
+    if (/^GF/.test(m)) { return 'IMPRESION GRAN FORMATO'; }
+    return 'IMPRESION';   /* sin maquina de impresion: no cuenta como MT2 propios */
+  }
+  return p;
+}
+
+/* UNIDAD: M2/MT2 -> MT2; PZ/PIEZAS -> PIEZA; LAMINAS -> LAMINA. En blanco: serigrafia es en piezas; lo demas, MT2.
+   Serigrafia capturada en MT2 son piezas (vasos, contenedores): se pasa a PIEZA para no inflar los m2. */
+function _normUnidad_(unidad, proceso, cant) {
+  var u = _sinAc_(unidad);
+  if (!u) { return cant > 0 ? (proceso === 'SERIGRAFIA' ? 'PIEZA' : 'MT2') : ''; }
+  if (/^(M2|MT2|M²|MTS2|METROS?\s*CUADRADOS?)$/.test(u)) { return proceso === 'SERIGRAFIA' ? 'PIEZA' : 'MT2'; }
+  if (/^(PZ|PZS|PZA|PZAS|PIEZA|PIEZAS)$/.test(u)) { return 'PIEZA'; }
+  if (/^(LAMINA|LAMINAS|HOJA|HOJAS)$/.test(u)) { return 'LAMINA'; }
+  return u;
+}
+
+/* ORIGEN: en blanco es PROPIO, salvo la maquina de maquila. */
+function _normOrigen_(origen, maquina) {
+  var o = _sinAc_(origen);
+  if (o) { return o; }
+  return /^MAQUILA/.test(_sinAc_(maquina)) ? 'MAQUILA' : 'PROPIO';
 }
 
 /* Nombre de catalogo en su forma canonica: sin acentos, en mayusculas y con
@@ -696,8 +777,9 @@ function _migraMaterialesATarifas_(tar) {
    al navegador para que sume es lo que hace lentas estas apps. */
 
 function _esImpresion_(proceso) {
+  var p = _sinAc_(proceso);
   for (var i = 0; i < PROCESOS_IMPRESION.length; i++) {
-    if (PROCESOS_IMPRESION[i] === proceso) { return true; }
+    if (PROCESOS_IMPRESION[i] === p) { return true; }
   }
   return false;
 }
@@ -776,7 +858,7 @@ function _matrizPor_(filas, campo, semanas, clavePeriodo) {
 function _alertas_(filas) {
   var a = {
     sinFecha: 0, sinMaquina: 0, sinMaterial: 0, sinHoras: 0,
-    obs: 0, cantCero: 0, sinUnidad: 0
+    obs: 0, cantCero: 0, sinUnidad: 0, sinOrigen: 0, mermaNeg: 0, serMt2: 0, fechaVentas: 0
   };
   var ejemplos = [];
   for (var i = 0; i < filas.length; i++) {
@@ -787,7 +869,11 @@ function _alertas_(filas) {
       a.sinMaquina++; motivos.push('sin maquina');
     }
     if (f.material === '(NO REPORTADO)')          { a.sinMaterial++; motivos.push('sin material'); }
-    if (!f.unidad)                                { a.sinUnidad++;   motivos.push('sin unidad'); }
+    if (!f.uniRaw && f.cant > 0)                  { a.sinUnidad++;   motivos.push('sin unidad (se asume ' + f.unidad + ')'); }
+    if (!f.oriRaw && f.cant > 0)                  { a.sinOrigen++; }
+    if (f.mermaRaw < 0)                           { a.mermaNeg++;    motivos.push('merma negativa (cuenta 0)'); }
+    if (f.proceso === 'SERIGRAFIA' && /^(MT2|M2)$/i.test(String(f.uniRaw).trim())) { a.serMt2++; motivos.push('serigrafia en MT2 (se cuenta en piezas)'); }
+    if (f.fechaDeVentas)                          { a.fechaVentas++; motivos.push('fecha tomada de VENTAS'); }
     if (f.unidad === 'MT2' && f.horas === 0)      { a.sinHoras++; }
     if (f.cant === 0)                             { a.cantCero++; }
     if (f.obs) { a.obs++; motivos.push('observacion de migracion'); }
@@ -1144,7 +1230,40 @@ function _agregaTablero_(filas) {
   };
 }
 
-/* ===================== COSTOS DE PRODUCCION ===================== */
+/* ===================== COSTOS OPERATIVOS DE BASE (por renglon de produccion) ===================== */
+/* Las columnas MANO DE OBRA, HORAS EXTRAS, OTROS COSTOS e INSTALACIÓN de BASE son los MISMOS importes que VENTAS (renglon con
+   renglon, por ID): aqui se ven por MAQUINA para saber donde se gasta, y NO se suman a los costos que salen de VENTAS (seria
+   contarlos dos veces). FACTURA es el folio que tiene ese renglon. Dinero en centavos enteros. */
+function _costosOp_(filas) {
+  var t = { mo: 0, he: 0, otros: 0, inst: 0, m2: 0, conFactura: 0, m2Factura: 0 }, por = {};
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    var mo = _cc_(f.cMO), he = _cc_(f.cHE), ot = _cc_(f.cOtros), ins = _cc_(f.cInst);
+    var propio = (f.unidad === 'MT2' && _esImpresion_(f.proceso) && f.origen !== 'MAQUILA') ? _cc_(f.cant) : 0;
+    var n = f.maquina || '(SIN MAQUINA)';
+    var a = por[n] || (por[n] = { maquina: n, mo: 0, he: 0, otros: 0, inst: 0, m2: 0, facturas: 0 });
+    a.mo += mo; a.he += he; a.otros += ot; a.inst += ins; a.m2 += propio;
+    t.mo += mo; t.he += he; t.otros += ot; t.inst += ins; t.m2 += propio;
+    if (f.factura) { a.facturas++; t.conFactura++; t.m2Factura += propio; }
+  }
+  var lista = [];
+  for (var k in por) {
+    if (!por.hasOwnProperty(k)) { continue; }
+    var x = por[k], tot = x.mo + x.he + x.otros + x.inst;
+    lista.push({ maquina: x.maquina, mo: _dc_(x.mo), he: _dc_(x.he), otros: _dc_(x.otros), inst: _dc_(x.inst), total: _dc_(tot),
+                 m2: _dc_(x.m2), costoM2: x.m2 > 0 ? _r2_(tot / x.m2) : null, facturas: x.facturas });
+  }
+  lista.sort(function (p, q) { return q.total - p.total; });
+  var total = t.mo + t.he + t.otros + t.inst;
+  return {
+    total: { mo: _dc_(t.mo), he: _dc_(t.he), otros: _dc_(t.otros), inst: _dc_(t.inst), total: _dc_(total), m2: _dc_(t.m2),
+             costoM2: t.m2 > 0 ? _r2_(total / t.m2) : null, conFactura: t.conFactura, renglones: filas.length,
+             pctM2Factura: t.m2 > 0 ? _r2_(t.m2Factura / t.m2 * 100) : null },
+    porMaquina: lista
+  };
+}
+
+/* ===================== COSTOS DE PRODUCCION =====================
 /* Los costos viven en VENTAS (por proyecto). En PRODUCCION se reparten por
    FECHA DE PRODUCCION; si esa fecha falta o esta a mas de 90 dias de la de
    venta (error de captura), se usa la de venta. Aplican TODOS los filtros
@@ -1353,6 +1472,7 @@ function cargarTablero(filtros, sub, clave) {
     acabados: res.acabados,
     alertas: res.alertas,
     costos: ses.venta ? _costosProd_(q, base) : null,
+    costosOp: ses.venta ? _costosOp_(filas) : null,
     ms: new Date().getTime() - t0
   };
 }
@@ -1362,6 +1482,12 @@ function cargarCatalogos(clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
   return _leerCatalogos_();
+}
+
+function _sinCostosFila_(f) {
+  var o = {};
+  for (var k in f) { if (f.hasOwnProperty(k) && k !== 'cMO' && k !== 'cHE' && k !== 'cOtros' && k !== 'cInst' && k !== 'factura') { o[k] = f[k]; } }
+  return o;
 }
 
 function detalleSemana(semana, filtros, sub, clave) {
@@ -1376,7 +1502,11 @@ function detalleSemana(semana, filtros, sub, clave) {
   if (subs.length) { filas = _aplicaSub_(filas, subs); }
   var out = [], caps = _leerCapacidades_(), turno = _horasTurno_();
   for (var i = 0; i < filas.length; i++) {
-    if (filas[i].semana === s) { filas[i].uso = _usoFila_(filas[i], caps, turno); out.push(filas[i]); }
+    if (filas[i].semana === s) {
+      filas[i].uso = _usoFila_(filas[i], caps, turno);
+      if (!ses.venta) { filas[i] = _sinCostosFila_(filas[i]); }   /* costos y factura solo para quien ve venta */
+      out.push(filas[i]);
+    }
   }
   out.sort(function (a, b) {
     if (a.maquina !== b.maquina) { return a.maquina < b.maquina ? -1 : 1; }
@@ -2621,6 +2751,8 @@ function onOpen() {
       .addSeparator()
       .addItem('Instalar / verificar hojas', 'instalar')
       .addItem('Vincular produccion con ventas (ORDEN)', 'vincularOrdenes')
+      .addItem('Reparar BASE desde VENTAS (fechas, costos, factura)', 'repararBase')
+      .addItem('Diagnóstico de BASE (hoja BASE_REVISION)', 'diagnosticoBase')
       .addSeparator()
       .addItem('Corregir VINIL ED271 (M2 8250 a 8.25)', 'corregirViniEd271')
       .addItem('Refrescar catalogos', 'refrescarCatalogos')
@@ -2644,6 +2776,130 @@ function onOpen() {
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
+}
+
+/* ===================== REPARAR / DIAGNOSTICAR BASE ===================== */
+/* BASE y VENTAS nacen del mismo trabajo: el renglon de BASE con un ID es el de VENTAS con ese mismo ID (y mismo cliente o
+   proyecto). De VENTAS se completan en BASE lo que falte: FECHA, SEM_INICIO y SEMANA, los costos (MANO DE OBRA, HORAS EXTRAS,
+   OTROS COSTOS, INSTALACIÓN) y FACTURA, y se ponen UNIDAD y ORIGEN en blanco como los lee el tablero (MT2 o pieza, PROPIO).
+   VENTAS manda en el dinero. Primero muestra lo que va a cambiar y pide confirmar. */
+function _reparaBase_(aplicar) {
+  var base = _hoja_(CFG.HOJA_BASE), ven = _hoja_(CFG.HOJA_VENTAS);
+  var ub = base.getLastRow(), uv = ven.getLastRow();
+  var res = { filas: 0, sinMatch: 0, fecha: 0, mo: 0, he: 0, otros: 0, inst: 0, factura: 0, unidad: 0, origen: 0 };
+  if (ub < 2 || uv < 2) { return res; }
+  _aseguraColumnas_(base, COL_N);
+  var nc = COL_N;
+  var B = base.getRange(2, 1, ub - 1, nc).getValues();
+  var V = ven.getRange(2, 1, uv - 1, CV_N).getValues();
+  var porId = {};
+  for (var v = 0; v < V.length; v++) { porId[_num_(V[v][CV.ID - 1])] = V[v]; }
+  var existentes = [];
+  for (var e = 0; e < B.length; e++) { existentes.push({ semIni: _fecha_(B[e][COL.SEM_INICIO - 1]), semana: String(B[e][COL.SEMANA - 1] || '') }); }
+  var num = function (x) { return _num_(x); };
+  for (var i = 0; i < B.length; i++) {
+    var r = B[i];
+    if (!r[COL.SEMANA - 1] && !r[COL.MAQUINA - 1] && !r[COL.CANTIDAD - 1]) { continue; }
+    res.filas++;
+    var cant = num(r[COL.CANTIDAD - 1]);
+    var maq = String(r[COL.MAQUINA - 1] || ''), proc = _normProceso_(String(r[COL.PROCESO - 1] || ''), maq);
+    if (!String(r[COL.UNIDAD - 1] || '').trim() && cant > 0) { r[COL.UNIDAD - 1] = (proc === 'SERIGRAFIA') ? 'PZ' : 'MT2'; res.unidad++; }
+    if (!String(r[COL.ORIGEN - 1] || '').trim() && cant > 0) { r[COL.ORIGEN - 1] = _normOrigen_('', maq); res.origen++; }
+    var vt = porId[_num_(r[COL.ID - 1])];
+    if (!vt || !(_mismoTexto_(r[COL.CLIENTE_OT - 1], vt[CV.CLIENTE - 1]) || _mismoTexto_(r[COL.CLIENTE_OT - 1], vt[CV.PROYECTO - 1]))) { res.sinMatch++; continue; }
+    if (!r[COL.FECHA - 1]) {
+      var d = vt[CV.FECHA_PROD - 1] || vt[CV.FECHA_VENTA - 1];
+      var iso = d ? _fecha_(d) : '';
+      if (iso) {
+        var lun = _semanaDe_(iso), etiq = _etiquetaSemana_(lun, existentes);
+        r[COL.FECHA - 1] = _aDate_(iso); r[COL.SEM_INICIO - 1] = _aDate_(lun); r[COL.SEMANA - 1] = etiq;
+        existentes[i] = { semIni: lun, semana: etiq };
+        res.fecha++;
+      }
+    }
+    var pares = [[COL.MANO_OBRA, CV.MANO_OBRA, 'mo'], [COL.HORAS_EXTRAS, CV.HORAS_EXTRAS, 'he'], [COL.OTROS_COSTOS, CV.OTROS, 'otros'], [COL.INSTALACION, CV.INSTALACION, 'inst']];
+    for (var p = 0; p < pares.length; p++) {
+      var nuevo = num(vt[pares[p][1] - 1]), act = r[pares[p][0] - 1];
+      if (act === '' || act === null || Math.abs(num(act) - nuevo) > 0.005 || typeof act !== 'number') { r[pares[p][0] - 1] = nuevo; res[pares[p][2]]++; }
+    }
+    var fv = String(vt[CV.FACTURA - 1] || '').trim(), fb = String(r[COL.FACTURA - 1] || '').trim();
+    if (fv !== fb) { r[COL.FACTURA - 1] = fv; res.factura++; }
+  }
+  if (aplicar) {
+    var col = function (c0, n) { var o = []; for (var k = 0; k < B.length; k++) { o.push(B[k].slice(c0 - 1, c0 - 1 + n)); } return o; };
+    base.getRange(2, COL.FECHA, B.length, 3).setValues(col(COL.FECHA, 3));
+    base.getRange(2, COL.FECHA, B.length, 2).setNumberFormat('dd/mm/yyyy');
+    base.getRange(2, COL.UNIDAD, B.length, 1).setValues(col(COL.UNIDAD, 1));
+    base.getRange(2, COL.ORIGEN, B.length, 1).setValues(col(COL.ORIGEN, 1));
+    base.getRange(2, COL.MANO_OBRA, B.length, 5).setValues(col(COL.MANO_OBRA, 5));
+    _limpiaCacheBase_();
+  }
+  return res;
+}
+
+function repararBase() {
+  var ui = SpreadsheetApp.getUi();
+  var plan = _reparaBase_(false);
+  var cambios = plan.fecha + plan.mo + plan.he + plan.otros + plan.inst + plan.factura + plan.unidad + plan.origen;
+  var txt = 'Renglones de BASE revisados: ' + plan.filas + '\n' +
+    '- sin FECHA (se toma de VENTAS): ' + plan.fecha + '\n' +
+    '- MANO DE OBRA a completar o corregir: ' + plan.mo + '\n- HORAS EXTRAS: ' + plan.he + '\n- OTROS COSTOS: ' + plan.otros + '\n- INSTALACIÓN: ' + plan.inst + '\n' +
+    '- FACTURA distinta a la de VENTAS: ' + plan.factura + '\n' +
+    '- sin UNIDAD (MT2, o PZ en serigrafia): ' + plan.unidad + '\n- sin ORIGEN (PROPIO): ' + plan.origen + '\n' +
+    '- sin renglon equivalente en VENTAS (no se tocan): ' + plan.sinMatch + '\n\n' +
+    (cambios ? '¿Aplicar estos cambios en BASE? VENTAS no se modifica.' : 'No hay nada que completar.');
+  if (!cambios) { ui.alert('Reparar BASE', txt, ui.ButtonSet.OK); return plan; }
+  if (ui.alert('Reparar BASE', txt, ui.ButtonSet.YES_NO) !== ui.Button.YES) { return plan; }
+  var res = _reparaBase_(true);
+  _bitacora_(_correoSeguro_(), 'REPARAR_BASE', JSON.stringify(res));
+  diagnosticoBase();
+  ui.alert('Reparar BASE', 'Listo. En la hoja BASE_REVISION quedan los renglones que siguen pendientes.', ui.ButtonSet.OK);
+  return res;
+}
+
+/* Hoja BASE_REVISION: lo que sigue mal en BASE y el tablero no puede arreglar solo. */
+function diagnosticoBase() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var filas = _leerBase_(), out = [['ID', 'FILA', 'PROBLEMA', 'DETALLE']];
+  var anio = new Date().getFullYear(), conteo = { sinUnidad: 0, sinOrigen: 0 }, ids = {};
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    if (ids[f.id]) { out.push([f.id, f.fila, 'ID repetido', 'Tambien en la fila ' + ids[f.id]]); } else { ids[f.id] = f.fila; }
+    if (!f.fecha) { out.push([f.id, f.fila, 'SIN FECHA', f.cliente + ' | ' + f.maquina + ' | ' + f.cant + ' ' + f.unidad + ' (no entra a las graficas por semana)']); }
+    else {
+      var a = Number(f.fecha.slice(0, 4));
+      if (a > anio + 1 || a < 2024) { out.push([f.id, f.fila, 'FECHA improbable', f.fecha + ' | ' + f.cliente + ' (revisa el año)']); }
+    }
+    if (f.proceso === 'SERIGRAFIA' && /^(MT2|M2)$/i.test(String(f.uniRaw).trim())) { out.push([f.id, f.fila, 'Serigrafia en MT2', f.cant + ' ' + f.uniRaw + ' | ' + f.material + ' (el tablero lo cuenta en piezas)']); }
+    if (f.mermaRaw < 0) { out.push([f.id, f.fila, 'Merma negativa', f.mermaRaw + ' (el tablero la cuenta como 0)']); }
+    if (!f.uniRaw && f.cant > 0) { conteo.sinUnidad++; }
+    if (!f.oriRaw && f.cant > 0) { conteo.sinOrigen++; }
+  }
+  if (conteo.sinUnidad) { out.push(['', '', 'Sin UNIDAD', conteo.sinUnidad + ' renglones: el tablero asume MT2 (PZ en serigrafia). "Reparar BASE desde VENTAS" los completa.']); }
+  if (conteo.sinOrigen) { out.push(['', '', 'Sin ORIGEN', conteo.sinOrigen + ' renglones: el tablero asume PROPIO.']); }
+  /* costos y factura de BASE contra VENTAS */
+  try {
+    var ventas = _leerVentas_(), porId = {}, dif = 0;
+    for (var v = 0; v < ventas.length; v++) { porId[ventas[v].id] = ventas[v]; }
+    for (var j = 0; j < filas.length; j++) {
+      var g = filas[j], vt = porId[g.id];
+      if (!vt || !(_mismoTexto_(g.cliente, vt.cliente) || _mismoTexto_(g.cliente, vt.proyecto))) { continue; }
+      var difs = [];
+      if (Math.abs(g.cMO - vt.mo) > 0.01) { difs.push('mano de obra ' + g.cMO + ' vs ' + vt.mo); }
+      if (Math.abs(g.cHE - vt.hext) > 0.01) { difs.push('horas extras ' + g.cHE + ' vs ' + vt.hext); }
+      if (Math.abs(g.cOtros - vt.otros) > 0.01) { difs.push('otros ' + g.cOtros + ' vs ' + vt.otros); }
+      if (Math.abs(g.cInst - vt.inst) > 0.01) { difs.push('instalacion ' + g.cInst + ' vs ' + vt.inst); }
+      if (String(g.factura || '') !== String(vt.factura || '')) { difs.push('factura "' + g.factura + '" vs "' + vt.factura + '"'); }
+      if (difs.length) { dif++; if (dif <= 300) { out.push([g.id, g.fila, 'BASE distinta a VENTAS', difs.join(' | ')]); } }
+    }
+    if (dif > 300) { out.push(['', '', 'BASE distinta a VENTAS', 'Hay ' + dif + ' renglones distintos (se listan 300). Corre "Reparar BASE desde VENTAS".']); }
+  } catch (e) { out.push(['', '', 'VENTAS', 'No se pudo comparar con VENTAS: ' + e.message]); }
+  if (out.length === 1) { out.push(['', '', 'Sin pendientes', 'BASE esta completa.']); }
+  var h = ss.getSheetByName('BASE_REVISION') || ss.insertSheet('BASE_REVISION');
+  h.getRange(1, 1, Math.max(h.getLastRow(), 1), 4).clearContent();
+  h.getRange(1, 1, out.length, 4).setValues(out);
+  try { h.setFrozenRows(1); h.getRange(1, 1, 1, 4).setFontWeight('bold'); } catch (e2) { /* cosmetico */ }
+  return out.length - 1;
 }
 
 /* ===================== ODP FALTANTES ===================== */
@@ -3310,6 +3566,19 @@ function migrarEsquema(base, ven) {
     }
     props.setProperty('esquema', '7');
     actual = 7;
+  }
+  if (actual < 8) {
+    /* v7 -> v8: costos y factura por renglon de produccion (columnas 26 a 30). Solo se escriben los
+       encabezados vacios; los datos los completa el menu "Reparar BASE desde VENTAS". */
+    if (base && base.getLastRow() >= 1 && base.getMaxColumns() >= COL.FACTURA) {
+      var nombres8 = ['MANO DE OBRA', 'HORAS EXTRAS', 'OTROS COSTOS', 'INSTALACIÓN', 'FACTURA'];
+      for (var k8 = 0; k8 < nombres8.length; k8++) {
+        var c8 = base.getRange(1, COL.MANO_OBRA + k8);
+        if (!c8.getValue()) { c8.setValue(nombres8[k8]); }
+      }
+    }
+    props.setProperty('esquema', '8');
+    actual = 8;
   }
   /* Peldanos futuros van aqui, siempre con if (actual < n), nunca de un salto:
      una instalacion puede estar dos o tres versiones atras. */

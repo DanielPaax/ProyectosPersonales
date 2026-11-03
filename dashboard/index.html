@@ -600,6 +600,17 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
     <div class="tscroll solo-dash"><table id="tCos"></table></div>
   </section>
 
+  <section class="card" id="cOper" style="display:none">
+    <header><h2>Costos operativos por máquina</h2>
+      <span class="sub">Mano de obra, horas extras, otros costos e instalación de cada renglón de BASE, por máquina. Son los mismos importes que VENTAS (renglón por renglón, por ID): <b>no se suman</b> a los costos de arriba. Respetan los filtros generales y los sub-filtros de tarjeta.</span>
+    </header>
+    <div class="cuerpo">
+      <div class="kpis s" id="kpisO"></div>
+      <div class="gc alto"><canvas id="cvOper"></canvas></div>
+    </div>
+    <div class="tscroll"><table id="tOper"></table></div>
+  </section>
+
   <div class="ggrid g3 solo-dash" id="gridCostos">
     <section class="card span2"><header><h2>Costo de producción y merma por semana</h2></header><div class="gc"><canvas id="cvCosSem"></canvas></div></section>
     <section class="card"><header><h2>Costo por cliente (top 10)</h2></header><div class="gc"><canvas id="cvCosCli"></canvas></div></section>
@@ -1655,6 +1666,54 @@ function pintaCostos(){
   document.getElementById('tCos').innerHTML = h;
 }
 
+/* ---------- costos operativos de BASE por maquina ---------- */
+var OPCOLS = [['mo', 'Mano de obra', VERDE], ['he', 'Horas extras', NARANJA], ['otros', 'Otros costos', GRIS], ['inst', 'Instalación', MORADO]];
+function pintaCostosOp(){
+  var card = document.getElementById('cOper');
+  if (!D || !D.costosOp) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  var O = D.costosOp, t = O.total, i, c, h;
+  var M = O.porMaquina.filter(function(m){ return m.total > 0; });
+  var kc = [
+    ['Mano de obra', peso(t.mo), t.total ? n1(t.mo / t.total * 100) + '% del total' : '', ''],
+    ['Horas extras', peso(t.he), t.total ? n1(t.he / t.total * 100) + '% del total' : '', ''],
+    ['Otros costos', peso(t.otros), t.total ? n1(t.otros / t.total * 100) + '% del total' : '', ''],
+    ['Instalación', peso(t.inst), t.total ? n1(t.inst / t.total * 100) + '% del total' : '', ''],
+    ['Total operativo', peso(t.total), n0(t.renglones) + ' renglones de BASE', 'mq'],
+    ['Costo por MT2 propio', t.costoM2 === null ? '—' : peso(t.costoM2), 'total ÷ ' + n2(t.m2) + ' MT2 propios', ''],
+    ['Renglones con factura', n0(t.conFactura), t.pctM2Factura === null ? '' : n1(t.pctM2Factura) + '% de los MT2 propios', '']
+  ];
+  h = '';
+  for (i = 0; i < kc.length; i++) {
+    h += '<div class="kpi ' + kc[i][3] + '"><div class="et">' + kc[i][0] + '</div><div class="vl">' + kc[i][1] + '</div><div class="un">' + kc[i][2] + '</div></div>';
+  }
+  document.getElementById('kpisO').innerHTML = h;
+  var top = M.slice(0, 12);
+  graf('cvOper', { type: 'bar',
+    data: { labels: top.map(function(m){ return m.maquina; }),
+      datasets: OPCOLS.map(function(cc){ return { label: cc[1], data: top.map(function(m){ return m[cc[0]]; }), backgroundColor: cc[2], stack: 'o', borderRadius: 2 }; }) },
+    options: { layout: { padding: { top: 4 } },
+      plugins: { legend: { position: 'top' },
+        tooltip: { callbacks: { label: function(cx){ return ' ' + cx.dataset.label + ': ' + peso(cx.parsed.y); },
+          footer: function(cx){ var m = top[cx[0].dataIndex]; return 'Total: ' + peso(m.total) + (m.costoM2 === null ? '' : ' · ' + peso(m.costoM2) + ' por MT2 propio'); } } } },
+      scales: { x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, grace: '10%', grid: { color: '#E5E9EC' }, ticks: { callback: function(v){ return corto(v); } } } } } });
+  if (!M.length) { document.getElementById('tOper').innerHTML = '<tbody><tr><td class="vacio">Sin costos operativos en el periodo.</td></tr></tbody>'; return; }
+  h = '<thead><tr><th>Máquina</th><th>MT2 propios</th>';
+  for (c = 0; c < OPCOLS.length; c++) { h += '<th>' + OPCOLS[c][1] + '</th>'; }
+  h += '<th>Total</th><th>Costo / MT2</th><th>Con factura</th></tr></thead><tbody>';
+  for (i = 0; i < M.length; i++) {
+    var r = M[i];
+    h += '<tr><td>' + esc(r.maquina) + '</td>' + celda(r.m2);
+    for (c = 0; c < OPCOLS.length; c++) { h += cp2(r[OPCOLS[c][0]]); }
+    h += '<td class="num"><b>' + peso(r.total) + '</b></td>' + (r.costoM2 === null ? '<td class="num cero">—</td>' : cp2(r.costoM2)) + celda(r.facturas, 0) + '</tr>';
+  }
+  h += '<tr class="tot"><td>TOTAL</td>' + celda(t.m2);
+  for (c = 0; c < OPCOLS.length; c++) { h += cp2(t[OPCOLS[c][0]]); }
+  h += '<td class="num">' + peso(t.total) + '</td>' + (t.costoM2 === null ? '<td></td>' : cp2(t.costoM2)) + celda(t.conFactura, 0) + '</tr></tbody>';
+  document.getElementById('tOper').innerHTML = h;
+}
+
 /* ---------- % de uso de maquina ---------- */
 function usoExplica(U){
   var t = U ? U.horasTurno : 11;
@@ -1866,6 +1925,7 @@ function pintar(){
 
   pintaMatrices();
   pintaUso();
+  pintaCostosOp();
 
   /* calidad del dato */
   var cel = [
@@ -1874,7 +1934,12 @@ function pintar(){
     [a.sinMaquina, 'sin maquina asignada', a.sinMaquina ? 'mal' : 'bien'],
     [a.sinMaterial, 'sin material', a.sinMaterial ? 'mal' : 'bien'],
     [a.sinHoras, 'MT2 sin horas maquina', a.sinHoras ? 'mal' : 'bien'],
-    [a.obs, 'con supuesto de migracion', a.obs ? 'mal' : 'bien']
+    [a.obs, 'con supuesto de migracion', a.obs ? 'mal' : 'bien'],
+    [a.sinUnidad, 'sin UNIDAD (se asume MT2 o pieza)', a.sinUnidad ? 'mal' : 'bien'],
+    [a.sinOrigen, 'sin ORIGEN (se asume PROPIO)', a.sinOrigen ? 'mal' : 'bien'],
+    [a.mermaNeg, 'con merma negativa (cuenta 0)', a.mermaNeg ? 'mal' : 'bien'],
+    [a.serMt2, 'serigrafia capturada en MT2', a.serMt2 ? 'mal' : 'bien'],
+    [a.fechaVentas, 'con fecha tomada de VENTAS', a.fechaVentas ? 'mal' : 'bien']
   ];
   h = '';
   for (var m = 0; m < cel.length; m++) {
@@ -1999,6 +2064,9 @@ function matriz(id, filas){
   document.getElementById(id).innerHTML = h;
 }
 
+/* % de uso de un renglon (columna "% uso" del detalle de semana) */
+function usoTd(v){ return v === null || v === undefined ? '<td class="num cero">—</td>' : '<td class="num">' + n1(v) + '%</td>'; }
+
 /* ---------- detalle de semana ---------- */
 function verSemana(sem){
   var si = semInfo(sem);
@@ -2013,9 +2081,10 @@ function verSemana(sem){
           '<tbody><tr><td class="vacio">Esta semana no tiene renglones.</td></tr></tbody>';
         return;
       }
+      var conCos = !!(D && D.costosOp);
       var h = '<thead><tr><th>Fila</th><th>Fecha</th><th>Maquina</th><th>Proceso</th><th>Material</th>' +
               '<th>Cant.</th><th>Un.</th><th>Origen</th><th>Cliente / OT</th><th>Turno</th>' +
-              '<th>Operador</th><th>Horas</th><th>% uso</th><th>Merma</th><th>Reimp.</th><th>Nota</th></tr></thead><tbody>';
+              '<th>Operador</th><th>Horas</th><th>% uso</th><th>Merma</th><th>Reimp.</th>' + (conCos ? '<th>M. de obra</th><th>H. extras</th><th>Otros</th><th>Instal.</th><th>Factura</th>' : '') + '<th>Nota</th></tr></thead><tbody>';
       for (var i = 0; i < res.filas.length; i++) {
         var r = res.filas[i];
         h += '<tr><td>' + r.fila + '</td><td>' + esc(r.fecha || 'sin fecha') + '</td>' +
@@ -2025,6 +2094,7 @@ function verSemana(sem){
              '<td>' + esc(r.cliente) + '</td><td>' + esc(r.turno) + '</td>' +
              '<td>' + esc(r.operador) + '</td>' + celda(r.horas) + usoTd(r.uso) + celda(r.merma) +
              '<td>' + (r.reimp === 'SI' ? '<span class="chip dn">SI</span>' : '') + '</td>' +
+             (conCos ? cp2(r.cMO) + cp2(r.cHE) + cp2(r.cOtros) + cp2(r.cInst) + '<td>' + esc(r.factura || '') + '</td>' : '') +
              '<td style="text-align:left;white-space:normal;max-width:300px;font-size:11.5px">' +
              esc(r.nota || r.obs) + '</td></tr>';
       }
