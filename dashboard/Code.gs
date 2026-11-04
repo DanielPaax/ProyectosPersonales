@@ -88,7 +88,10 @@ var AREAS = [
     acceso: { roles: [], socios: false }, vista: 'admin', soloAdmin: true },
   { id: 'erp', nombre: 'ERP', icono: 'engrane',
     desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
-    acceso: { roles: [], socios: true }, vista: 'erp' }
+    acceso: { roles: [], socios: true }, vista: 'erp' },
+  { id: 'marketing', nombre: 'Marketing', icono: 'megafono',
+    desc: 'Tablero Kanban de actividades, calendario, archivos y comentarios con menciones.',
+    acceso: { roles: [], socios: false }, vista: 'marketing' }
 ];
 
 function _areaPorId_(id) {
@@ -2822,6 +2825,7 @@ function onOpen() {
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar'))
+      .addItem('Instalar Marketing (hojas y carpeta de archivos)', 'mktInstalar')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
