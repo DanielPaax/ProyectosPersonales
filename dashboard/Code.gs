@@ -284,8 +284,18 @@ function portalArea(id, clave) {
            planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
 
+/* Une un archivo HTML del proyecto a index.html. Si el archivo trae el contenido equivocado (otro archivo pegado por error),
+   no rompe la pagina: quita escrituras de plantilla sueltas y deja avisado cual archivo es, para que el portal lo diga. */
+var INCLUIR_ESPERADO = { ErpUI: 'function abrirErp', AdminUI: 'function abrirAdmin', MarketingUI: 'function abrirMkt' };
 function incluir(nombre) {
-  return HtmlService.createHtmlOutputFromFile(nombre).getContent();
+  var c = HtmlService.createHtmlOutputFromFile(nombre).getContent();
+  c = c.replace(/<\?!?=[\s\S]*?\?>/g, '');
+  var marca = INCLUIR_ESPERADO[nombre];
+  if (marca && c.indexOf(marca) < 0) {
+    var ini = c.replace(/\s+/g, ' ').trim().slice(0, 90);
+    return '<script>window.INC_MAL = window.INC_MAL || {}; window.INC_MAL[' + JSON.stringify(nombre) + '] = ' + JSON.stringify(ini).replace(/</g, '\\u003c') + ';</script>';
+  }
+  return c;
 }
 
 /* ===================== IDENTIDAD Y ROL ===================== */

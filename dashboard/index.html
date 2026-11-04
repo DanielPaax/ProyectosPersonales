@@ -2889,6 +2889,8 @@ function ptEntrar(id){
   if (a.vista === 'erp' || a.vista === 'admin' || a.vista === 'marketing') {
     var arch = { erp: 'ErpUI.html', admin: 'AdminUI.html', marketing: 'MarketingUI.html' };
     var abre = { erp: window.abrirErp, admin: window.abrirAdmin, marketing: window.abrirMkt }[a.vista];
+    var mal = window.INC_MAL && window.INC_MAL[{ erp: 'ErpUI', admin: 'AdminUI', marketing: 'MarketingUI' }[a.vista]];
+    if (typeof abre !== 'function' && mal) { ptToast('El archivo ' + arch[a.vista] + ' de tu proyecto tiene otro contenido (empieza con: «' + mal + '»). Bórralo por completo y pega el ' + arch[a.vista] + ' correcto.'); return; }
     if (typeof abre !== 'function') { ptToast('No se pudo abrir ' + a.nombre + ': falta ' + arch[a.vista] + ' en el proyecto de Apps Script o index.html está desactualizado.'); return; }
     try { abre(); } catch (e) { ptToast('Error al abrir ' + a.nombre + ': ' + (e && e.message ? e.message : e)); }
     return;
