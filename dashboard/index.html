@@ -2809,8 +2809,12 @@ function ptFalla(err){
 function ptEntrar(id){
   var a = (PT ? PT.areas : []).filter(function(x){ return x.id === id; })[0];
   if (!a) { return; }
-  if (a.vista === 'erp') { abrirErp(); return; }
-  if (a.vista === 'admin') { abrirAdmin(); return; }
+  if (a.vista === 'erp' || a.vista === 'admin') {
+    var abre = a.vista === 'erp' ? window.abrirErp : window.abrirAdmin;
+    if (typeof abre !== 'function') { ptToast('No se pudo abrir ' + a.nombre + ': falta ' + (a.vista === 'erp' ? 'ErpUI.html' : 'AdminUI.html') + ' en el proyecto de Apps Script o index.html está desactualizado.'); return; }
+    try { abre(); } catch (e) { ptToast('Error al abrir ' + a.nombre + ': ' + (e && e.message ? e.message : e)); }
+    return;
+  }
   if (a.vista) { abrirTablero(a.vista); return; }
   ptAbrirArea(id);
 }
