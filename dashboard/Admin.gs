@@ -17,7 +17,9 @@ var ADMIN_AREAS = [
   { id: 'direccion', nombre: 'Dirección', max: 1, nota: 'Solo consulta' },
   { id: 'finanzas', nombre: 'Finanzas', max: 1, nota: 'Solo consulta' },
   { id: 'erp', nombre: 'ERP', max: 3, nota: 'Ver · escribir: crear clientes, cotizaciones, ODP… · editar: modificar, cancelar y eliminar' },
-  { id: 'marketing', nombre: 'Marketing', max: 3, nota: 'Ver · escribir: crear actividades, comentar y subir archivos · editar: modificar y eliminar las de todos' }
+  { id: 'marketing', nombre: 'Marketing', max: 3, nota: 'Ver · escribir: crear actividades, comentar y subir archivos · editar: modificar y eliminar las de todos' },
+  { id: 'calidad', nombre: 'Calidad', max: 1, nota: 'En construcción' },
+  { id: 'soporte', nombre: 'Soporte y Sistemas', max: 1, nota: 'En construcción' }
 ];
 var ADMIN_MAX_CORREOS = 20;
 var ADMIN_NIVEL_TXT = { 1: 'Ver', 2: 'Ver y escribir', 3: 'Ver, escribir y editar' };

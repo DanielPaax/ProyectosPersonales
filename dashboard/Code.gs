@@ -71,27 +71,33 @@ var ROLES = {
    modulos: tarjetas dentro del area. estado: 'activo' (tiene destino), 'proximamente'.
    planeados: texto de lo que se va a construir (solo se muestra como pista). */
 var AREAS = [
-  { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
-    desc: 'Producción y comercial: ventas, costos, merma y productividad.',
-    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
-  { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
-    desc: 'Información estratégica y de gestión. Acceso restringido.',
-    acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
-  { id: 'finanzas', nombre: 'Finanzas', icono: 'monedas',
-    desc: 'Estado financiero de la empresa. Acceso restringido.',
-    acceso: { roles: [], lista: 'FINANZAS', socios: false }, modulos: [], planeados: [] },
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
+  { id: 'finanzas', nombre: 'Finanzas', icono: 'monedas',
+    desc: 'Estado financiero de la empresa. Acceso restringido.',
+    acceso: { roles: [], lista: 'FINANZAS', socios: false }, modulos: [], planeados: [] },
+  { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
+    desc: 'Información estratégica y de gestión. Acceso restringido.',
+    acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
+  { id: 'marketing', nombre: 'Marketing', icono: 'megafono',
+    desc: 'Tablero Kanban de actividades, calendario, archivos y comentarios con menciones.',
+    acceso: { roles: [], socios: false }, vista: 'marketing' },
   { id: 'admin', nombre: 'Administración', icono: 'llave',
     desc: 'Invita personas a la intranet y define qué puede ver, escribir y editar cada una. Solo administradores.',
     acceso: { roles: [], socios: false }, vista: 'admin', soloAdmin: true },
   { id: 'erp', nombre: 'ERP', icono: 'engrane',
     desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
     acceso: { roles: [], socios: true }, vista: 'erp' },
-  { id: 'marketing', nombre: 'Marketing', icono: 'megafono',
-    desc: 'Tablero Kanban de actividades, calendario, archivos y comentarios con menciones.',
-    acceso: { roles: [], socios: false }, vista: 'marketing' }
+  { id: 'calidad', nombre: 'Calidad', icono: 'escudo',
+    desc: 'Control de calidad, no conformidades y mejora continua. En construcción.',
+    acceso: { roles: [], socios: false }, modulos: [], planeados: [] },
+  { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
+    desc: 'Producción y comercial: ventas, costos, merma y productividad.',
+    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
+  { id: 'soporte', nombre: 'Soporte y Sistemas', icono: 'soporte',
+    desc: 'Solicitudes de soporte, equipos y sistemas. En construcción.',
+    acceso: { roles: [], socios: false }, modulos: [], planeados: [] }
 ];
 
 function _areaPorId_(id) {
