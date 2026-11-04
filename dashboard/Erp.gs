@@ -1716,7 +1716,27 @@ function correoRegistrado(correo) {
   return read_('Usuarios').some(function (r) { return str_(r.Email).toLowerCase() === correo && str_(r.Activo).toUpperCase() !== 'NO'; });
 }
 
-return { nivel: nivel, claseAccion: claseAccion, run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+/* Para Marketing (prospectos): clientes y cuantas cotizaciones / ODP vivas tiene cada uno. */
+function estadoComercial() {
+  const out = { clientes: [], cots: {}, odps: {} };
+  if (!ss_().getSheetByName(PREF + 'Clientes')) return out;
+  resetCache_();
+  out.clientes = read_('Clientes').map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Email: c.Email }; });
+  if (ss_().getSheetByName(PREF + 'Cotizaciones')) read_('Cotizaciones').forEach(function (c) { if (c.Estatus !== 'Rechazada' && c.Estatus !== 'Cancelada') out.cots[c.ClienteID] = (out.cots[c.ClienteID] || 0) + 1; });
+  if (ss_().getSheetByName(PREF + 'ODP')) read_('ODP').forEach(function (o) { if (o.Estatus !== 'Cancelada') out.odps[o.ClienteID] = (out.odps[o.ClienteID] || 0) + 1; });
+  return out;
+}
+
+/* Crea el cliente del ERP desde un prospecto (o devuelve el que ya existe con ese nombre). El candado lo tiene quien llama. */
+function clienteDeProspecto(ses, p) {
+  resetCache_(); asegura_();
+  const u = usuarioDe_(ses), ex = find_('Clientes', 'Nombre', p.Nombre);
+  if (ex) return { ID: ex.ID, Nombre: ex.Nombre, nuevo: false };
+  const c = a_saveCliente(u, p);
+  return { ID: c.ID, Nombre: c.Nombre, nuevo: true };
+}
+
+return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================

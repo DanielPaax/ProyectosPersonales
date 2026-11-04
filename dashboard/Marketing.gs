@@ -16,11 +16,14 @@ var MKT_PRIORIDADES = ['Baja', 'Media', 'Alta', 'Urgente'];
 var MKT_EXT = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', ai: 'application/illustrator' };
 var MKT_MAX_B64 = 11500000;   /* ~8.5 MB por archivo (limite practico de google.script.run) */
 var MKT_HOJAS = {
-  MKT_TAREAS: ['ID', 'TITULO', 'DESCRIPCION', 'ETAPA', 'PRIORIDAD', 'RESPONSABLES', 'INICIO', 'FIN', 'ETIQUETAS', 'CREADO_POR', 'CREADO_EN', 'ACTUALIZADO_EN', 'HISTORIAL'],
+  MKT_TAREAS: ['ID', 'TITULO', 'DESCRIPCION', 'ETAPA', 'PRIORIDAD', 'RESPONSABLES', 'INICIO', 'FIN', 'ETIQUETAS', 'CREADO_POR', 'CREADO_EN', 'ACTUALIZADO_EN', 'HISTORIAL', 'PROSPECTO'],
   MKT_COMENTARIOS: ['ID', 'TAREA', 'AUTOR', 'FECHA', 'TIPO', 'TEXTO', 'MENCIONES'],
+  MKT_PROSPECTOS: ['ID', 'FECHA', 'HORA', 'USUARIO', 'NOMBRE_CONTACTO', 'EMPRESA', 'FUENTE', 'CELULAR', 'CORREO', 'SOLICITUD', 'ESTATUS', 'CLIENTE_ID', 'ACTUALIZADO_POR', 'ACTUALIZADO_EN'],
   MKT_ARCHIVOS: ['ID', 'TAREA', 'NOMBRE', 'MIME', 'DRIVE_ID', 'TAMANO', 'SUBIDO_POR', 'FECHA', 'ETAPA']
 };
-var MKT_ESCRIBEN = { guardarTarea: 1, moverTarea: 1, eliminarTarea: 1, comentar: 1, eliminarComentario: 1, subirArchivo: 1, eliminarArchivo: 1 };
+var MKT_FUENTES = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'TIKTOK', 'YOUTUBE', 'WEB', 'OTROS'];
+var MKT_ESTATUS_MANUAL = ['Nuevo', 'Contactado', 'Descartado'];
+var MKT_ESCRIBEN = { guardarProspecto: 1, eliminarProspecto: 1, convertirProspecto: 1, guardarTarea: 1, moverTarea: 1, eliminarTarea: 1, comentar: 1, eliminarComentario: 1, subirArchivo: 1, eliminarArchivo: 1 };
 
 /* Se corre UNA vez desde el editor (o menu): crea hojas y carpeta, y pide el permiso de Drive. */
 function mktInstalar() {
@@ -36,6 +39,13 @@ function _mktHoja_(nombre) {
     h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold').setBackground('#E8EEFB');
     h.setFrozenRows(1);
     h.getRange(2, 1, h.getMaxRows() - 1, enc.length).setNumberFormat('@');   /* texto: Sheets no convierte fechas ni IDs */
+  }
+  else {
+    var act = h.getRange(1, 1, 1, Math.max(enc.length, h.getLastColumn())).getValues()[0], falta = false;
+    for (var c = 0; c < enc.length; c++) { if (String(act[c] || '') !== enc[c]) { falta = true; } }
+    if (falta) {   /* hoja creada con una version anterior: se completan los encabezados nuevos al final */
+      for (var c2 = 0; c2 < enc.length; c2++) { if (!String(act[c2] || '')) { h.getRange(1, c2 + 1).setValue(enc[c2]).setFontWeight('bold').setBackground('#E8EEFB'); h.getRange(2, c2 + 1, Math.max(1, h.getMaxRows() - 1), 1).setNumberFormat('@'); } }
+    }
   }
   return h;
 }
@@ -127,7 +137,7 @@ function _mktSepara_(s) { return String(s || '').split(',').map(function (x) { r
 function _mktTareaOut_(f, nCom, nArc) {
   return { id: f.ID, titulo: f.TITULO, descripcion: f.DESCRIPCION, etapa: f.ETAPA, prioridad: f.PRIORIDAD, responsables: _mktSepara_(f.RESPONSABLES),
            inicio: f.INICIO, fin: f.FIN, etiquetas: f.ETIQUETAS, creadoPor: f.CREADO_POR, creadoEn: f.CREADO_EN, actualizadoEn: f.ACTUALIZADO_EN,
-           comentarios: nCom || 0, archivos: nArc || 0 };
+           comentarios: nCom || 0, archivos: nArc || 0, prospecto: f.PROSPECTO || '' };
 }
 
 function _mktConteo_(filas) {
@@ -214,6 +224,10 @@ function mktApi(accion, payloadJson, clave) {
   try {
     switch (accion) {
       case 'inicio': return _mktInicio_(ses, nivel);
+      case 'prospectos': return { prospectos: _mktProspectos_() };
+      case 'guardarProspecto': return _mktGuardarProspecto_(ses, nivel, p);
+      case 'eliminarProspecto': return _mktEliminarProspecto_(ses, nivel, p);
+      case 'convertirProspecto': return _mktConvertir_(ses, nivel, p);
       case 'detalle': return _mktDetalle_(p);
       case 'archivo': return _mktDescarga_(p);
       case 'guardarTarea': return _mktGuardarTarea_(ses, nivel, p);
@@ -232,7 +246,7 @@ function _mktInicio_(ses, nivel) {
   var t = _mktLee_('MKT_TAREAS'), cc = _mktConteo_(_mktLee_('MKT_COMENTARIOS').filter(function (c) { return c.TIPO !== 'sistema'; })), ca = _mktConteo_(_mktLee_('MKT_ARCHIVOS'));
   return { yo: String(ses.correo).toLowerCase(), nivel: nivel, etapas: MKT_ETAPAS, prioridades: MKT_PRIORIDADES, equipo: _mktEquipo_(),
            tareas: t.map(function (f) { return _mktTareaOut_(f, cc[f.ID], ca[f.ID]); }),
-           extensiones: Object.keys(MKT_EXT), maxMb: 8 };
+           extensiones: Object.keys(MKT_EXT), maxMb: 8, fuentes: MKT_FUENTES, prospectos: _mktProspectos_() };
 }
 
 function _mktDetalle_(p) {
@@ -266,6 +280,8 @@ function _mktGuardarTarea_(ses, nivel, p) {
   if (inicio && fin && fin < inicio) { throw new Error('La fecha final no puede ser anterior a la inicial.'); }
   var equipo = _mktEquipo_(), validos = equipo.map(function (e) { return e.correo; });
   var resp = _mktSepara_((p.responsables || []).join(',')).filter(function (c, i, a) { return validos.indexOf(c) >= 0 && a.indexOf(c) === i; });
+  var prosp = String(p.prospecto || '').trim();
+  if (prosp && !_mktProspectoFila_(prosp)) { throw new Error('El prospecto elegido ya no existe.'); }
   var f, nuevo = !p.id, antes = [];
   if (nuevo) {
     f = { ID: _mktId_('T'), CREADO_POR: String(ses.correo).toLowerCase(), CREADO_EN: _mktAhora_(), HISTORIAL: '[]' };
@@ -279,6 +295,7 @@ function _mktGuardarTarea_(ses, nivel, p) {
   }
   f.TITULO = titulo; f.DESCRIPCION = String(p.descripcion || '').slice(0, 5000); f.ETAPA = etapa; f.PRIORIDAD = prio;
   f.RESPONSABLES = resp.join(','); f.INICIO = inicio; f.FIN = fin; f.ETIQUETAS = String(p.etiquetas || '').slice(0, 120);
+  f.PROSPECTO = prosp;
   f.ACTUALIZADO_EN = _mktAhora_();
   if (nuevo) { _mktAgrega_('MKT_TAREAS', f); } else { _mktGuarda_('MKT_TAREAS', f); }
   var nuevosResp = resp.filter(function (c) { return antes.indexOf(c) < 0; });
@@ -365,4 +382,108 @@ function _mktEliminarArchivo_(ses, nivel, p) {
   try { DriveApp.getFileById(fila.DRIVE_ID).setTrashed(true); } catch (e) { /* ya no estaba */ }
   _mktBorraFilas_('MKT_ARCHIVOS', [fila._fila]);
   return { ok: true };
+}
+
+/* ---------- Prospectos (leads de redes sociales) ---------- */
+function _mktProspectoFila_(id) {
+  var l = _mktLee_('MKT_PROSPECTOS');
+  for (var i = 0; i < l.length; i++) { if (l[i].ID === id) { return l[i]; } }
+  return null;
+}
+
+function _mktSoloDigitos_(t) { return String(t || '').replace(/\D+/g, ''); }
+
+/* Prospecto -> Cotizando -> Cliente: se calcula con el ERP. Un prospecto ligado a un cliente del ERP (por el boton "Crear cliente en ERP",
+   o porque el nombre de la empresa o el correo ya coinciden con un cliente) pasa a COTIZANDO cuando tiene una cotizacion, y a CLIENTE
+   cuando una cotizacion se aprueba y genera una ODP (venta). */
+function _mktProspectos_(sinGuardar) {
+  var filas = _mktLee_('MKT_PROSPECTOS'), estado = { clientes: [], cots: {}, odps: {} };
+  try { estado = ERP.estadoComercial(); } catch (e) { /* ERP sin instalar: solo estatus manual */ }
+  var norm = function (t) { return String(t || '').toLowerCase().replace(/[\s.,]+/g, ' ').trim(); };
+  var porNombre = {}, porCorreo = {};
+  estado.clientes.forEach(function (c) { if (norm(c.Nombre)) { porNombre[norm(c.Nombre)] = c; } if (String(c.Email || '').trim()) { porCorreo[String(c.Email).trim().toLowerCase()] = c; } });
+  var tareas = _mktLee_('MKT_TAREAS'), nt = {};
+  tareas.forEach(function (t) { if (t.PROSPECTO) { nt[t.PROSPECTO] = (nt[t.PROSPECTO] || 0) + 1; } });
+  var cambios = [];
+  var out = filas.map(function (f) {
+    var cid = f.CLIENTE_ID;
+    if (!cid) {
+      var c = (norm(f.EMPRESA) && porNombre[norm(f.EMPRESA)]) || (f.CORREO && porCorreo[String(f.CORREO).trim().toLowerCase()]) || null;
+      if (c) { cid = c.ID; }
+    }
+    var est = MKT_ESTATUS_MANUAL.indexOf(f.ESTATUS) >= 0 ? f.ESTATUS : 'Nuevo';
+    if (cid && estado.odps[cid]) { est = 'Cliente'; } else if (cid && estado.cots[cid]) { est = 'Cotizando'; }
+    if (cid !== f.CLIENTE_ID || (est === 'Cliente' || est === 'Cotizando') && f.ESTATUS !== est) { f._nuevoCliente = cid || ''; f._nuevoEst = est; cambios.push(f); }
+    return { id: f.ID, fecha: f.FECHA, hora: f.HORA, usuario: f.USUARIO, nombre: f.NOMBRE_CONTACTO, empresa: f.EMPRESA, fuente: f.FUENTE, celular: f.CELULAR,
+             correo: f.CORREO, solicitud: f.SOLICITUD, estatus: est, clienteId: cid || '', actualizadoPor: f.ACTUALIZADO_POR, tareas: nt[f.ID] || 0 };
+  });
+  if (cambios.length && !sinGuardar) {   /* deja registrada en la hoja la conversion (si el candado esta libre) */
+    var lock = LockService.getScriptLock(), tiene = false;
+    try { tiene = lock.tryLock(3000); } catch (e2) { tiene = false; }
+    if (tiene) {
+      try {
+        cambios.forEach(function (f) { f.CLIENTE_ID = f._nuevoCliente; f.ESTATUS = f._nuevoEst; f.ACTUALIZADO_EN = _mktAhora_(); f.ACTUALIZADO_POR = 'Sistema (ERP)'; _mktGuarda_('MKT_PROSPECTOS', f); });
+      } finally { lock.releaseLock(); }
+    }
+  }
+  out.sort(function (a, b) { return (a.fecha + a.hora) < (b.fecha + b.hora) ? 1 : -1; });
+  return out;
+}
+
+function _mktGuardarProspecto_(ses, nivel, p) {
+  var nombre = String(p.nombre || '').trim(), empresa = String(p.empresa || '').trim(), fuente = String(p.fuente || '').trim().toUpperCase();
+  var cel = String(p.celular || '').trim(), correo = String(p.correo || '').trim().toLowerCase(), sol = String(p.solicitud || '').trim();
+  if (!nombre) { throw new Error('Escribe el nombre del contacto.'); }
+  if (MKT_FUENTES.indexOf(fuente) < 0) { throw new Error('Elige la fuente del prospecto.'); }
+  if (!cel && !correo) { throw new Error('Captura al menos un celular o un correo para poder contactarlo.'); }
+  if (cel && _mktSoloDigitos_(cel).length < 8) { throw new Error('El celular debe tener al menos 8 dígitos.'); }
+  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { throw new Error('El correo no es válido.'); }
+  if (!sol) { throw new Error('Escribe qué solicita o necesita el prospecto.'); }
+  if (sol.length > 3000) { throw new Error('La solicitud es demasiado larga (máx. 3000).'); }
+  var todos = _mktLee_('MKT_PROSPECTOS'), yo = String(ses.correo).toLowerCase(), f = null, i;
+  if (p.id) {
+    for (i = 0; i < todos.length; i++) { if (todos[i].ID === p.id) { f = todos[i]; } }
+    if (!f) { throw new Error('El prospecto ya no existe.'); }
+    if (nivel < 3 && String(f.USUARIO).toLowerCase() !== yo) { throw new Error('Solo quien capturó el prospecto o un editor puede modificarlo.'); }
+  }
+  for (i = 0; i < todos.length; i++) {
+    var o = todos[i]; if (f && o.ID === f.ID) { continue; }
+    if ((correo && String(o.CORREO).toLowerCase() === correo) || (cel && _mktSoloDigitos_(o.CELULAR) && _mktSoloDigitos_(o.CELULAR) === _mktSoloDigitos_(cel))) {
+      throw new Error('Ya existe un prospecto con ese ' + (correo && String(o.CORREO).toLowerCase() === correo ? 'correo' : 'celular') + ': ' + o.NOMBRE_CONTACTO + (o.EMPRESA ? ' (' + o.EMPRESA + ')' : '') + ' · ' + o.ID + '.');
+    }
+  }
+  var ahora = _mktAhora_(), nuevo = !f;
+  if (nuevo) { f = { ID: _mktId_('P'), FECHA: ahora.slice(0, 10), HORA: ahora.slice(11, 16), USUARIO: yo, ESTATUS: 'Nuevo', CLIENTE_ID: '' }; }
+  f.NOMBRE_CONTACTO = nombre.slice(0, 120); f.EMPRESA = empresa.slice(0, 120); f.FUENTE = fuente; f.CELULAR = cel.slice(0, 30); f.CORREO = correo.slice(0, 120); f.SOLICITUD = sol;
+  if (!nuevo && MKT_ESTATUS_MANUAL.indexOf(p.estatus) >= 0 && f.ESTATUS !== 'Cliente') { f.ESTATUS = p.estatus; }
+  f.ACTUALIZADO_POR = yo; f.ACTUALIZADO_EN = ahora;
+  if (nuevo) { _mktAgrega_('MKT_PROSPECTOS', f); } else { _mktGuarda_('MKT_PROSPECTOS', f); }
+  _bitacora_(ses.correo, nuevo ? 'MKT_PROSPECTO_NUEVO' : 'MKT_PROSPECTO_EDITA', f.ID);
+  return { prospecto: f.ID, prospectos: _mktProspectos_(true) };
+}
+
+function _mktEliminarProspecto_(ses, nivel, p) {
+  var f = _mktProspectoFila_(p.id);
+  if (!f) { return { ok: true, prospectos: _mktProspectos_(true) }; }
+  if (nivel < 3 && String(f.USUARIO).toLowerCase() !== String(ses.correo).toLowerCase()) { throw new Error('Solo quien capturó el prospecto o un editor puede eliminarlo.'); }
+  _mktLee_('MKT_TAREAS').forEach(function (t) { if (t.PROSPECTO === f.ID) { t.PROSPECTO = ''; _mktGuarda_('MKT_TAREAS', t); } });
+  _mktBorraFilas_('MKT_PROSPECTOS', [f._fila]);
+  _bitacora_(ses.correo, 'MKT_PROSPECTO_ELIMINA', f.ID + ' ' + f.NOMBRE_CONTACTO);
+  return { ok: true, prospectos: _mktProspectos_(true) };
+}
+
+/* Crea (o liga, si ya existe uno con ese nombre) el cliente del ERP para poder cotizarle. */
+function _mktConvertir_(ses, nivel, p) {
+  var f = _mktProspectoFila_(p.id);
+  if (!f) { throw new Error('El prospecto ya no existe.'); }
+  if (f.CLIENTE_ID) { return { prospectos: _mktProspectos_(true), mensaje: 'Ya está ligado al cliente ' + f.CLIENTE_ID + ' del ERP.' }; }
+  var r;
+  try {
+    r = ERP.clienteDeProspecto(ses, { Nombre: f.EMPRESA || f.NOMBRE_CONTACTO, Contacto: f.NOMBRE_CONTACTO, Telefono: f.CELULAR, Email: f.CORREO,
+      Notas: 'Prospecto ' + f.ID + ' de ' + f.FUENTE + ' (' + f.FECHA + '). Solicitud: ' + String(f.SOLICITUD).slice(0, 300) });
+  } catch (e) { throw new Error('No se pudo crear el cliente en el ERP: ' + (e && e.message ? e.message : e) + ' (necesitas permiso de escritura en el ERP).'); }
+  f.CLIENTE_ID = r.ID; if (f.ESTATUS === 'Nuevo') { f.ESTATUS = 'Contactado'; }
+  f.ACTUALIZADO_POR = String(ses.correo).toLowerCase(); f.ACTUALIZADO_EN = _mktAhora_();
+  _mktGuarda_('MKT_PROSPECTOS', f);
+  return { prospectos: _mktProspectos_(true), mensaje: (r.nuevo ? 'Cliente creado en el ERP: ' : 'Ligado al cliente existente: ') + r.ID + ' · ' + r.Nombre + '. Ya puedes hacerle una cotización en el ERP; cuando se apruebe pasará a Cliente.' };
 }

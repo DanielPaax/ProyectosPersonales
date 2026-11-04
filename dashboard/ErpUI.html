@@ -152,8 +152,7 @@ function ventana(titulo, cuerpo, pie, ancha){
   document.body.appendChild(v);
   var o = { el: v, cerrar: function(){ if (v.parentNode) { v.parentNode.removeChild(v); } } };
   v.querySelector('header button').onclick = o.cerrar;
-  v.addEventListener('mousedown', function(ev){ if (ev.target === v) { v.dataset.dn = '1'; } });
-  v.addEventListener('mouseup', function(ev){ if (ev.target === v && v.dataset.dn) { o.cerrar(); } v.dataset.dn = ''; });
+  /* no se cierra con clic afuera: solo con la X o los botones */
   return o;
 }
 function leer(el){

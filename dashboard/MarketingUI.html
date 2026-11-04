@@ -93,6 +93,20 @@
 .mk-arch .dt{flex:1; min-width:0; font-size:12.5px} .mk-arch .dt b{display:block; word-break:break-all}
 .mk-arch .dt small{color:var(--tinta-3)}
 .mk-hist div{padding:6px 0; border-bottom:1px solid var(--linea); font-size:12.5px} .mk-hist small{color:var(--tinta-3); display:block}
+.mk-pro{padding:10px 20px 40px}
+.mk-pfil{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px}
+.mk-pfil select{padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff}
+.mk-tabla{width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--linea); border-radius:10px; overflow:hidden; min-width:980px}
+.mk-tabla th{background:var(--azul-t); color:var(--azul); font:700 11px Montserrat,sans-serif; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:9px 10px; white-space:nowrap}
+.mk-tabla td{padding:8px 10px; border-top:1px solid var(--linea); font-size:12.5px; vertical-align:top}
+.mk-tabla td.sol{max-width:260px; white-space:pre-wrap; word-break:break-word}
+.mk-tabla .acc{display:flex; gap:5px; flex-wrap:wrap}
+.mk-est{display:inline-block; padding:2px 9px; border-radius:999px; font:700 11px Montserrat,sans-serif; background:#EEF2F6; color:var(--tinta-2); white-space:nowrap}
+.mk-est.Nuevo{background:var(--azul-t); color:var(--azul)} .mk-est.Contactado{background:var(--ambar-l); color:#9A6A00} .mk-est.Cotizando{background:#FFE9D9; color:var(--naranja-d)} .mk-est.Cliente{background:var(--verde-l); color:var(--verde)} .mk-est.Descartado{background:var(--rojo-l); color:var(--rojo)}
+.mk-fte{display:inline-block; border-radius:6px; padding:1px 7px; font:700 10.5px Montserrat,sans-serif; background:#1c2540; color:#fff}
+.mk-chipP{display:inline-block; background:#E8F6EF; color:var(--verde); border-radius:6px; padding:1px 7px; font:700 10.5px Montserrat,sans-serif; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mk-modalP{max-width:680px}
+.mk-modalP .mk-izq{border-right:none}
 @media (max-width:900px){ .mk-mb{grid-template-columns:1fr} .mk-izq{border-right:none; border-bottom:1px solid var(--linea)} .mk-tablero,.mk-cal,.mk-barra{padding-left:12px; padding-right:12px} .mk-dia{min-height:76px} .mk-ev{font-size:10px; padding:1px 3px} }
 </style>
 
@@ -104,16 +118,44 @@
     <div class="mk-quien" id="mkQuien"></div>
   </div>
   <div class="mk-barra">
-    <div class="mk-seg"><button type="button" id="mkVTab" class="on" onclick="mkVista('tablero')">Tablero</button><button type="button" id="mkVCal" onclick="mkVista('calendario')">Calendario</button></div>
+    <div class="mk-seg"><button type="button" id="mkVTab" class="on" onclick="mkVista('tablero')">Tablero</button><button type="button" id="mkVCal" onclick="mkVista('calendario')">Calendario</button><button type="button" id="mkVPro" onclick="mkVista('prospectos')">Prospectos</button></div>
     <select id="mkFPers" onchange="mkPinta()"></select>
     <input type="text" id="mkFTxt" placeholder="Buscar actividad…" oninput="mkPinta()">
-    <button type="button" class="mk-btn nar mk-der" id="mkNueva" onclick="mkAbre(null)">+ Nueva actividad</button>
+    <button type="button" class="mk-btn nar mk-der" id="mkNueva" onclick="mkNuevoBtn()">+ Nueva actividad</button>
   </div>
   <div id="mkTablero" class="mk-tablero"></div>
   <div id="mkCal" class="mk-cal" style="display:none"></div>
+  <div id="mkPros" class="mk-pro" style="display:none"></div>
 </div>
 
-<div id="mkVelo" class="mk-velo oculto" onmousedown="if(event.target===this)mkCierra()">
+<div id="mkVeloP" class="mk-velo oculto">
+  <div class="mk-modal mk-modalP">
+    <div class="mk-mh"><h2 id="mkPTit">Nuevo prospecto</h2><button type="button" class="mk-x" onclick="mkPCierra()" aria-label="Cerrar">×</button></div>
+    <div class="mk-izq">
+      <label class="t" for="mkPNom" style="margin-top:0">Nombre contacto</label>
+      <input type="text" id="mkPNom" maxlength="120" placeholder="Nombre de la persona">
+      <label class="t" for="mkPEmp">Empresa</label>
+      <input type="text" id="mkPEmp" maxlength="120" placeholder="Empresa o negocio (si aplica)">
+      <div class="mk-2c">
+        <div><label class="t" for="mkPFte">Fuente</label><select id="mkPFte"></select></div>
+        <div><label class="t" for="mkPEst">Estatus</label><select id="mkPEst"></select></div>
+        <div><label class="t" for="mkPCel">Celular</label><input type="text" id="mkPCel" maxlength="30" placeholder="10 dígitos" inputmode="tel"></div>
+        <div><label class="t" for="mkPCor">Correo</label><input type="text" id="mkPCor" maxlength="120" placeholder="correo@empresa.com" inputmode="email"></div>
+      </div>
+      <label class="t" for="mkPSol">Solicitud (qué necesita el prospecto)</label>
+      <textarea id="mkPSol" maxlength="3000" placeholder="Ej. Cotizar 20 lonas 3x1 m para evento del 15 de diciembre…"></textarea>
+      <p class="mk-vacio" id="mkPInfo" style="text-align:left; padding:8px 0 0"></p>
+      <div id="mkPTar" style="font-size:12.5px; margin-top:6px"></div>
+      <div class="mk-acc">
+        <button type="button" class="mk-btn nar" id="mkPGuarda" onclick="mkPGuarda()">Guardar prospecto</button>
+        <button type="button" class="mk-btn sec" id="mkPTarea" onclick="mkPNuevaTarea()" style="display:none">+ Crear tarea para este prospecto</button>
+        <button type="button" class="mk-btn sec" onclick="mkPCierra()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="mkVelo" class="mk-velo oculto">
   <div class="mk-modal">
     <div class="mk-mh"><h2 id="mkMTit">Nueva actividad</h2><button type="button" class="mk-x" onclick="mkCierra()" aria-label="Cerrar">×</button></div>
     <div class="mk-mb">
@@ -130,6 +172,8 @@
         </div>
         <label class="t" for="mkEti">Etiqueta (opcional)</label>
         <input type="text" id="mkEti" maxlength="120" placeholder="Ej. Redes, Evento, Impreso">
+        <label class="t" for="mkPro">Prospecto relacionado (opcional)</label>
+        <select id="mkPro"></select>
         <label class="t">Responsables (se les avisa por correo)</label>
         <div class="mk-resp" id="mkResp"></div>
         <div class="mk-acc">
@@ -228,6 +272,7 @@ function mkVista(v){
   MK.vista = v;
   document.getElementById('mkVTab').className = v === 'tablero' ? 'on' : '';
   document.getElementById('mkVCal').className = v === 'calendario' ? 'on' : '';
+  document.getElementById('mkVPro').className = v === 'prospectos' ? 'on' : '';
   mkPinta();
 }
 function mkFiltradas(){
@@ -235,7 +280,8 @@ function mkFiltradas(){
   return MK.d.tareas.filter(function(t){
     if (p === 'mias' && t.responsables.indexOf(MK.d.yo) < 0 && t.creadoPor !== MK.d.yo) { return false; }
     if (p !== 'todos' && p !== 'mias' && t.responsables.indexOf(p) < 0) { return false; }
-    if (q && (t.titulo + ' ' + t.descripcion + ' ' + t.etiquetas).toLowerCase().indexOf(q) < 0) { return false; }
+    var pp = t.prospecto ? mkPros(t.prospecto) : null;
+    if (q && (t.titulo + ' ' + t.descripcion + ' ' + t.etiquetas + ' ' + (pp ? pp.nombre + ' ' + pp.empresa : '')).toLowerCase().indexOf(q) < 0) { return false; }
     return true;
   });
 }
@@ -243,8 +289,91 @@ function mkPinta(){
   if (!MK.d) { return; }
   document.getElementById('mkTablero').style.display = MK.vista === 'tablero' ? '' : 'none';
   document.getElementById('mkCal').style.display = MK.vista === 'calendario' ? '' : 'none';
-  if (MK.vista === 'tablero') { mkTableroPinta(); } else { mkCalPinta(); }
+  document.getElementById('mkPros').style.display = MK.vista === 'prospectos' ? '' : 'none';
+  document.getElementById('mkFPers').style.display = MK.vista === 'prospectos' ? 'none' : '';
+  document.getElementById('mkNueva').textContent = MK.vista === 'prospectos' ? '+ Nuevo prospecto' : '+ Nueva actividad';
+  if (MK.vista === 'tablero') { mkTableroPinta(); } else if (MK.vista === 'calendario') { mkCalPinta(); } else { mkProsPinta(); }
 }
+
+/* ---------- Prospectos ---------- */
+function mkPros(id){ return (MK.d.prospectos || []).filter(function(x){ return x.id === id; })[0]; }
+function mkProSelect(sel){
+  var l = (MK.d.prospectos || []).filter(function(x){ return x.estatus !== 'Descartado' || x.id === sel; });
+  document.getElementById('mkPro').innerHTML = '<option value="">— Sin prospecto (actividad libre) —</option>' +
+    l.map(function(x){ return '<option value="' + x.id + '">' + mkE(x.nombre + (x.empresa ? ' · ' + x.empresa : '') + ' (' + x.estatus + ')') + '</option>'; }).join('');
+  document.getElementById('mkPro').value = sel || '';
+}
+function mkNuevoBtn(){ if (MK.vista === 'prospectos') { mkPAbre(null); } else { mkAbre(null); } }
+function mkProsPinta(){
+  var el = document.getElementById('mkPros'), fte = (document.getElementById('mkPF1') || {}).value || '', est = (document.getElementById('mkPF2') || {}).value || '';
+  var q = document.getElementById('mkFTxt').value.trim().toLowerCase();
+  var l = MK.d.prospectos.filter(function(x){
+    if (fte && x.fuente !== fte) { return false; } if (est && x.estatus !== est) { return false; }
+    return !q || (x.nombre + ' ' + x.empresa + ' ' + x.correo + ' ' + x.celular + ' ' + x.solicitud).toLowerCase().indexOf(q) >= 0;
+  });
+  var cuenta = {}; MK.d.prospectos.forEach(function(x){ cuenta[x.estatus] = (cuenta[x.estatus] || 0) + 1; });
+  var h = '<div class="mk-pfil"><b>' + l.length + ' de ' + MK.d.prospectos.length + ' prospectos</b>' +
+    '<select id="mkPF1" onchange="mkProsPinta()"><option value="">Todas las fuentes</option>' + MK.d.fuentes.map(function(f){ return '<option' + (f === fte ? ' selected' : '') + '>' + f + '</option>'; }).join('') + '</select>' +
+    '<select id="mkPF2" onchange="mkProsPinta()"><option value="">Todos los estatus</option>' + ['Nuevo','Contactado','Cotizando','Cliente','Descartado'].map(function(f){ return '<option' + (f === est ? ' selected' : '') + ' value="' + f + '">' + f + (cuenta[f] ? ' (' + cuenta[f] + ')' : '') + '</option>'; }).join('') + '</select></div>' +
+    '<div style="overflow-x:auto"><table class="mk-tabla"><thead><tr><th>Fecha y hora</th><th>Capturó</th><th>Contacto</th><th>Empresa</th><th>Fuente</th><th>Celular</th><th>Correo</th><th>Solicitud</th><th>Estatus</th><th>Tareas</th><th></th></tr></thead><tbody>';
+  if (!l.length) { h += '<tr><td colspan="11" class="mk-vacio">Sin prospectos. Usa «+ Nuevo prospecto».</td></tr>'; }
+  l.forEach(function(x){
+    var edita = MK.d.nivel >= 3 || (MK.d.nivel >= 2 && x.usuario === MK.d.yo);
+    h += '<tr><td>' + mkE(mkFmt(x.fecha)) + '<br><small>' + mkE(x.hora) + ' h</small></td><td>' + mkE(mkNombre(x.usuario)) + '</td><td><b>' + mkE(x.nombre) + '</b></td><td>' + mkE(x.empresa) + '</td>' +
+      '<td><span class="mk-fte">' + mkE(x.fuente) + '</span></td><td>' + mkE(x.celular) + '</td><td>' + mkE(x.correo) + '</td><td class="sol">' + mkE(x.solicitud.length > 180 ? x.solicitud.slice(0, 180) + '…' : x.solicitud) + '</td>' +
+      '<td><span class="mk-est ' + x.estatus + '">' + x.estatus + '</span>' + (x.clienteId ? '<br><small>ERP ' + mkE(x.clienteId) + '</small>' : '') + '</td><td>' + (x.tareas || '') + '</td>' +
+      '<td><div class="acc"><button type="button" class="mk-btn sec chico" onclick="mkPAbre(\'' + x.id + '\')">' + (edita ? 'Editar' : 'Ver') + '</button>' +
+      (MK.d.nivel >= 2 ? '<button type="button" class="mk-btn sec chico" onclick="mkPTareaDe(\'' + x.id + '\')">+ Tarea</button>' : '') +
+      (MK.d.nivel >= 2 && !x.clienteId ? '<button type="button" class="mk-btn chico" title="Crea el cliente en el ERP para poder cotizarle" onclick="mkPConvierte(\'' + x.id + '\')">Crear cliente ERP</button>' : '') +
+      (edita ? '<button type="button" class="mk-btn rojo chico" onclick="mkPBorra(\'' + x.id + '\')">×</button>' : '') + '</div></td></tr>';
+  });
+  el.innerHTML = h + '</tbody></table></div>';
+}
+function mkPAbre(id){
+  var x = id ? mkPros(id) : null; if (!x && MK.d.nivel < 2) { return; }
+  MK.pcur = x;
+  var ed = !x || MK.d.nivel >= 3 || (MK.d.nivel >= 2 && x.usuario === MK.d.yo);
+  document.getElementById('mkPTit').textContent = x ? 'Prospecto ' + x.id : 'Nuevo prospecto';
+  document.getElementById('mkPFte').innerHTML = '<option value="">Elige…</option>' + MK.d.fuentes.map(function(f){ return '<option>' + f + '</option>'; }).join('');
+  document.getElementById('mkPEst').innerHTML = ['Nuevo','Contactado','Descartado'].map(function(f){ return '<option>' + f + '</option>'; }).join('');
+  document.getElementById('mkPNom').value = x ? x.nombre : ''; document.getElementById('mkPEmp').value = x ? x.empresa : '';
+  document.getElementById('mkPFte').value = x ? x.fuente : ''; document.getElementById('mkPCel').value = x ? x.celular : '';
+  document.getElementById('mkPCor').value = x ? x.correo : ''; document.getElementById('mkPSol').value = x ? x.solicitud : '';
+  var auto = x && (x.estatus === 'Cotizando' || x.estatus === 'Cliente');
+  document.getElementById('mkPEst').value = x && !auto ? x.estatus : 'Nuevo';
+  document.getElementById('mkPEst').disabled = !ed || !x || auto;
+  ['mkPNom','mkPEmp','mkPFte','mkPCel','mkPCor','mkPSol'].forEach(function(k){ document.getElementById(k).disabled = !ed; });
+  document.getElementById('mkPGuarda').style.display = ed ? '' : 'none';
+  document.getElementById('mkPTarea').style.display = x && MK.d.nivel >= 2 ? '' : 'none';
+  document.getElementById('mkPInfo').innerHTML = x ? 'Capturado el ' + mkE(mkFmt(x.fecha)) + ' a las ' + mkE(x.hora) + ' h por <b>' + mkE(mkNombre(x.usuario)) + '</b> (' + mkE(x.usuario) + ').' +
+    (auto ? '<br>Estatus <b>' + x.estatus + '</b>: lo calcula el ERP según sus cotizaciones y ODP.' : '') : 'La fecha, la hora y tu usuario se guardan solos al capturar.';
+  var ts = x ? MK.d.tareas.filter(function(t){ return t.prospecto === x.id; }) : [];
+  document.getElementById('mkPTar').innerHTML = ts.length ? '<b>Tareas ligadas:</b> ' + ts.map(function(t){ return '<a href="#" style="color:var(--azul)" onclick="mkPCierra();mkAbre(\'' + t.id + '\');return false">' + mkE(t.titulo) + ' (' + mkE(t.etapa) + ')</a>'; }).join(' · ') : '';
+  document.getElementById('mkVeloP').className = 'mk-velo';
+}
+function mkPCierra(){ document.getElementById('mkVeloP').className = 'mk-velo oculto'; MK.pcur = null; }
+function mkPGuarda(){
+  var b = document.getElementById('mkPGuarda'); b.disabled = true;
+  var d = { id: MK.pcur ? MK.pcur.id : '', nombre: document.getElementById('mkPNom').value, empresa: document.getElementById('mkPEmp').value, fuente: document.getElementById('mkPFte').value,
+            celular: document.getElementById('mkPCel').value, correo: document.getElementById('mkPCor').value, solicitud: document.getElementById('mkPSol').value, estatus: document.getElementById('mkPEst').value };
+  mkApi('guardarProspecto', d).then(function(r){
+    b.disabled = false; MK.d.prospectos = r.prospectos; mkPCierra(); mkMsg(d.id ? 'Prospecto actualizado.' : 'Prospecto guardado.'); mkPinta();
+  }).catch(function(e){ b.disabled = false; mkErr(e); });
+}
+function mkPBorra(id){
+  var x = mkPros(id);
+  if (!confirm('¿Eliminar el prospecto «' + x.nombre + '»? Las tareas ligadas se conservan, solo pierden la relación.')) { return; }
+  mkApi('eliminarProspecto', { id: id }).then(function(r){
+    MK.d.prospectos = r.prospectos; MK.d.tareas.forEach(function(t){ if (t.prospecto === id) { t.prospecto = ''; } }); mkPinta(); mkMsg('Prospecto eliminado.');
+  }).catch(mkErr);
+}
+function mkPConvierte(id){
+  var x = mkPros(id);
+  if (!confirm('¿Crear (o ligar) el cliente «' + (x.empresa || x.nombre) + '» en el ERP para poder cotizarle?')) { return; }
+  mkApi('convertirProspecto', { id: id }).then(function(r){ MK.d.prospectos = r.prospectos; mkPinta(); mkMsg(r.mensaje || 'Listo.'); }).catch(mkErr);
+}
+function mkPTareaDe(id){ MK.preP = id; mkVista('tablero'); mkAbre(null); }
+function mkPNuevaTarea(){ if (MK.pcur) { var id = MK.pcur.id; mkPCierra(); mkPTareaDe(id); } }
 
 /* ---------- Tablero ---------- */
 function mkTarjeta(t, i){
@@ -261,6 +390,7 @@ function mkTarjeta(t, i){
     '<div class="mt"><span class="mk-pill ' + mkE(t.prioridad) + '">' + mkE(t.prioridad) + '</span>' +
     (t.fin ? '<span class="' + (venc ? 'mk-venc' : '') + '">' + (venc ? '⚠ ' : '') + mkFmt(t.fin) + '</span>' : '') +
     (t.etiquetas ? '<span>#' + mkE(t.etiquetas) + '</span>' : '') + '</div>' +
+    (t.prospecto && mkPros(t.prospecto) ? '<div style="margin-top:6px"><span class="mk-chipP" title="Prospecto">👤 ' + mkE(mkPros(t.prospecto).nombre + (mkPros(t.prospecto).empresa ? ' · ' + mkPros(t.prospecto).empresa : '')) + '</span></div>' : '') +
     '<div class="ft"><span>' + av + (t.responsables.length > 4 ? ' <small>+' + (t.responsables.length - 4) + '</small>' : '') +
     '</span><span class="mt">' + (t.comentarios ? '💬 ' + t.comentarios + ' ' : '') + (t.archivos ? '📎 ' + t.archivos : '') + '</span>' + fl + '</div></div>';
 }
@@ -341,8 +471,10 @@ function mkAbre(id, fecha){
   document.getElementById('mkIni').value = t ? t.inicio : (fecha || '');
   document.getElementById('mkFin').value = t ? t.fin : (fecha || '');
   document.getElementById('mkEti').value = t ? t.etiquetas : '';
+  mkProSelect(t ? t.prospecto : (MK.preP || ''));
+  MK.preP = '';
   MK.sel = t ? t.responsables.slice() : [];
-  ['mkTitulo','mkDesc','mkEtapa','mkPrio','mkIni','mkFin','mkEti'].forEach(function(k){ document.getElementById(k).disabled = !ed; });
+  ['mkTitulo','mkDesc','mkEtapa','mkPrio','mkIni','mkFin','mkEti','mkPro'].forEach(function(k){ document.getElementById(k).disabled = !ed; });
   mkRespPinta(ed);
   document.getElementById('mkGuardar').style.display = ed ? '' : 'none';
   document.getElementById('mkElimina').style.display = (t && (MK.d.nivel >= 3 || t.creadoPor === MK.d.yo) && MK.d.nivel >= 2) ? '' : 'none';
@@ -436,7 +568,7 @@ function mkGuardar(){
   var b = document.getElementById('mkGuardar'); b.disabled = true;
   var d = { id: MK.cur ? MK.cur.id : '', titulo: document.getElementById('mkTitulo').value, descripcion: document.getElementById('mkDesc').value,
     etapa: document.getElementById('mkEtapa').value, prioridad: document.getElementById('mkPrio').value, inicio: document.getElementById('mkIni').value,
-    fin: document.getElementById('mkFin').value, etiquetas: document.getElementById('mkEti').value, responsables: MK.sel,
+    fin: document.getElementById('mkFin').value, prospecto: document.getElementById('mkPro').value, etiquetas: document.getElementById('mkEti').value, responsables: MK.sel,
     comentarios: MK.cur ? MK.cur.comentarios : 0, archivos: MK.cur ? MK.cur.archivos : 0 };
   mkApi('guardarTarea', d).then(function(r){
     b.disabled = false;
@@ -447,6 +579,7 @@ function mkGuardar(){
     if (av.fallidos) { mkMsg('No se pudo enviar ' + av.fallidos + ' correo(s) (¿cuota diaria?).'); }
     document.getElementById('mkMTit').textContent = 'Actividad';
     document.getElementById('mkElimina').style.display = '';
+    MK.d.prospectos.forEach(function(x){ x.tareas = MK.d.tareas.filter(function(t){ return t.prospecto === x.id; }).length; });
     mkPinta(); mkPanel(); if (nuevo) { MK.det = null; mkCargaDetalle(); mkTab('a'); }
   }).catch(function(e){ b.disabled = false; mkErr(e); });
 }
