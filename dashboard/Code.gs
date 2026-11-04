@@ -2711,10 +2711,12 @@ function _crearAccesoSocio_(nombre, dias, perfil, areas) {
    Quitando "/a/macros/DOMINIO" queda https://script.google.com/macros/s/ID/exec,
    que abre para cualquier persona si la implementacion lo permite. */
 function _urlPublica_() {
-  if (URL_APP) { return URL_APP; }
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
-  return url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
+  url = url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
+  /* La implementacion que esta atendiendo la solicitud manda; URL_APP es solo respaldo (ya no se usa si hay URL /exec). */
+  if (/\/exec$/.test(url)) { return url; }
+  return URL_APP || url;
 }
 
 function _revocarSocios_(nombre) {
