@@ -800,6 +800,19 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
     };
     Object.defineProperty(google.script, 'run', { configurable: true, get: function(){ return mk({}); } });
   } catch (e) { /* sin google.script: la pagina sigue igual */ }
+  /* Guarda contra archivos mal pegados: si algun archivo incluido (ErpUI, AdminUI, MarketingUI) trae por error el HTML de index.html,
+     la pagina queda con el inicio repetido mas abajo. Se quitan las copias (ids repetidos) y se avisa cual fue. */
+  window.addEventListener('load', function(){
+    try {
+      var vistos = {}, copias = [];
+      Array.prototype.forEach.call(document.querySelectorAll('body [id]'), function(n){ if (vistos[n.id]) { copias.push(n); } else { vistos[n.id] = 1; } });
+      var raiz = copias.filter(function(n){ return !copias.some(function(o){ return o !== n && o.contains(n); }); });
+      if (raiz.length) {
+        raiz.forEach(function(n){ if (n.parentNode) { n.parentNode.removeChild(n); } });
+        if (window.console) { console.warn('Elementos repetidos eliminados (revisa que ErpUI.html, AdminUI.html y MarketingUI.html tengan solo su contenido):', copias.map(function(n){ return '#' + n.id; })); }
+      }
+    } catch (e) { /* nada */ }
+  });
   /* clic en botones, tarjetas y pestañas: Rafi aparece un momento */
   document.addEventListener('click', function(ev){
     var n = ev.target && ev.target.closest ? ev.target.closest('button,a,.pt-tile,[onclick],summary,.mk-card,.mk-dia,label.on') : null;
