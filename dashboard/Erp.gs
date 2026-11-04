@@ -1469,10 +1469,37 @@ function rolDe(ses) {
     if (x) { const rol = str_(x.Rol).toUpperCase(); return ROLES_ERP[rol] ? rol : null; }
   }
   const ac = _accesoDeCorreo_(correo);
-  if (ac && ac.areas.indexOf('erp') >= 0) return ac.capturar ? 'COMERCIAL' : 'CONSULTA';
+  if (ac && ac.areas.indexOf('erp') >= 0) return (ac.niveles && ac.niveles.erp !== undefined ? ac.niveles.erp >= 2 : ac.capturar) ? 'COMERCIAL' : 'CONSULTA';
   if (ses.rol === 'SOCIO') return 'DIRECCION';
   return null;
 }
+/** Nivel de permiso de la persona en el ERP: 1 ver, 2 escribir (crear), 3 editar (modificar y eliminar).
+ *  Lo fija la hoja ACCESOS (modulo Administracion); sin ese dato, el rol de ERP_Usuarios manda (3) y un socio solo ve (1). */
+function nivel(ses) {
+  if (!ses || !ses.correo) return 0;
+  if (ses.rol === 'MASTER' && !ses.porClave) return 3;
+  if (ses.porClave) return 1;
+  const ac = _accesoDeCorreo_(String(ses.correo).toLowerCase());
+  if (ac && ac.niveles && ac.niveles.erp !== undefined) return ac.niveles.erp;
+  return ses.rol === 'SOCIO' ? 1 : 3;
+}
+
+/** Que nivel pide cada accion: 1 consultar, 2 crear, 3 modificar / eliminar / cancelar / administrar. */
+function claseAccion(accion, p) {
+  p = p || {};
+  if (LECTURAS[accion]) return 1;
+  const existe = function (k) { return str_(p[k]) !== ''; };
+  switch (accion) {
+    case 'saveCliente': case 'saveProveedor': return existe('ID') ? 3 : 2;
+    case 'saveCot': case 'saveODP': return existe('Folio') ? 3 : 2;
+    case 'saveMaterial': return existe('Clave') && find_('Materiales', 'Clave', p.Clave) ? 3 : 2;
+    case 'saveTarifa': return existe('MaterialOriginal') ? 3 : 2;
+    case 'saveSeg': case 'aprobarCot': case 'consumir': case 'agregarCosto': case 'saveFactura': case 'registrarCobro': case 'saveCompra': case 'registrarPago':
+    case 'conteo': case 'registrarProduccion': return 2;
+    default: return 3;   // aprobarCot, devolver, anular*, cancelar*, deleteTarifa, saveUsuario, saveConfig...
+  }
+}
+
 function usuarioDe_(ses) {
   const rol = rolDe(ses);
   if (!rol) throw new Error('Sin autorizacion para esta accion.');
@@ -1481,7 +1508,7 @@ function usuarioDe_(ses) {
     const x = read_('Usuarios').find(function (r) { return str_(r.Email).toLowerCase() === String(ses.correo).toLowerCase(); });
     if (x && str_(x.Nombre)) nombre = str_(x.Nombre);
   }
-  return { email: String(ses.correo).toLowerCase(), nombre: nombre, rol: rol };
+  return { email: String(ses.correo).toLowerCase(), nombre: nombre, rol: rol, nivel: nivel(ses) };
 }
 
 // ==================== PRODUCCION (BASE) Y VENTAS (dashboard) ====================
@@ -1689,7 +1716,7 @@ function correoRegistrado(correo) {
   return read_('Usuarios').some(function (r) { return str_(r.Email).toLowerCase() === correo && str_(r.Activo).toUpperCase() !== 'NO'; });
 }
 
-return { run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+return { nivel: nivel, claseAccion: claseAccion, run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================
@@ -1699,6 +1726,11 @@ function erpApi(accion, payloadJson, clave) {
     var ses = _ses_(clave, !ERP.esLectura(String(accion)));
     if (!ERP.rolDe(ses)) { _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion); throw new Error('Sin autorizacion para esta accion.'); }
     var p = payloadJson ? JSON.parse(payloadJson) : {};
+    var pide = ERP.claseAccion(String(accion), p || {});
+    if (ERP.nivel(ses) < pide) {
+      _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion + ' nivel ' + ERP.nivel(ses) + ' < ' + pide);
+      throw new Error(pide >= 3 ? 'Tu permiso en el ERP no incluye editar ni eliminar.' : 'Tu permiso en el ERP es solo de consulta.');
+    }
     return JSON.stringify({ ok: true, data: ERP.run(String(accion), p || {}, ses) });
   } catch (e) {
     return JSON.stringify({ ok: false, error: (e && e.message) || String(e) });

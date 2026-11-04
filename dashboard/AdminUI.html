@@ -1,0 +1,227 @@
+<!-- ADMINISTRACION de la intranet: invitar personas y darles permisos por area. Se incluye desde index.html.
+     Solo la ven los correos de ROLES.ADMIN; el servidor lo valida en cada llamada. -->
+<style>
+#appAdmin{min-height:100vh; background:var(--fondo); font-family:'Montserrat',-apple-system,'Segoe UI',Arial,sans-serif; color:var(--tinta); font-size:14px}
+#appAdmin.oculto{display:none !important}
+#appAdmin *{box-sizing:border-box}
+.adm-top{background:var(--azul-b); color:#fff; display:flex; align-items:center; gap:16px; padding:10px 20px; position:sticky; top:0; z-index:30}
+.adm-top img{height:34px; width:auto; display:block}
+.adm-top h1{font:700 18px Khand,Poppins,sans-serif; letter-spacing:.04em; margin:0; text-transform:uppercase}
+.adm-top .adm-quien{margin-left:auto; font-size:12px; color:#D6E0F7; text-align:right}
+.adm-main{max-width:1280px; margin:0 auto; padding:20px 24px 60px}
+.adm-card{background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px; margin-bottom:18px; box-shadow:var(--sombra)}
+.adm-card h2{margin:0 0 4px; font:700 20px Khand,Poppins,sans-serif; color:var(--azul); text-transform:uppercase; letter-spacing:.02em}
+.adm-card .adm-sub{margin:0 0 14px; color:var(--tinta-2); font-size:13px}
+.adm-form{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:22px}
+.adm-form label.t{display:block; font:700 11px Montserrat,sans-serif; color:var(--tinta-2); text-transform:uppercase; letter-spacing:.04em; margin:0 0 4px}
+.adm-form textarea,.adm-form input[type=text]{width:100%; padding:9px 11px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff}
+.adm-form textarea{min-height:92px; resize:vertical}
+.adm-mat{width:100%; border-collapse:collapse}
+.adm-mat td{padding:7px 6px; border-bottom:1px solid var(--linea); vertical-align:middle}
+.adm-mat td:first-child{font-weight:600}
+.adm-mat small{display:block; color:var(--tinta-3); font-weight:400; font-size:11px; line-height:1.3}
+.adm-mat td:last-child{width:230px}
+.adm-mat select{padding:7px 9px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff; width:100%; min-width:0}
+.adm-chk{display:flex; align-items:center; gap:8px; margin:10px 0; font-size:13px}
+.adm-chk input{width:16px; height:16px}
+.adm-btn{background:var(--azul); color:#fff; border:none; border-radius:8px; padding:10px 18px; font:700 13px Montserrat,sans-serif; cursor:pointer}
+.adm-btn:hover{background:var(--azul-b)} .adm-btn[disabled]{opacity:.5; cursor:default}
+.adm-btn.nar{background:var(--naranja)} .adm-btn.nar:hover{background:var(--naranja-d)}
+.adm-btn.sec{background:#fff; color:var(--azul); border:1px solid var(--azul)}
+.adm-btn.rojo{background:var(--rojo)}
+.adm-btn.chico{padding:5px 10px; font-size:12px; height:auto; line-height:1.2}
+.adm-tabla{width:100%; border-collapse:collapse; min-width:960px}
+.adm-acc button{white-space:nowrap}
+.adm-tabla th{background:var(--azul-t); color:var(--azul); font:700 11px Montserrat,sans-serif; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:9px 10px; white-space:nowrap}
+.adm-tabla td{padding:8px 10px; border-top:1px solid var(--linea); font-size:13px; vertical-align:middle; text-align:left}
+.adm-scroll{overflow-x:auto}
+.adm-pill{display:inline-block; padding:2px 9px; border-radius:999px; font:700 11px Montserrat,sans-serif; background:#EEF2F6; color:var(--tinta-2); white-space:nowrap}
+.adm-pill.v{background:var(--azul-t); color:var(--azul)} .adm-pill.e{background:var(--ambar-l); color:#9A6A00} .adm-pill.x{background:var(--verde-l); color:var(--verde)}
+.adm-pill.act{background:var(--verde-l); color:var(--verde)} .adm-pill.pen{background:var(--ambar-l); color:#9A6A00}
+.adm-res{margin-top:12px; font-size:13px}
+.adm-res div{padding:6px 10px; border-radius:8px; margin-bottom:5px; background:var(--verde-l); color:var(--verde)}
+.adm-res div.mal{background:var(--rojo-l); color:var(--rojo)}
+.adm-doms{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px}
+.adm-acc{display:flex; gap:6px; flex-wrap:wrap}
+@media (max-width:900px){ .adm-form{grid-template-columns:1fr} .adm-main{padding:14px 12px 50px} }
+</style>
+
+<div id="appAdmin" class="oculto">
+  <div class="adm-top">
+    <img id="admLogo" alt="bigfoot print">
+    <h1>Administración</h1>
+    <button type="button" class="b-inicio" onclick="admSalir()" style="margin-left:8px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>Inicio</button>
+    <div class="adm-quien" id="admQuien"></div>
+  </div>
+  <main class="adm-main">
+    <section class="adm-card">
+      <h2 id="admTitForm">Invitar personas</h2>
+      <p class="adm-sub" id="admSubForm">Escribe uno o varios correos (separados por coma, espacio o renglón), elige qué puede hacer cada uno en cada área y envía la invitación. Quien recibe el correo entra con su dirección y un código de 6 dígitos.</p>
+      <div class="adm-form">
+        <div>
+          <label class="t" for="admCorreos">Correos</label>
+          <textarea id="admCorreos" placeholder="nombre@empresa.com, otra@empresa.com"></textarea>
+          <label class="t" for="admNotas" style="margin-top:12px">Mensaje o nota (opcional; sale en la invitación)</label>
+          <input type="text" id="admNotas" maxlength="300" placeholder="Ej. Bienvenido, aquí consultas las ODP del día">
+          <div class="adm-chk"><input type="checkbox" id="admVentas"><label for="admVentas">Puede ver ventas, costos y margen</label></div>
+          <div class="adm-chk"><input type="checkbox" id="admEnviar" checked><label for="admEnviar">Enviar la invitación por correo</label></div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px">
+            <button type="button" class="adm-btn nar" id="admGuardar" onclick="admGuardar()">Guardar y enviar invitación</button>
+            <button type="button" class="adm-btn sec" id="admCancelar" onclick="admLimpiar()" style="display:none">Cancelar edición</button>
+          </div>
+          <div class="adm-res" id="admRes"></div>
+        </div>
+        <div>
+          <label class="t">Permisos por área</label>
+          <table class="adm-mat" id="admMat"></table>
+          <p class="adm-sub" style="margin:10px 0 0; font-size:12px"><b>Ver</b> consulta. <b>Escribir</b> además crea registros nuevos. <b>Editar</b> además modifica, cancela y elimina. Talento Humano lo ve todo el mundo.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="adm-card">
+      <h2>Personas con acceso</h2>
+      <p class="adm-sub" id="admSubTabla">Cargando…</p>
+      <div class="adm-scroll"><table class="adm-tabla" id="admTabla"></table></div>
+    </section>
+
+    <section class="adm-card">
+      <h2>Dominios con acceso base</h2>
+      <p class="adm-sub">Cualquier correo de estos dominios puede pedir su código y entra a Talento Humano. Para darle más, invítalo arriba con sus permisos. Los dominios se cambian en el código (ROLES.DOMINIOS).</p>
+      <div class="adm-doms" id="admDoms"></div>
+      <h3 style="margin:16px 0 6px; font-size:13px; color:var(--azul)">Accesos definidos en el código (solo lectura)</h3>
+      <div class="adm-scroll"><table class="adm-tabla" id="admCodigo"></table></div>
+    </section>
+  </main>
+</div>
+
+<script>
+var ADM = { d: null, edita: '' };
+var ADM_NIV = ['Sin acceso', 'Ver', 'Ver y escribir', 'Ver, escribir y editar'];
+
+function admLlama(fn, args){
+  return new Promise(function(res, rej){
+    var r = google.script.run
+      .withSuccessHandler(res)
+      .withFailureHandler(function(err){ if (esSesionPerdida(err)) { sesionPerdida(); } rej(err); });
+    r[fn].apply(r, args.concat([CLAVE]));
+  });
+}
+function admEsc(s){ return esc(s == null ? '' : s); }
+function admMsg(m){ ptToast(m); }
+
+function abrirAdmin(){
+  document.getElementById('appPortal').className = 'oculto';
+  document.getElementById('appAdmin').className = '';
+  window.scrollTo(0, 0);
+  var l = document.getElementById('admLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
+  admCarga();
+}
+function admSalir(){
+  document.getElementById('appAdmin').className = 'oculto';
+  document.getElementById('appPortal').className = '';
+  window.scrollTo(0, 0);
+}
+function admCarga(){
+  admLlama('adminListar', []).then(function(d){
+    ADM.d = d;
+    document.getElementById('admQuien').innerHTML = '<b>' + admEsc(d.yo) + '</b><br>Administrador · ' + d.cuota + ' correos disponibles hoy';
+    if (!ADM.edita) { admPintaMatriz({}); }
+    admPintaTabla();
+    document.getElementById('admDoms').innerHTML = d.dominios.map(function(x){ return '<span class="adm-pill v">@' + admEsc(x) + '</span>'; }).join('');
+    document.getElementById('admCodigo').innerHTML = '<thead><tr><th>Correo</th><th>Lista</th></tr></thead><tbody>' +
+      d.codigo.map(function(x){ return '<tr><td>' + admEsc(x.correo) + '</td><td>' + admEsc(x.lista) + '</td></tr>'; }).join('') + '</tbody>';
+  }, function(e){ document.getElementById('admSubTabla').textContent = e && e.message ? e.message : 'No se pudo cargar.'; });
+}
+function admPintaMatriz(niv){
+  var h = '';
+  ADM.d.areas.forEach(function(a){
+    var ops = '';
+    for (var n = 0; n <= a.max; n++) { ops += '<option value="' + n + '"' + (Number(niv[a.id] || 0) === n ? ' selected' : '') + '>' + ADM_NIV[n] + '</option>'; }
+    h += '<tr><td>' + admEsc(a.nombre) + '<small>' + admEsc(a.nota) + '</small></td><td><select data-area="' + a.id + '">' + ops + '</select></td></tr>';
+  });
+  document.getElementById('admMat').innerHTML = h;
+}
+function admNivPill(n){
+  if (!n) { return '<span class="adm-pill">—</span>'; }
+  return '<span class="adm-pill ' + (n === 1 ? 'v' : n === 2 ? 'e' : 'x') + '">' + (n === 1 ? 'Ver' : n === 2 ? 'Escribir' : 'Editar') + '</span>';
+}
+function admPintaTabla(){
+  var u = ADM.d.usuarios;
+  document.getElementById('admSubTabla').textContent = u.length ? u.length + ' personas con permisos asignados. "Pendiente" = aún no ha entrado.' : 'Todavía no hay personas con permisos asignados.';
+  if (!u.length) { document.getElementById('admTabla').innerHTML = ''; return; }
+  var h = '<thead><tr><th>Correo</th><th>Estado</th>' + ADM.d.areas.map(function(a){ return '<th>' + admEsc(a.nombre) + '</th>'; }).join('') + '<th>Ventas</th><th>Invitó</th><th></th></tr></thead><tbody>';
+  u.forEach(function(x, i){
+    h += '<tr><td><b>' + admEsc(x.correo) + '</b>' + (x.notas ? '<br><small style="color:var(--tinta-3)">' + admEsc(x.notas) + '</small>' : '') + '</td>' +
+      '<td><span class="adm-pill ' + (x.estado === 'Activo' ? 'act' : 'pen') + '">' + x.estado + '</span>' + (x.ultimoAcceso ? '<br><small>' + admEsc(x.ultimoAcceso) + '</small>' : '') + '</td>' +
+      ADM.d.areas.map(function(a){ return '<td>' + admNivPill(x.niveles[a.id]) + '</td>'; }).join('') +
+      '<td>' + (x.verVentas ? '<span class="adm-pill x">Sí</span>' : '<span class="adm-pill">No</span>') + '</td>' +
+      '<td><small>' + admEsc(x.invitadoPor) + '<br>' + admEsc(x.invitadoEn) + '</small></td>' +
+      '<td><div class="adm-acc"><button class="adm-btn chico" onclick="admEditar(' + i + ')">Editar</button>' +
+      '<button class="adm-btn chico sec" onclick="admReenviar(' + i + ')">Reenviar</button>' +
+      '<button class="adm-btn chico sec" onclick="admCierra(' + i + ')">Cerrar sesión</button>' +
+      '<button class="adm-btn chico rojo" onclick="admQuitar(' + i + ')">Quitar</button></div></td></tr>';
+  });
+  document.getElementById('admTabla').innerHTML = h + '</tbody>';
+}
+function admNiveles(){
+  var n = {};
+  document.querySelectorAll('#admMat select').forEach(function(s){ n[s.getAttribute('data-area')] = Number(s.value); });
+  return n;
+}
+function admLimpiar(){
+  ADM.edita = '';
+  document.getElementById('admCorreos').value = ''; document.getElementById('admCorreos').disabled = false;
+  document.getElementById('admNotas').value = ''; document.getElementById('admVentas').checked = false; document.getElementById('admEnviar').checked = true;
+  document.getElementById('admTitForm').textContent = 'Invitar personas';
+  document.getElementById('admGuardar').textContent = 'Guardar y enviar invitación';
+  document.getElementById('admCancelar').style.display = 'none';
+  admPintaMatriz({});
+}
+function admEditar(i){
+  var x = ADM.d.usuarios[i];
+  ADM.edita = x.correo;
+  document.getElementById('admCorreos').value = x.correo; document.getElementById('admCorreos').disabled = true;
+  document.getElementById('admNotas').value = x.notas || ''; document.getElementById('admVentas').checked = !!x.verVentas; document.getElementById('admEnviar').checked = false;
+  document.getElementById('admTitForm').textContent = 'Permisos de ' + x.correo;
+  document.getElementById('admGuardar').textContent = 'Guardar permisos';
+  document.getElementById('admCancelar').style.display = '';
+  admPintaMatriz(x.niveles);
+  window.scrollTo(0, 0);
+}
+function admGuardar(){
+  var b = document.getElementById('admGuardar'), t = b.textContent;
+  b.disabled = true; b.textContent = 'Guardando…';
+  var d = { correos: document.getElementById('admCorreos').value, niveles: admNiveles(), verVentas: document.getElementById('admVentas').checked,
+            notas: document.getElementById('admNotas').value, enviar: document.getElementById('admEnviar').checked };
+  admLlama('adminGuardar', [d]).then(function(r){
+    b.disabled = false; b.textContent = t;
+    var h = '';
+    r.resultados.forEach(function(x){
+      var ok = x.ok && !x.error;
+      h += '<div class="' + (ok ? '' : 'mal') + '">' + admEsc(x.correo) + ': ' + (!x.ok ? admEsc(x.error) : x.error ? admEsc(x.error) : (x.nuevo ? 'invitado' : 'permisos actualizados') + (x.enviado ? ' y correo enviado' : '')) + '</div>';
+    });
+    document.getElementById('admRes').innerHTML = h;
+    if (ADM.edita) { admLimpiar(); } else { document.getElementById('admCorreos').value = ''; }
+    admCarga();
+  }, function(e){ b.disabled = false; b.textContent = t; admMsg(e && e.message ? e.message : 'No se pudo guardar.'); });
+}
+function admReenviar(i){
+  var x = ADM.d.usuarios[i];
+  admLlama('adminReenviar', [x.correo]).then(function(){ admMsg('Invitación reenviada a ' + x.correo + '.'); admCarga(); }, function(e){ admMsg(e && e.message ? e.message : 'No se pudo reenviar.'); });
+}
+function admCierra(i){
+  var x = ADM.d.usuarios[i];
+  if (!confirm('¿Cerrar las sesiones abiertas de ' + x.correo + '? Tendrá que pedir un código nuevo para entrar.')) { return; }
+  admLlama('adminCerrarSesiones', [x.correo]).then(function(){ admMsg('Sesiones cerradas.'); }, function(e){ admMsg(e && e.message ? e.message : 'No se pudo.'); });
+}
+function admQuitar(i){
+  var x = ADM.d.usuarios[i];
+  if (!confirm('¿Quitar a ' + x.correo + ' de la lista de accesos? Se cierran sus sesiones y pierde los permisos asignados.')) { return; }
+  admLlama('adminRevocar', [x.correo]).then(function(r){
+    admMsg(r.dominio ? 'Quitado. Su correo es de un dominio autorizado: aún puede entrar a Talento Humano.' : 'Quitado. Ya no puede entrar.');
+    if (ADM.edita === x.correo) { admLimpiar(); }
+    admCarga();
+  }, function(e){ admMsg(e && e.message ? e.message : 'No se pudo quitar.'); });
+}
+</script>

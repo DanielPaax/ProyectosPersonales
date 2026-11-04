@@ -46,13 +46,16 @@ var ROLES = {
      pedirlo todos los correos de estos DOMINIOS y los correos sueltos de ACCESO_EXTRA (o de
      cualquier lista de roles). Su rol sale de las mismas listas de arriba; sin lista = LECTOR.
      BLOQUEADOS nunca entran. */
-  DOMINIOS:     ['gpowib.com', 'bfprint.com.mx', 'imjmedia.com.mx'],
+  DOMINIOS:     ['gpowib.com', 'bfprint.com.mx', 'imjmedia.com.mx', 'imjfest.com'],
   ACCESO_EXTRA: [],
   BLOQUEADOS:   [],
   /* FINANZAS: solo MASTER y los correos de esta lista (los socios NO entran, salvo que se les dé el área). */
   FINANZAS:    [],
   COMERCIAL:   [],
-  OPERACIONES: []
+  OPERACIONES: [],
+  /* ADMIN: el modulo de Administracion (invitar personas y darles permisos por area). Solo estos correos, y solo en codigo:
+     ni la hoja ACCESOS ni nadie desde la intranet puede agregar a otro administrador. */
+  ADMIN:       ['danielpaax@gmail.com']
 };
 
 /* ===================== AREAS DE LA INTRANET ===================== */
@@ -80,6 +83,9 @@ var AREAS = [
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
+  { id: 'admin', nombre: 'Administración', icono: 'llave',
+    desc: 'Invita personas a la intranet y define qué puede ver, escribir y editar cada una. Solo administradores.',
+    acceso: { roles: [], socios: false }, vista: 'admin', soloAdmin: true },
   { id: 'erp', nombre: 'ERP', icono: 'engrane',
     desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
     acceso: { roles: [], socios: true }, vista: 'erp' }
@@ -90,6 +96,28 @@ function _areaPorId_(id) {
   return null;
 }
 
+/* NIVEL de permiso de una persona en un area: 0 sin acceso, 1 ver, 2 escribir (crear), 3 editar (modificar y eliminar).
+   MASTER = 3 en todo. La hoja ACCESOS (columna PERMISOS) fija el nivel por area; sin ese dato, quien esta en una lista de ROLES
+   tiene 3 en Dashboard y ERP si es de la lista CAPTURA, y 1 en lo demas a lo que entra. Los enlaces personales solo ven. */
+function _nivelArea_(ses, id) {
+  if (!ses) { return 0; }
+  if (ses.rol === 'MASTER' && !ses.porClave) { return 3; }
+  var area = _areaPorId_(id);
+  if (!area || !_accesoArea_(ses, area)) { return 0; }
+  if (ses.porClave) { return 1; }
+  var ac = _accesoDeCorreo_(ses.correo);
+  if (ac && ac.niveles && ac.niveles[id] !== undefined) { return ac.niveles[id]; }
+  if ((id === 'dashboard' || id === 'erp') && _enLista_(ROLES.CAPTURA || [], String(ses.correo).toLowerCase())) { return 3; }
+  if (ac && ac.areas.indexOf(id) >= 0) { return ac.capturar && (id === 'dashboard' || id === 'erp') ? 3 : 1; }
+  return 1;
+}
+
+function _exigeNivel_(ses, id, nivel) {
+  if (_nivelArea_(ses, id) >= nivel) { return true; }
+  _bitacora_(ses.correo, 'ACCESO_NEGADO', 'nivel ' + id + ' requeria=' + nivel);
+  throw new Error('Sin autorizacion para esta accion.');
+}
+
 /* Los datos del tablero solo salen a quien tiene Dashboard BFp o Direccion (que lo replica en lectura). */
 function _exigeTablero_(ses) {
   if (_accesoArea_(ses, _areaPorId_('dashboard')) || _accesoArea_(ses, _areaPorId_('direccion'))) { return; }
@@ -98,8 +126,13 @@ function _exigeTablero_(ses) {
 }
 
 /* ¿Esta sesion entra a esta area? MASTER entra a todas. */
+function _esAdmin_(ses) {
+  return !!(ses && ses.correo && !ses.porClave && _enLista_(ROLES.ADMIN || [], String(ses.correo).toLowerCase()));
+}
+
 function _accesoArea_(ses, area) {
   if (!area) { return false; }
+  if (area.soloAdmin) { return _esAdmin_(ses); }   /* ni MASTER ni la hoja ACCESOS: solo ROLES.ADMIN */
   var a = area.acceso || {};
   if (ses.rol === 'MASTER') { return true; }
   if (a.todos) { return true; }
@@ -444,10 +477,21 @@ function verificarCodigo(correo, codigo) {
   cache.remove(clave);
   if (!_correoPermitido_(c)) { throw new Error('Este correo no tiene acceso a la intranet.'); }
   _bitacora_(c, 'LOGIN_CODIGO', 'sesion de ' + SESION_DIAS + ' dias');
+  try { _marcaAcceso_(c); } catch (e) { /* solo informativo */ }
   return { ok: true, token: _crearToken_(c), correo: c, dias: SESION_DIAS };
 }
 
 /* Menu: Produccion > Acceso por correo. Solo MASTER. */
+/* Cierra en todos sus navegadores las sesiones de un correo (sin menus). */
+function _revocaSesiones_(correo) {
+  var c = String(correo || '').trim().toLowerCase();
+  if (!c) { return; }
+  var p = PropertiesService.getScriptProperties(), rev = {};
+  try { rev = JSON.parse(p.getProperty('sesion_revocadas') || '{}'); } catch (e) { rev = {}; }
+  rev[c] = Math.floor(new Date().getTime() / 1000) + 1;
+  p.setProperty('sesion_revocadas', JSON.stringify(rev));
+}
+
 function cerrarSesionesCorreo() {
   var ses = _exigeMasterMenu_(), ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Cerrar sesiones', 'Correo cuya sesión quieres cerrar (en todos sus navegadores):', ui.ButtonSet.OK_CANCEL);
@@ -1481,6 +1525,7 @@ function cargarTablero(filtros, sub, clave) {
 function cargarCatalogos(clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  _exigeNivel_(ses, 'dashboard', 2);
   return _leerCatalogos_();
 }
 
@@ -1576,6 +1621,7 @@ function _etiquetaSemana_(lunesIso, existentes) {
 function guardarTrabajo(d, clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  _exigeNivel_(ses, 'dashboard', 2);
   return _guardarTrabajoCore_(d, ses);
 }
 
@@ -2228,6 +2274,7 @@ function _tarifaMat_(material, tar, cats) {
 function cargarCatalogosVenta(clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 2);
   var cats = _leerCatalogos_();
   var tar = _leerTarifas_();
   var filas = _leerVentas_();
@@ -2286,6 +2333,7 @@ function listarVentas(filtro, clave) {
 function guardarVenta(d, clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 2);
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
   var cats = _leerCatalogos_();
@@ -2416,6 +2464,7 @@ function guardarVenta(d, clave) {
 function actualizarVenta(d, clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 3);
   if (!d || !d.id) { throw new Error('Falta el ID del proyecto.'); }
   var cats = _leerCatalogos_();
   var id = _num_(d.id);
