@@ -51,7 +51,7 @@ const SCHEMA = {
   CompraDetalle: ['CompraID', 'Clave', 'Cantidad', 'CostoUnit', 'Importe'],
   Pagos:         ['ID', 'Fecha', 'CompraID', 'Monto', 'Referencia', 'Usuario'],
   Cotizaciones:  ['Folio', 'Fecha', 'ClienteID', 'Cliente', 'Comercial', 'Descripcion', 'M2', 'Subtotal', 'IVA', 'Total', 'Estatus', 'ODP', 'ProximoSeguimiento', 'Notas',
-                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto', 'AgenteVentas', 'DescuentoPct', 'Indicaciones'],
+                  'Proyecto', 'RazonSocial', 'Terminados', 'Descuento', 'TipoProyecto', 'AgenteVentas', 'DescuentoPct', 'Indicaciones', 'NegociacionID'],
   CotDetalle:    ['Folio', 'Linea', 'Descripcion', 'Ancho', 'Alto', 'Cantidad', 'M2', 'PrecioM2', 'PrecioUnit', 'Importe', 'Unidad',
                   'Impresion', 'TintaBlanca', 'Barniz', 'Acabado1', 'Param1', 'Acabado2', 'Param2', 'Acabado3', 'Param3', 'Detalle', 'CostoMaterial', 'CostoTinta', 'CostoAcabados', 'PrecioManual'],
   Seguimiento:   ['ID', 'Fecha', 'ClienteID', 'Cliente', 'Cotizacion', 'Comercial', 'Tipo', 'Nota', 'ProximaAccion'],
@@ -65,17 +65,22 @@ const SCHEMA = {
   Facturas:      ['ID', 'Fecha', 'FolioSAT', 'ClienteID', 'Cliente', 'Comercial', 'ODP', 'Subtotal', 'IVA', 'Total', 'Vencimiento', 'Cobrado', 'Saldo', 'Estatus', 'Notas'],
   Cobros:        ['ID', 'Fecha', 'FacturaID', 'Monto', 'Referencia', 'Usuario'],
   Conteos:       ['ID', 'Fecha', 'Clave', 'Sistema', 'Fisico', 'Diferencia', 'CostoUnit', 'ImporteDif', 'Aplicado', 'Usuario'],
+  Negociaciones: ['ID', 'Nombre', 'Monto', 'Fecha', 'Hora', 'ClienteID', 'Cliente', 'ContactoCargo', 'ContactoNombre', 'ContactoTelefono', 'ContactoCorreo', 'ContactoCumple',
+                  'ResponsableEmail', 'ResponsableNombre', 'Etapa', 'Cotizacion', 'ODP', 'MotivoPerdido', 'MotivoDetalle', 'PerdidoEn', 'EtapaDesde', 'CreadoPor', 'ActualizadoEn', 'Historial'],
+  NegComentarios: ['ID', 'Negociacion', 'Autor', 'AutorNombre', 'Fecha', 'Hora', 'Tipo', 'Texto', 'Menciones'],
+  NegArchivos:   ['ID', 'Negociacion', 'ComentarioID', 'Tipo', 'Nombre', 'Mime', 'DriveID', 'Tamano', 'Usuario', 'UsuarioNombre', 'Fecha', 'Hora', 'Etapa'],
+  Notificaciones: ['ID', 'Fecha', 'Hora', 'Email', 'Titulo', 'Texto', 'Negociacion', 'Leida'],
 };
 
 // Permisos por rol
 const ROLES_ERP = {
   ADMIN:      ['*'],
-  DIRECCION:  ['dash', 'fin', 'reportes', 'crm_ver', 'odp_ver', 'inv_ver', 'cxc_ver', 'cxp_ver'],
-  COMERCIAL:  ['dash', 'crm', 'odp_ver', 'cxc_ver'],
-  PRODUCCION: ['dash', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod'],
-  CONSULTA:   ['dash', 'crm_ver', 'odp_ver'],
-  ALMACEN:    ['dash', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo'],
-  FINANZAS:   ['dash', 'fin', 'reportes', 'compras', 'cxp', 'cxp_ver', 'cxc', 'cxc_ver', 'facturas', 'odp_ver', 'inv_ver', 'crm_ver'],
+  DIRECCION:  ['dash', 'fin', 'reportes', 'crm_ver', 'odp_ver', 'inv_ver', 'cxc_ver', 'cxp_ver', 'neg_ver'],
+  COMERCIAL:  ['dash', 'crm', 'odp_ver', 'cxc_ver', 'neg', 'neg_ver'],
+  PRODUCCION: ['dash', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod', 'neg', 'neg_ver'],
+  CONSULTA:   ['dash', 'crm_ver', 'odp_ver', 'neg_ver'],
+  ALMACEN:    ['dash', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo', 'neg_ver'],
+  FINANZAS:   ['dash', 'fin', 'reportes', 'compras', 'cxp', 'cxp_ver', 'cxc', 'cxc_ver', 'facturas', 'odp_ver', 'inv_ver', 'crm_ver', 'neg_ver'],
 };
 
 const TIPOS_MATERIAL = ['Sustrato', 'Tinta', 'Consumible'];
@@ -113,8 +118,9 @@ const CONFIG_DEFAULTS = [
   ['COT_CUENTA', '0110213225', 'Número de cuenta (PDF de cotización)'],
   ['DIAS_CREDITO_PROV', '30', 'Días de crédito para proveedores nuevos que se dan de alta desde un XML'],
   ['RECIBE_PRODUCCION', 'ERNESTO RUIZ / CÉSAR MÁRQUEZ', 'Quién recibe en producción (sale en la ODP)'],
+  ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '7';
+const SCHEMA_VER = '8';
 
 
 
@@ -160,6 +166,8 @@ const ACTIONS = {
   agregarCosto: a_agregarCosto, anularCosto: a_anularCosto,
   facturas: a_facturas, facturaDetalle: a_facturaDetalle, saveFactura: a_saveFactura, cancelarFactura: a_cancelarFactura, registrarCobro: a_registrarCobro,
   reporteVentas: a_reporteVentas, catalogosProd: a_catalogosProd, produccionODP: a_produccionODP, registrarProduccion: a_registrarProduccion,
+  negociaciones: a_negociaciones, negDetalle: a_negDetalle, saveNeg: a_saveNeg, moveNeg: a_moveNeg, perdidoNeg: a_perdidoNeg, negLigarCot: a_negLigarCot,
+  negComentar: a_negComentar, negSubir: a_negSubir, negArchivo: a_negArchivo, notifs: a_notifs, notifLeer: a_notifLeer,
   usuarios: a_usuarios, saveUsuario: a_saveUsuario, config: a_config, saveConfig: a_saveConfig,
 };
 
@@ -286,6 +294,7 @@ function a_lookups(u) {
       .map(function (o) { return { Folio: o.Folio, Cliente: o.Cliente, Descripcion: o.Descripcion }; }).reverse(),
     comerciales: read_('Usuarios').filter(function (x) { return ['COMERCIAL', 'ADMIN', 'DIRECCION'].indexOf(str_(x.Rol).toUpperCase()) >= 0 && str_(x.Activo).toUpperCase() !== 'NO'; })
       .map(function (x) { return { Email: str_(x.Email).toLowerCase(), Nombre: x.Nombre }; }),
+    usuarios: negUsuarios_(),
   };
 }
 
@@ -934,6 +943,12 @@ function a_saveCot(u, p) {
                  ProximoSeguimiento: fechaOpc_(p.ProximoSeguimiento, 'Próximo seguimiento'), Notas: str_(p.Notas),
                  Proyecto: proyecto, TipoProyecto: str_(p.TipoProyecto), RazonSocial: str_(p.RazonSocial), Terminados: str_(p.Terminados), Descuento: descu || '',
                  AgenteVentas: agente, DescuentoPct: pct || '', Indicaciones: str_(p.Indicaciones) };
+  let negLiga = null;
+  if (!str_(p.Folio) && str_(p.NegociacionID)) {
+    negLiga = mustFind_('Negociaciones', 'ID', p.NegociacionID, 'Negociación');
+    if (str_(negLiga.Cotizacion)) throw new Error('La negociación ' + negLiga.ID + ' ya tiene la cotización ' + negLiga.Cotizacion + '.');
+    data.NegociacionID = negLiga.ID;
+  }
   let c;
   if (str_(p.Folio)) {
     c = mustFind_('Cotizaciones', 'Folio', p.Folio, 'Cotización'); ownOr_(u, c);
@@ -947,6 +962,7 @@ function a_saveCot(u, p) {
   }
   deleteWhere_('CotDetalle', function (l) { return str_(l.Folio) === str_(c.Folio); });
   insertMany_('CotDetalle', lineas.map(function (l, i) { return Object.assign({ Folio: c.Folio, Linea: i + 1 }, l); }));
+  if (str_(c.NegociacionID)) negSincronizaCot_(c, u, !!negLiga);
   return clean_(c);
 }
 
@@ -965,6 +981,7 @@ function a_aprobarCot(u, p) {
              Archivo: c.Proyecto || '', Acabados: str_(l.Detalle) };
   }));
   update_('Cotizaciones', c, { Estatus: 'Aprobada', ODP: o.Folio });
+  if (str_(c.NegociacionID)) negAprobada_(c.NegociacionID, o.Folio, u, !!p._neg);
   return { Folio: o.Folio };
 }
 
@@ -1469,10 +1486,39 @@ function rolDe(ses) {
     if (x) { const rol = str_(x.Rol).toUpperCase(); return ROLES_ERP[rol] ? rol : null; }
   }
   const ac = _accesoDeCorreo_(correo);
-  if (ac && ac.areas.indexOf('erp') >= 0) return ac.capturar ? 'COMERCIAL' : 'CONSULTA';
+  if (ac && ac.areas.indexOf('erp') >= 0) return (ac.niveles && ac.niveles.erp !== undefined ? ac.niveles.erp >= 2 : ac.capturar) ? 'COMERCIAL' : 'CONSULTA';
   if (ses.rol === 'SOCIO') return 'DIRECCION';
   return null;
 }
+/** Nivel de permiso de la persona en el ERP: 1 ver, 2 escribir (crear), 3 editar (modificar y eliminar).
+ *  Lo fija la hoja ACCESOS (modulo Administracion); sin ese dato, el rol de ERP_Usuarios manda (3) y un socio solo ve (1). */
+function nivel(ses) {
+  if (!ses || !ses.correo) return 0;
+  if (ses.rol === 'MASTER' && !ses.porClave) return 3;
+  if (ses.porClave) return 1;
+  const ac = _accesoDeCorreo_(String(ses.correo).toLowerCase());
+  if (ac && ac.niveles && ac.niveles.erp !== undefined) return ac.niveles.erp;
+  return ses.rol === 'SOCIO' ? 1 : 3;
+}
+
+/** Que nivel pide cada accion: 1 consultar, 2 crear, 3 modificar / eliminar / cancelar / administrar. */
+function claseAccion(accion, p) {
+  p = p || {};
+  if (LECTURAS[accion]) return 1;
+  const existe = function (k) { return str_(p[k]) !== ''; };
+  switch (accion) {
+    case 'saveCliente': case 'saveProveedor': return existe('ID') ? 3 : 2;
+    case 'saveCot': case 'saveODP': return existe('Folio') ? 3 : 2;
+    case 'saveMaterial': return existe('Clave') && find_('Materiales', 'Clave', p.Clave) ? 3 : 2;
+    case 'saveTarifa': return existe('MaterialOriginal') ? 3 : 2;
+    case 'saveSeg': case 'aprobarCot': case 'consumir': case 'agregarCosto': case 'saveFactura': case 'registrarCobro': case 'saveCompra': case 'registrarPago':
+    case 'conteo': case 'registrarProduccion': return 2;
+    case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': return 2;
+    case 'notifLeer': return 1;
+    default: return 3;   // aprobarCot, devolver, anular*, cancelar*, deleteTarifa, saveUsuario, saveConfig...
+  }
+}
+
 function usuarioDe_(ses) {
   const rol = rolDe(ses);
   if (!rol) throw new Error('Sin autorizacion para esta accion.');
@@ -1481,7 +1527,7 @@ function usuarioDe_(ses) {
     const x = read_('Usuarios').find(function (r) { return str_(r.Email).toLowerCase() === String(ses.correo).toLowerCase(); });
     if (x && str_(x.Nombre)) nombre = str_(x.Nombre);
   }
-  return { email: String(ses.correo).toLowerCase(), nombre: nombre, rol: rol };
+  return { email: String(ses.correo).toLowerCase(), nombre: nombre, rol: rol, nivel: nivel(ses) };
 }
 
 // ==================== PRODUCCION (BASE) Y VENTAS (dashboard) ====================
@@ -1667,7 +1713,7 @@ function resincronizar() {
 // ==================== EJECUCION ====================
 const LECTURAS = { usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
-  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1 };
+  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
 
 function run(action, p, ses) {
@@ -1683,13 +1729,384 @@ function run(action, p, ses) {
   } finally { if (usa) { try { lock.releaseLock(); } catch (_) {} } }
 }
 
+// ==================== NEGOCIACIONES (kanban tipo Bitrix24) ====================
+const NEG_ETAPAS = ['COTIZACIÓN PENDIENTE', 'COTIZACIÓN ENVIADA', 'APROBADO', 'PRE-PRENSA', 'PRODUCCIÓN', 'IMPRESO LISTO', 'INSTALANDO / POR ENTREGAR', 'TERMINADO'];
+const NEG_PERDIDO = 'PERDIDO';
+const NEG_MOTIVOS = ['PRECIO', 'SERVICIO', 'TIEMPO', 'CALIDAD', 'UBICACIÓN', 'OTRO'];
+const NEG_IDX_APROBADO = 2;                 // desde esta etapa la negociación ya tiene ODP
+const NEG_EXT_BLOQ = ['exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'js', 'vbs', 'ps1', 'jar', 'sh', 'dll', 'apk', 'app'];
+const NEG_MAX_B64 = 11500000;               // ~8.5 MB por archivo (limite practico de google.script.run)
+
+function negUsuarios_() {
+  return read_('Usuarios').filter(function (x) { return str_(x.Activo).toUpperCase() !== 'NO' && str_(x.Email); })
+    .map(function (x) { return { Email: str_(x.Email).toLowerCase(), Nombre: str_(x.Nombre) || str_(x.Email) }; })
+    .sort(function (a, b) { return a.Nombre.localeCompare(b.Nombre); });
+}
+function negNombreDe_(email) {
+  const x = negUsuarios_().find(function (r) { return r.Email === String(email).toLowerCase(); });
+  return x ? x.Nombre : String(email || '');
+}
+/* la hora lleva " h" para que Sheets no la convierta en hora (1899-12-30) al leerla */
+function negHora_() { return Utilities.formatDate(new Date(), tz_(), 'HH:mm') + ' h'; }
+function negHist_(n, txt, u) {
+  let h = []; try { h = JSON.parse(str_(n.Historial) || '[]'); } catch (e) { h = []; }
+  h.push({ f: hoy_() + ' ' + negHora_(), p: u.email, n: u.nombre, t: txt });
+  if (h.length > 80) h = h.slice(h.length - 80);
+  n.Historial = JSON.stringify(h);
+}
+function negIdx_(etapa) { return NEG_ETAPAS.indexOf(str_(etapa)); }
+function negLink_(id) { const url = _urlPublica_(); return url + (url.indexOf('?') < 0 ? '?' : '&') + 'neg=' + encodeURIComponent(id); }
+
+function negCorreo_(para, asunto, titulo, cuerpo, negId) {
+  let enviados = 0, cuota = 0;
+  try { cuota = MailApp.getRemainingDailyQuota(); } catch (e) { cuota = 0; }
+  const link = negLink_(negId);
+  para.forEach(function (to) {
+    if (cuota - enviados < 1) return;
+    try {
+      MailApp.sendEmail({ to: to, subject: asunto, name: 'BIG FOOT print · ERP',
+        body: titulo + '\n' + String(cuerpo).replace(/<[^>]+>/g, '') + '\nAbrir la negociación: ' + link,
+        htmlBody: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#1c2540"><h2 style="margin:0 0 8px;color:#16327a">' + esc_(titulo) + '</h2>' + cuerpo +
+          '<p style="margin:16px 0"><a href="' + esc_(link) + '" style="background:#ff6a13;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold">Abrir la negociación</a></p>' +
+          '<p style="color:#7b869f;font-size:12px">También la encuentras en la intranet: ERP → Negociaciones.</p></div>' });
+      enviados++;
+    } catch (e) { /* un correo fallido no tumba la operacion */ }
+  });
+  return enviados;
+}
+function esc_(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/** Aviso dentro de la intranet (campanita del ERP) y por correo. `a` = actor (no se avisa a si mismo). */
+function negNotifica_(emails, actor, titulo, texto, negId, soloApp) {
+  const a = actor ? String(actor.email || actor).toLowerCase() : '';
+  const para = [], vistos = {};
+  emails.forEach(function (e) { e = str_(e).toLowerCase(); if (e && e !== a && !vistos[e]) { vistos[e] = 1; para.push(e); } });
+  if (!para.length) return 0;
+  const f = hoy_(), h = negHora_();
+  insertMany_('Notificaciones', para.map(function (e) { return { ID: seq_('SEQ_NOT', 'NT-', 6), Fecha: f, Hora: h, Email: e, Titulo: titulo, Texto: str_(texto).slice(0, 500), Negociacion: negId, Leida: '' }; }));
+  return soloApp ? 0 : negCorreo_(para, titulo, titulo, '<p style="white-space:pre-wrap">' + esc_(texto) + '</p>', negId);
+}
+
+function negCarpeta_() {
+  const pr = PropertiesService.getScriptProperties(); let id = pr.getProperty('ERP_NEG_CARPETA');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* se recrea */ } }
+  const it = DriveApp.getFoldersByName('ERP BFP - Negociaciones'), f = it.hasNext() ? it.next() : DriveApp.createFolder('ERP BFP - Negociaciones');
+  pr.setProperty('ERP_NEG_CARPETA', f.getId());
+  return f;
+}
+function negGuardaArchivo_(u, n, comId, tipo, a) {
+  const nombre = str_(a && a.nombre).replace(/[\\\/:*?"<>|]+/g, '_').slice(0, 150);
+  if (!nombre) throw new Error('El archivo no tiene nombre.');
+  const ext = (nombre.match(/\.([A-Za-z0-9]+)$/) || [])[1];
+  if (ext && NEG_EXT_BLOQ.indexOf(ext.toLowerCase()) >= 0) throw new Error('Por seguridad no se permiten archivos .' + ext.toLowerCase() + '.');
+  const b64 = str_(a.b64);
+  if (!b64) throw new Error('El archivo llegó vacío.');
+  if (b64.length > NEG_MAX_B64) throw new Error('El archivo pesa más de 8 MB: ' + nombre);
+  const bytes = Utilities.base64Decode(b64);
+  const f = negCarpeta_().createFile(Utilities.newBlob(bytes, str_(a.mime) || 'application/octet-stream', nombre));
+  f.setDescription('Negociación ' + n.ID + ' · ' + n.Nombre + ' · ' + u.email);
+  return insert_('NegArchivos', { ID: seq_('SEQ_NARC', 'NA-', 6), Negociacion: n.ID, ComentarioID: comId || '', Tipo: tipo, Nombre: nombre, Mime: str_(a.mime), DriveID: f.getId(),
+    Tamano: bytes.length, Usuario: u.email, UsuarioNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Etapa: n.Etapa });
+}
+
+function negOut_(n, nc, na) {
+  const o = clean_(n); delete o.Historial;
+  o.Monto = num_(n.Monto); o.comentarios = nc || 0; o.archivos = na || 0;
+  const cot = n.Cotizacion ? find_('Cotizaciones', 'Folio', n.Cotizacion) : null;
+  o.cotEstatus = cot ? cot.Estatus : ''; o.cotTotal = cot ? num_(cot.Subtotal) : 0;
+  return o;
+}
+function negCuenta_(rows) { const c = {}; rows.forEach(function (r) { c[r.Negociacion] = (c[r.Negociacion] || 0) + 1; }); return c; }
+
+function a_negociaciones(u) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const cc = negCuenta_(read_('NegComentarios').filter(function (c) { return c.Tipo !== 'sistema'; })), ca = negCuenta_(read_('NegArchivos'));
+  return { etapas: NEG_ETAPAS, motivos: NEG_MOTIVOS, perdido: NEG_PERDIDO, yo: u.email,
+           rows: read_('Negociaciones').map(function (n) { return negOut_(n, cc[n.ID], ca[n.ID]); }) };
+}
+
+function a_negDetalle(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const com = read_('NegComentarios').filter(function (c) { return c.Negociacion === n.ID; }).map(clean_);
+  const arch = read_('NegArchivos').filter(function (a) { return a.Negociacion === n.ID; }).map(function (a) { const o = clean_(a); delete o.DriveID; return o; });
+  let hist = []; try { hist = JSON.parse(str_(n.Historial) || '[]'); } catch (e) { hist = []; }
+  return { neg: negOut_(n, com.filter(function (c) { return c.Tipo !== 'sistema'; }).length, arch.length), comentarios: com, archivos: arch, historial: hist };
+}
+
+function negValida_(p) {
+  const nombre = req_(p.Nombre, 'Nombre de la negociación').slice(0, 150);
+  const monto = str_(p.Monto) === '' ? 0 : num_(p.Monto);
+  if (monto < 0) throw new Error('El monto no puede ser negativo.');
+  let cli = null, clienteTxt = str_(p.Cliente).slice(0, 150);
+  if (str_(p.ClienteID)) { cli = mustFind_('Clientes', 'ID', p.ClienteID, 'Cliente'); clienteTxt = cli.Nombre; }
+  if (!clienteTxt) throw new Error('Falta: Cliente');
+  const correo = str_(p.ContactoCorreo).slice(0, 120);
+  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) throw new Error('El correo del contacto no es válido.');
+  return { Nombre: nombre, Monto: monto, ClienteID: cli ? cli.ID : '', Cliente: clienteTxt, ContactoCargo: str_(p.ContactoCargo).slice(0, 80), ContactoNombre: str_(p.ContactoNombre).slice(0, 120),
+           ContactoTelefono: str_(p.ContactoTelefono).slice(0, 30), ContactoCorreo: correo, ContactoCumple: fechaOpc_(p.ContactoCumple, 'Cumpleaños') };
+}
+
+function a_saveNeg(u, p) {
+  need_(u, 'neg');
+  const d = negValida_(p);
+  let resp = str_(p.ResponsableEmail).toLowerCase() || u.email;
+  if (!negUsuarios_().some(function (x) { return x.Email === resp; })) throw new Error('El responsable no es un usuario activo del ERP.');
+  let n;
+  if (str_(p.ID)) {
+    n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+    const antes = str_(n.ResponsableEmail).toLowerCase();
+    Object.assign(n, d, { ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), ActualizadoEn: hoy_() });
+    negHist_(n, 'Modificó la negociación', u);
+    update_('Negociaciones', n);
+    if (resp !== antes) negNotifica_([resp], u, 'Te asignaron una negociación', u.nombre + ' te asignó la negociación «' + n.Nombre + '» (' + n.Cliente + ').', n.ID);
+  } else {
+    const etapa = str_(p.Etapa) || NEG_ETAPAS[0];
+    if (NEG_ETAPAS.indexOf(etapa) < 0) throw new Error('Etapa inválida.');
+    n = Object.assign({ ID: seq_('SEQ_NEG', 'NG-', 5), Fecha: hoy_(), Hora: negHora_(), ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), Etapa: etapa, Cotizacion: '', ODP: '',
+                        MotivoPerdido: '', MotivoDetalle: '', PerdidoEn: '', EtapaDesde: hoy_(), CreadoPor: u.email, ActualizadoEn: hoy_(), Historial: '[]' }, d);
+    negHist_(n, 'Creó la negociación en ' + etapa, u);
+    insert_('Negociaciones', n);
+    if (resp !== u.email) negNotifica_([resp], u, 'Te asignaron una negociación', u.nombre + ' creó la negociación «' + n.Nombre + '» (' + n.Cliente + ') y te la asignó.', n.ID);
+  }
+  return negOut_(n);
+}
+
+/** Mueve la negociacion de etapa. Pasar de COTIZACION PENDIENTE/ENVIADA a APROBADO (o mas adelante) convierte la cotizacion ligada en ODP. */
+function a_moveNeg(u, p) {
+  need_(u, 'neg');
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const etapa = str_(p.Etapa), desde = n.Etapa, a = negIdx_(etapa), de = negIdx_(desde);
+  if (a < 0) throw new Error(etapa === NEG_PERDIDO ? 'Para marcarla como perdida usa el botón PERDIDO (pide el motivo).' : 'Etapa inválida.');
+  if (etapa === desde) return negOut_(n);
+  let aviso = '';
+  if (desde === NEG_PERDIDO && str_(n.Cotizacion)) { const cr = find_('Cotizaciones', 'Folio', n.Cotizacion); if (cr && !cr.ODP && cr.Estatus === 'Rechazada') update_('Cotizaciones', cr, { Estatus: 'Enviada' }); }
+  if (a >= NEG_IDX_APROBADO && (de < NEG_IDX_APROBADO)) {            // incluye reabrir una PERDIDA directo a una etapa avanzada
+    if (!str_(n.Cotizacion)) throw new Error('Antes de aprobar, crea o liga una cotización a la negociación (botón «Crear cotización»).');
+    const cot = mustFind_('Cotizaciones', 'Folio', n.Cotizacion, 'Cotización');
+    if (!cot.ODP) {
+      const r = a_aprobarCot(u, { Folio: cot.Folio, FechaEntrega: p.FechaEntrega, _neg: 1 });
+      n.ODP = r.Folio; aviso = ' Se creó la ' + r.Folio + '.';
+    } else { n.ODP = cot.ODP; }
+  }
+  if (a === 1) { const cot1 = n.Cotizacion ? find_('Cotizaciones', 'Folio', n.Cotizacion) : null; if (cot1 && cot1.Estatus === 'Borrador') update_('Cotizaciones', cot1, { Estatus: 'Enviada' }); }
+  if (str_(n.ODP)) {                                                  // la ODP acompaña a la negociacion
+    const o = find_('ODP', 'Folio', n.ODP);
+    if (o && a === 4 && o.Estatus === 'Abierta') update_('ODP', o, { Estatus: 'En producción' });
+    if (o && a === 7 && ['Abierta', 'En producción'].indexOf(o.Estatus) >= 0) update_('ODP', o, { Estatus: 'Terminada' });
+  }
+  if (desde === NEG_PERDIDO) { n.MotivoPerdido = ''; n.MotivoDetalle = ''; n.PerdidoEn = ''; negHist_(n, 'Reabrió la negociación (estaba PERDIDA)', u); }
+  negHist_(n, 'Movió de ' + desde + ' a ' + etapa + aviso, u);
+  update_('Negociaciones', n, { Etapa: etapa, EtapaDesde: hoy_(), ActualizadoEn: hoy_() });
+  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema',
+    Texto: 'Movió la negociación de ' + desde + ' a ' + etapa + '.' + aviso, Menciones: '' });
+  negNotifica_([n.ResponsableEmail], u, 'Se movió tu negociación', u.nombre + ' movió «' + n.Nombre + '» de ' + desde + ' a ' + etapa + '.' + aviso, n.ID);
+  const out = negOut_(n); out.aviso = aviso.trim();
+  return out;
+}
+
+function a_perdidoNeg(u, p) {
+  need_(u, 'neg');
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  if (n.Etapa === NEG_PERDIDO) throw new Error('La negociación ya está marcada como PERDIDA.');
+  if (str_(n.ODP)) throw new Error('La negociación ya tiene la ' + n.ODP + ' (aprobada): para cancelarla usa la ODP.');
+  const motivo = inList_(str_(p.Motivo).toUpperCase(), NEG_MOTIVOS, 'Motivo');
+  const det = str_(p.Detalle);
+  if (motivo === 'OTRO' && !det) throw new Error('Describe el motivo (máximo 200 caracteres).');
+  if (det.length > 200) throw new Error('El motivo debe tener menos de 200 caracteres.');
+  const desde = n.Etapa;
+  negHist_(n, 'Marcó como PERDIDA (' + motivo + (det ? ': ' + det : '') + ')', u);
+  update_('Negociaciones', n, { Etapa: NEG_PERDIDO, MotivoPerdido: motivo, MotivoDetalle: motivo === 'OTRO' ? det : '', PerdidoEn: hoy_(), EtapaDesde: hoy_(), ActualizadoEn: hoy_() });
+  const cot = n.Cotizacion ? find_('Cotizaciones', 'Folio', n.Cotizacion) : null;
+  if (cot && !cot.ODP && cot.Estatus !== 'Rechazada') update_('Cotizaciones', cot, { Estatus: 'Rechazada' });
+  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema',
+    Texto: 'Marcó la negociación como PERDIDA desde ' + desde + '. Motivo: ' + motivo + (det ? ' — ' + det : ''), Menciones: '' });
+  negNotifica_([n.ResponsableEmail], u, 'Negociación PERDIDA', u.nombre + ' marcó «' + n.Nombre + '» como PERDIDA. Motivo: ' + motivo + (det ? ' — ' + det : '') + '.', n.ID);
+  return negOut_(n);
+}
+
+/** Una cotizacion creada o editada desde/para una negociacion mantiene su monto al dia. */
+function negSincronizaCot_(c, u, nueva) {
+  const n = find_('Negociaciones', 'ID', c.NegociacionID);
+  if (!n) return;
+  const ch = { Monto: num_(c.Subtotal), ActualizadoEn: hoy_() };
+  if (nueva || !str_(n.Cotizacion)) { ch.Cotizacion = c.Folio; negHist_(n, 'Se ligó la cotización ' + c.Folio, u); }
+  update_('Negociaciones', n, ch);
+}
+/** La cotizacion ligada se aprobo (aqui o desde Comercial): la negociacion pasa a APROBADO y guarda su ODP. */
+function negAprobada_(id, folioODP, u, silencioso) {
+  const n = find_('Negociaciones', 'ID', id);
+  if (!n) return;
+  const ch = { ODP: folioODP, ActualizadoEn: hoy_() };
+  if (negIdx_(n.Etapa) < NEG_IDX_APROBADO) { ch.Etapa = NEG_ETAPAS[NEG_IDX_APROBADO]; ch.EtapaDesde = hoy_(); }
+  negHist_(n, 'La cotización se aprobó y generó la ' + folioODP, u);
+  update_('Negociaciones', n, ch);
+  if (!silencioso) negNotifica_([n.ResponsableEmail], u, 'Negociación aprobada', 'La cotización de «' + n.Nombre + '» se aprobó y generó la ' + folioODP + '.', n.ID);
+}
+
+/** Liga una cotizacion hecha en Comercial a una negociacion existente. */
+function a_negLigarCot(u, p) {
+  need_(u, 'neg');
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const c = mustFind_('Cotizaciones', 'Folio', p.Folio, 'Cotización'); ownOr_(u, c);
+  if (str_(c.NegociacionID)) throw new Error('La cotización ya está ligada a la negociación ' + c.NegociacionID + '.');
+  if (str_(n.Cotizacion)) throw new Error('La negociación ya tiene la cotización ' + n.Cotizacion + '.');
+  if (n.Etapa === NEG_PERDIDO) throw new Error('La negociación está PERDIDA: reábrela primero.');
+  update_('Cotizaciones', c, { NegociacionID: n.ID });
+  negSincronizaCot_(c, u, true);
+  if (str_(c.ODP)) negAprobada_(n.ID, c.ODP, u, true);
+  return negOut_(find_('Negociaciones', 'ID', n.ID));
+}
+
+function negMenciones_(texto) {
+  const us = negUsuarios_(), loc = {};
+  us.forEach(function (x) { const l = x.Email.split('@')[0]; loc[l] = (loc[l] || 0) + 1; });
+  const tok = function (x) { const l = x.Email.split('@')[0]; return loc[l] > 1 ? x.Email : l; };
+  const re = /(^|[\s(\[¡¿])@([\w.\-+]+@[\w.\-]+|[\w.\-+]+)/g, out = [];
+  let m;
+  while ((m = re.exec(String(texto || ''))) !== null) {
+    const t = m[2].replace(/[.\-]+$/, '').toLowerCase();
+    us.forEach(function (x) { if ((tok(x).toLowerCase() === t || x.Email === t) && out.indexOf(x.Email) < 0) out.push(x.Email); });
+  }
+  return out;
+}
+
+function a_negComentar(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const texto = str_(p.Texto);
+  if (!texto && !(p.archivo && p.archivo.b64)) throw new Error('Escribe un comentario o adjunta un archivo.');
+  if (texto.length > 3000) throw new Error('El comentario es demasiado largo (máx. 3000).');
+  const ment = negMenciones_(texto);
+  const c = insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'comentario', Texto: texto, Menciones: ment.join(',') });
+  let arch = null;
+  if (p.archivo && p.archivo.b64) {
+    arch = negGuardaArchivo_(u, n, c.ID, 'comentario', p.archivo);
+    negHist_(n, 'Adjuntó el archivo ' + arch.Nombre + ' en un comentario', u); update_('Negociaciones', n);
+  }
+  if (ment.length) negNotifica_(ment, u, 'Te mencionaron en una negociación', u.nombre + ' te mencionó en «' + n.Nombre + '»:\n' + texto, n.ID);
+  const ao = arch ? (function () { const o = clean_(arch); delete o.DriveID; return o; })() : null;
+  return { comentario: clean_(c), archivo: ao, mencionados: ment.length };
+}
+
+/** Archivo de diseño / impresion: avisa por correo (y en la intranet) a los disenadores. */
+function a_negSubir(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const a = negGuardaArchivo_(u, n, '', 'diseno', p.archivo || {});
+  negHist_(n, 'Subió el archivo de diseño ' + a.Nombre, u); update_('Negociaciones', n);
+  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema',
+    Texto: 'Subió el archivo de diseño «' + a.Nombre + '». Se avisó a diseño.', Menciones: '' });
+  const dis = cfg_('NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx').split(/[,;\s]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return x.indexOf('@') > 0; });
+  const cuerpo = '<p><b>' + esc_(u.nombre) + '</b> subió un archivo de diseño a la negociación.</p><table style="border-collapse:collapse;font-size:14px">' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Negociación</td><td><b>' + esc_(n.ID + ' · ' + n.Nombre) + '</b></td></tr>' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Cliente</td><td>' + esc_(n.Cliente) + '</td></tr>' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Archivo</td><td>' + esc_(a.Nombre) + ' (' + Math.max(1, Math.round(num_(a.Tamano) / 1024)) + ' KB)</td></tr>' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Etapa</td><td>' + esc_(n.Etapa) + '</td></tr>' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Responsable</td><td>' + esc_(n.ResponsableNombre) + '</td></tr></table>';
+  const enviados = negCorreo_(dis, 'Archivo de diseño nuevo: ' + n.Nombre, 'Nuevo archivo de diseño por revisar', cuerpo, n.ID);
+  const us = negUsuarios_().map(function (x) { return x.Email; });
+  negNotifica_(dis.filter(function (e) { return us.indexOf(e) >= 0; }), u, 'Archivo de diseño nuevo', u.nombre + ' subió «' + a.Nombre + '» a la negociación «' + n.Nombre + '».', n.ID, true);
+  negNotifica_([n.ResponsableEmail], u, 'Subieron un archivo a tu negociación', u.nombre + ' subió «' + a.Nombre + '» a «' + n.Nombre + '».', n.ID, true);
+  const ao = clean_(a); delete ao.DriveID;
+  return { archivo: ao, avisados: enviados };
+}
+
+function a_negArchivo(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const a = mustFind_('NegArchivos', 'ID', p.ID, 'Archivo');
+  const blob = DriveApp.getFileById(a.DriveID).getBlob();
+  return { nombre: a.Nombre, mime: str_(a.Mime) || blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+function a_notifs(u) {
+  const mias = read_('Notificaciones').filter(function (x) { return str_(x.Email).toLowerCase() === u.email; }).reverse();
+  return { sinLeer: mias.filter(function (x) { return !str_(x.Leida); }).length, rows: mias.slice(0, 40).map(clean_) };
+}
+function a_notifLeer(u, p) {
+  const ids = (p && p.ids) || null;
+  read_('Notificaciones').forEach(function (x) {
+    if (str_(x.Email).toLowerCase() !== u.email || str_(x.Leida)) return;
+    if (ids && ids.indexOf(x.ID) < 0) return;
+    update_('Notificaciones', x, { Leida: 'SI' });
+  });
+  return a_notifs(u);
+}
+
+/** Metricas de negociaciones para el Dashboard y Direccion. q = filtros generales (desde, hasta, mes, anio); se filtra por la fecha de creacion. */
+function resumenNegociaciones(q) {
+  q = q || {};
+  const out = { etapas: [], motivos: [], responsables: [], total: { n: 0, monto: 0 }, abiertas: { n: 0, monto: 0 }, enCurso: { n: 0, monto: 0 }, terminadas: { n: 0, monto: 0 }, ganadas: { n: 0, monto: 0 },
+                perdidas: { n: 0, monto: 0 }, conversion: null, ticket: null, diasCierre: null };
+  if (!ss_().getSheetByName(PREF + 'Negociaciones')) return out;
+  resetCache_();
+  const rows = read_('Negociaciones').filter(function (n) {
+    const f = str_(n.Fecha);
+    return _enRango_(q, f) && _en_(q.mes || [], f.slice(0, 7)) && _en_(q.anio || [], f.slice(0, 4));
+  });
+  const porEt = {}, porMot = {}, porResp = {};
+  NEG_ETAPAS.concat([NEG_PERDIDO]).forEach(function (e) { porEt[e] = { etapa: e, n: 0, monto: 0 }; });
+  NEG_MOTIVOS.forEach(function (m) { porMot[m] = { motivo: m, n: 0, monto: 0 }; });
+  let dias = 0, nd = 0;
+  rows.forEach(function (n) {
+    const m = num_(n.Monto), e = porEt[n.Etapa] || (porEt[n.Etapa] = { etapa: n.Etapa, n: 0, monto: 0 });
+    e.n++; e.monto += m;
+    const rk = str_(n.ResponsableNombre) || str_(n.ResponsableEmail) || '(sin responsable)';
+    const r = porResp[rk] || (porResp[rk] = { responsable: rk, abiertas: 0, montoAbiertas: 0, ganadas: 0, montoGanadas: 0, perdidas: 0, montoPerdidas: 0 });
+    const idx = negIdx_(n.Etapa);
+    out.total.n++; out.total.monto += m;
+    if (n.Etapa === NEG_PERDIDO) {
+      out.perdidas.n++; out.perdidas.monto += m; r.perdidas++; r.montoPerdidas += m;
+      const mo = porMot[n.MotivoPerdido] || (porMot[n.MotivoPerdido || 'SIN MOTIVO'] = { motivo: n.MotivoPerdido || 'SIN MOTIVO', n: 0, monto: 0 });
+      mo.n++; mo.monto += m;
+    } else if (idx < NEG_IDX_APROBADO) { out.abiertas.n++; out.abiertas.monto += m; r.abiertas++; r.montoAbiertas += m; }
+    else {
+      out.ganadas.n++; out.ganadas.monto += m; r.ganadas++; r.montoGanadas += m;
+      if (idx === NEG_ETAPAS.length - 1) { out.terminadas.n++; out.terminadas.monto += m; } else { out.enCurso.n++; out.enCurso.monto += m; }
+      if (str_(n.Fecha) && str_(n.EtapaDesde)) { dias += Math.max(0, diffDays_(n.Fecha, n.EtapaDesde)); nd++; }
+    }
+  });
+  const r2m = function (o) { o.monto = r2_(o.monto); return o; };
+  out.etapas = NEG_ETAPAS.concat([NEG_PERDIDO]).map(function (e) { return r2m(porEt[e]); });
+  const lostN = out.perdidas.n;
+  out.motivos = Object.keys(porMot).map(function (k) { const o = r2m(porMot[k]); o.pct = lostN ? r2_(o.n / lostN * 100) : 0; return o; }).filter(function (o) { return o.n > 0 || NEG_MOTIVOS.indexOf(o.motivo) >= 0; });
+  out.responsables = Object.keys(porResp).map(function (k) { const o = porResp[k]; ['montoAbiertas', 'montoGanadas', 'montoPerdidas'].forEach(function (c) { o[c] = r2_(o[c]); }); return o; })
+    .sort(function (a, b) { return (b.montoGanadas + b.montoAbiertas) - (a.montoGanadas + a.montoAbiertas); });
+  ['total', 'abiertas', 'enCurso', 'terminadas', 'ganadas', 'perdidas'].forEach(function (k) { out[k].monto = r2_(out[k].monto); });
+  const cerradas = out.ganadas.n + out.perdidas.n;
+  out.conversion = cerradas ? r2_(out.ganadas.n / cerradas * 100) : null;
+  out.ticket = out.ganadas.n ? r2_(out.ganadas.monto / out.ganadas.n) : null;
+  out.diasCierre = nd ? r2_(dias / nd) : null;
+  return out;
+}
+
 function correoRegistrado(correo) {
   if (!ss_().getSheetByName(PREF + 'Usuarios')) return false;
   correo = String(correo || '').toLowerCase();
   return read_('Usuarios').some(function (r) { return str_(r.Email).toLowerCase() === correo && str_(r.Activo).toUpperCase() !== 'NO'; });
 }
 
-return { run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+/* Para Marketing (prospectos): clientes y cuantas cotizaciones / ODP vivas tiene cada uno. */
+function estadoComercial() {
+  const out = { clientes: [], cots: {}, odps: {} };
+  if (!ss_().getSheetByName(PREF + 'Clientes')) return out;
+  resetCache_();
+  out.clientes = read_('Clientes').map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Email: c.Email }; });
+  if (ss_().getSheetByName(PREF + 'Cotizaciones')) read_('Cotizaciones').forEach(function (c) { if (c.Estatus !== 'Rechazada' && c.Estatus !== 'Cancelada') out.cots[c.ClienteID] = (out.cots[c.ClienteID] || 0) + 1; });
+  if (ss_().getSheetByName(PREF + 'ODP')) read_('ODP').forEach(function (o) { if (o.Estatus !== 'Cancelada') out.odps[o.ClienteID] = (out.odps[o.ClienteID] || 0) + 1; });
+  return out;
+}
+
+/* Crea el cliente del ERP desde un prospecto (o devuelve el que ya existe con ese nombre). El candado lo tiene quien llama. */
+function clienteDeProspecto(ses, p) {
+  resetCache_(); asegura_();
+  const u = usuarioDe_(ses), ex = find_('Clientes', 'Nombre', p.Nombre);
+  if (ex) return { ID: ex.ID, Nombre: ex.Nombre, nuevo: false };
+  const c = a_saveCliente(u, p);
+  return { ID: c.ID, Nombre: c.Nombre, nuevo: true };
+}
+
+return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================
@@ -1699,6 +2116,11 @@ function erpApi(accion, payloadJson, clave) {
     var ses = _ses_(clave, !ERP.esLectura(String(accion)));
     if (!ERP.rolDe(ses)) { _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion); throw new Error('Sin autorizacion para esta accion.'); }
     var p = payloadJson ? JSON.parse(payloadJson) : {};
+    var pide = ERP.claseAccion(String(accion), p || {});
+    if (ERP.nivel(ses) < pide) {
+      _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion + ' nivel ' + ERP.nivel(ses) + ' < ' + pide);
+      throw new Error(pide >= 3 ? 'Tu permiso en el ERP no incluye editar ni eliminar.' : 'Tu permiso en el ERP es solo de consulta.');
+    }
     return JSON.stringify({ ok: true, data: ERP.run(String(accion), p || {}, ses) });
   } catch (e) {
     return JSON.stringify({ ok: false, error: (e && e.message) || String(e) });

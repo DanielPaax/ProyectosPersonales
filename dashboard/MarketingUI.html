@@ -1,0 +1,690 @@
+<!-- MARKETING: Kanban + calendario + archivos + comentarios con @menciones. Se incluye desde index.html.
+     Habla con el servidor solo por mktApi(accion, payloadJson, clave); el servidor valida permisos en cada llamada. -->
+<style>
+#appMkt{min-height:100vh; background:var(--fondo); font-family:'Montserrat',-apple-system,'Segoe UI',Arial,sans-serif; color:var(--tinta); font-size:14px}
+#appMkt.oculto{display:none !important}
+#appMkt *{box-sizing:border-box}
+.mk-top{background:var(--azul-b); color:#fff; display:flex; align-items:center; gap:16px; padding:10px 20px; position:sticky; top:0; z-index:30}
+.mk-top img{height:34px; width:auto; display:block}
+.mk-top h1{font:700 18px Khand,Poppins,sans-serif; letter-spacing:.04em; margin:0; text-transform:uppercase}
+.mk-top .mk-quien{margin-left:auto; font-size:12px; color:#D6E0F7; text-align:right}
+.mk-barra{display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:14px 20px 4px}
+.mk-seg{display:inline-flex; border:1px solid var(--azul); border-radius:8px; overflow:hidden}
+.mk-seg button{background:#fff; color:var(--azul); border:none; padding:8px 16px; font:700 13px Montserrat,sans-serif; cursor:pointer}
+.mk-seg button.on{background:var(--azul); color:#fff}
+.mk-barra select,.mk-barra input[type=text]{padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff; min-width:0}
+.mk-btn{background:var(--azul); color:#fff; border:none; border-radius:8px; padding:9px 16px; font:700 13px Montserrat,sans-serif; cursor:pointer}
+.mk-btn:hover{background:var(--azul-b)} .mk-btn[disabled]{opacity:.5; cursor:default}
+.mk-btn.nar{background:var(--naranja)} .mk-btn.nar:hover{background:var(--naranja-d)}
+.mk-btn.sec{background:#fff; color:var(--azul); border:1px solid var(--azul)}
+.mk-btn.rojo{background:var(--rojo)}
+.mk-btn.chico{padding:4px 9px; font-size:12px}
+.mk-der{margin-left:auto}
+.mk-tablero{display:grid; grid-template-columns:repeat(5,minmax(230px,1fr)); gap:12px; padding:10px 20px 40px; overflow-x:auto; align-items:start}
+.mk-col{background:#E9EFF4; border-radius:12px; padding:10px; min-height:220px}
+.mk-col.sobre{outline:2px dashed var(--naranja); background:#FFF3EA}
+.mk-col h3{margin:2px 4px 10px; font:700 15px Khand,Poppins,sans-serif; letter-spacing:.05em; text-transform:uppercase; color:var(--azul); display:flex; justify-content:space-between; align-items:center}
+.mk-col h3 span{background:#fff; border-radius:999px; font:700 11px Montserrat,sans-serif; padding:2px 9px; color:var(--tinta-2)}
+.mk-card{background:#fff; border:1px solid var(--linea); border-left:4px solid var(--c, var(--azul)); border-radius:9px; padding:10px 11px; margin-bottom:9px; cursor:pointer; box-shadow:var(--sombra)}
+.mk-card:hover{box-shadow:0 4px 12px rgba(24,48,60,.14)}
+.mk-card.arr{opacity:.45}
+.mk-card .tt{font-weight:700; font-size:13.5px; line-height:1.3; margin-bottom:6px; word-break:break-word}
+.mk-card .mt{display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:11.5px; color:var(--tinta-2)}
+.mk-card .ft{display:flex; align-items:center; justify-content:space-between; margin-top:8px}
+.mk-av{display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--azul); color:#fff; font:700 10px Montserrat,sans-serif; margin-right:-6px; border:2px solid #fff}
+.mk-flechas button{border:1px solid var(--linea); background:#fff; border-radius:6px; width:26px; height:24px; cursor:pointer; color:var(--azul); font-weight:700}
+.mk-flechas button:hover{background:var(--azul-t)}
+.mk-pill{display:inline-block; padding:1px 8px; border-radius:999px; font:700 10.5px Montserrat,sans-serif; background:#EEF2F6; color:var(--tinta-2)}
+.mk-pill.Alta{background:var(--ambar-l); color:#9A6A00} .mk-pill.Urgente{background:var(--rojo-l); color:var(--rojo)} .mk-pill.Baja{background:var(--verde-l); color:var(--verde)} .mk-pill.Media{background:var(--azul-t); color:var(--azul)}
+.mk-venc{color:var(--rojo); font-weight:700}
+.mk-vacio{color:var(--tinta-3); text-align:center; padding:18px 6px; font-size:12px}
+.mk-cal{padding:10px 20px 40px}
+.mk-calcab{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.mk-calcab h2{margin:0; font:700 22px Khand,Poppins,sans-serif; color:var(--azul); text-transform:uppercase; min-width:200px}
+.mk-grid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); border-top:1px solid var(--linea); border-left:1px solid var(--linea); background:#fff}
+.mk-dsem{background:var(--azul-t); color:var(--azul); font:700 11px Montserrat,sans-serif; text-transform:uppercase; padding:7px; text-align:center; border-right:1px solid var(--linea); border-bottom:1px solid var(--linea)}
+.mk-dia{min-height:112px; border-right:1px solid var(--linea); border-bottom:1px solid var(--linea); padding:4px; cursor:pointer; overflow:hidden}
+.mk-dia:hover{background:#FAFBFD}
+.mk-dia.fuera{background:#F6F8FA; color:var(--tinta-3)}
+.mk-dia.hoy{background:#FFF6EE}
+.mk-dia .n{font:700 12px Montserrat,sans-serif; margin:0 2px 3px}
+.mk-dia.hoy .n{display:inline-block; background:var(--naranja); color:#fff; border-radius:999px; padding:1px 7px}
+.mk-ev{display:block; background:var(--c); color:#fff; border-radius:5px; padding:2px 6px; margin-bottom:3px; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer}
+.mk-mas{font-size:11px; color:var(--azul); font-weight:700; padding:0 4px}
+.mk-sinfecha{margin-top:14px; background:#fff; border:1px solid var(--linea); border-radius:10px; padding:10px 14px; font-size:12.5px}
+.mk-velo{position:fixed; inset:0; background:rgba(15,30,60,.55); z-index:80; display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:30px 12px}
+.mk-velo.oculto{display:none}
+.mk-modal{background:#fff; border-radius:14px; width:100%; max-width:1020px; box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.mk-mh{display:flex; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid var(--linea)}
+.mk-mh h2{margin:0; font:700 20px Khand,Poppins,sans-serif; color:var(--azul); text-transform:uppercase; flex:1}
+.mk-x{background:none; border:none; font-size:26px; line-height:1; cursor:pointer; color:var(--tinta-2)}
+.mk-mb{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:0}
+.mk-izq{padding:16px 20px; border-right:1px solid var(--linea)}
+.mk-der2{padding:16px 20px; min-width:0}
+.mk-izq label.t{display:block; font:700 11px Montserrat,sans-serif; color:var(--tinta-2); text-transform:uppercase; letter-spacing:.04em; margin:12px 0 4px}
+.mk-izq input[type=text],.mk-izq input[type=date],.mk-izq textarea,.mk-izq select{width:100%; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff}
+.mk-izq textarea{min-height:110px; resize:vertical}
+.mk-2c{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.mk-resp{display:flex; flex-wrap:wrap; gap:6px}
+.mk-resp label{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--linea); border-radius:999px; padding:4px 10px; font-size:12.5px; cursor:pointer; background:#fff}
+.mk-resp label.on{background:var(--azul-t); border-color:var(--azul); color:var(--azul); font-weight:700}
+.mk-resp input{display:none}
+.mk-acc{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px}
+.mk-tabs{display:flex; gap:4px; border-bottom:1px solid var(--linea); margin-bottom:12px}
+.mk-tabs button{background:none; border:none; padding:8px 12px; font:700 13px Montserrat,sans-serif; color:var(--tinta-2); cursor:pointer; border-bottom:3px solid transparent}
+.mk-tabs button.on{color:var(--azul); border-bottom-color:var(--naranja)}
+.mk-lista{max-height:340px; overflow:auto; margin-bottom:10px}
+.mk-com{padding:8px 10px; border-radius:10px; background:#F4F7F9; margin-bottom:8px}
+.mk-com.sis{background:#fff; border:1px dashed var(--linea); color:var(--tinta-2); font-size:12.5px}
+.mk-com .q{font-size:11.5px; color:var(--tinta-2); display:flex; justify-content:space-between; gap:8px; margin-bottom:3px}
+.mk-com .q button{border:none; background:none; color:var(--rojo); cursor:pointer; font-size:11.5px}
+.mk-com .x{white-space:pre-wrap; word-break:break-word}
+.mk-men{background:#FFE9D9; color:var(--naranja-d); font-weight:700; border-radius:4px; padding:0 3px}
+.mk-redacta{position:relative}
+.mk-redacta textarea{width:100%; min-height:72px; padding:9px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; resize:vertical}
+.mk-sug{position:absolute; left:0; bottom:100%; background:#fff; border:1px solid var(--linea); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); max-height:200px; overflow:auto; z-index:5; min-width:240px}
+.mk-sug div{padding:7px 12px; cursor:pointer; font-size:13px} .mk-sug div:hover,.mk-sug div.on{background:var(--azul-t)}
+.mk-sug small{color:var(--tinta-3); margin-left:6px}
+.mk-drop{border:2px dashed var(--linea); border-radius:10px; padding:16px; text-align:center; color:var(--tinta-2); margin-bottom:10px; cursor:pointer}
+.mk-drop.sobre{border-color:var(--naranja); background:#FFF3EA}
+.mk-arch{display:flex; align-items:center; gap:10px; padding:7px 8px; border:1px solid var(--linea); border-radius:9px; margin-bottom:7px}
+.mk-arch .im{width:46px; height:46px; border-radius:7px; background:var(--azul-t); color:var(--azul); font:700 11px Montserrat,sans-serif; display:flex; align-items:center; justify-content:center; flex:none; overflow:hidden}
+.mk-arch .im img{width:100%; height:100%; object-fit:cover}
+.mk-arch .dt{flex:1; min-width:0; font-size:12.5px} .mk-arch .dt b{display:block; word-break:break-all}
+.mk-arch .dt small{color:var(--tinta-3)}
+.mk-hist div{padding:6px 0; border-bottom:1px solid var(--linea); font-size:12.5px} .mk-hist small{color:var(--tinta-3); display:block}
+.mk-pro{padding:10px 20px 40px}
+.mk-pfil{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px}
+.mk-pfil select{padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff}
+.mk-tabla{width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--linea); border-radius:10px; overflow:hidden; min-width:980px}
+.mk-tabla th{background:var(--azul-t); color:var(--azul); font:700 11px Montserrat,sans-serif; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:9px 10px; white-space:nowrap}
+.mk-tabla td{padding:8px 10px; border-top:1px solid var(--linea); font-size:12.5px; vertical-align:top}
+.mk-tabla td.sol{max-width:260px; white-space:pre-wrap; word-break:break-word}
+.mk-tabla .acc{display:flex; gap:5px; flex-wrap:wrap}
+.mk-est{display:inline-block; padding:2px 9px; border-radius:999px; font:700 11px Montserrat,sans-serif; background:#EEF2F6; color:var(--tinta-2); white-space:nowrap}
+.mk-est.Nuevo{background:var(--azul-t); color:var(--azul)} .mk-est.Contactado{background:var(--ambar-l); color:#9A6A00} .mk-est.Cotizando{background:#FFE9D9; color:var(--naranja-d)} .mk-est.Cliente{background:var(--verde-l); color:var(--verde)} .mk-est.Descartado{background:var(--rojo-l); color:var(--rojo)}
+.mk-fte{display:inline-block; border-radius:6px; padding:1px 7px; font:700 10.5px Montserrat,sans-serif; background:#1c2540; color:#fff}
+.mk-chipP{display:inline-block; background:#E8F6EF; color:var(--verde); border-radius:6px; padding:1px 7px; font:700 10.5px Montserrat,sans-serif; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mk-modalP{max-width:680px}
+.mk-modalP .mk-izq{border-right:none}
+@media (max-width:900px){ .mk-mb{grid-template-columns:1fr} .mk-izq{border-right:none; border-bottom:1px solid var(--linea)} .mk-tablero,.mk-cal,.mk-barra{padding-left:12px; padding-right:12px} .mk-dia{min-height:76px} .mk-ev{font-size:10px; padding:1px 3px} }
+</style>
+
+<div id="appMkt" class="oculto">
+  <div class="mk-top">
+    <img id="mkLogo" alt="bigfoot print">
+    <h1>Marketing</h1>
+    <button type="button" class="b-inicio" onclick="mkSalir()" style="margin-left:8px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>Inicio</button>
+    <div class="mk-quien" id="mkQuien"></div>
+  </div>
+  <div class="mk-barra">
+    <div class="mk-seg"><button type="button" id="mkVTab" class="on" onclick="mkVista('tablero')">Tablero</button><button type="button" id="mkVCal" onclick="mkVista('calendario')">Calendario</button><button type="button" id="mkVPro" onclick="mkVista('prospectos')">Prospectos</button></div>
+    <select id="mkFPers" onchange="mkPinta()"></select>
+    <input type="text" id="mkFTxt" placeholder="Buscar actividad…" oninput="mkPinta()">
+    <button type="button" class="mk-btn nar mk-der" id="mkNueva" onclick="mkNuevoBtn()">+ Nueva actividad</button>
+  </div>
+  <div id="mkTablero" class="mk-tablero"></div>
+  <div id="mkCal" class="mk-cal" style="display:none"></div>
+  <div id="mkPros" class="mk-pro" style="display:none"></div>
+</div>
+
+<div id="mkVeloP" class="mk-velo oculto">
+  <div class="mk-modal mk-modalP">
+    <div class="mk-mh"><h2 id="mkPTit">Nuevo prospecto</h2><button type="button" class="mk-x" onclick="mkPCierra()" aria-label="Cerrar">×</button></div>
+    <div class="mk-izq">
+      <label class="t" for="mkPNom" style="margin-top:0">Nombre contacto</label>
+      <input type="text" id="mkPNom" maxlength="120" placeholder="Nombre de la persona">
+      <label class="t" for="mkPEmp">Empresa</label>
+      <input type="text" id="mkPEmp" maxlength="120" placeholder="Empresa o negocio (si aplica)">
+      <div class="mk-2c">
+        <div><label class="t" for="mkPFte">Fuente</label><select id="mkPFte"></select></div>
+        <div><label class="t" for="mkPEst">Estatus</label><select id="mkPEst"></select></div>
+        <div><label class="t" for="mkPCel">Celular</label><input type="text" id="mkPCel" maxlength="30" placeholder="10 dígitos" inputmode="tel"></div>
+        <div><label class="t" for="mkPCor">Correo</label><input type="text" id="mkPCor" maxlength="120" placeholder="correo@empresa.com" inputmode="email"></div>
+      </div>
+      <label class="t" for="mkPSol">Solicitud (qué necesita el prospecto)</label>
+      <textarea id="mkPSol" maxlength="3000" placeholder="Ej. Cotizar 20 lonas 3x1 m para evento del 15 de diciembre…"></textarea>
+      <p class="mk-vacio" id="mkPInfo" style="text-align:left; padding:8px 0 0"></p>
+      <div id="mkPTar" style="font-size:12.5px; margin-top:6px"></div>
+      <div class="mk-acc">
+        <button type="button" class="mk-btn nar" id="mkPGuarda" onclick="mkPGuarda()">Guardar prospecto</button>
+        <button type="button" class="mk-btn sec" id="mkPTarea" onclick="mkPNuevaTarea()" style="display:none">+ Crear tarea para este prospecto</button>
+        <button type="button" class="mk-btn sec" onclick="mkPCierra()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="mkVelo" class="mk-velo oculto">
+  <div class="mk-modal">
+    <div class="mk-mh"><h2 id="mkMTit">Nueva actividad</h2><button type="button" class="mk-x" onclick="mkCierra()" aria-label="Cerrar">×</button></div>
+    <div class="mk-mb">
+      <div class="mk-izq">
+        <label class="t" for="mkTitulo" style="margin-top:0">Título</label>
+        <input type="text" id="mkTitulo" maxlength="200" placeholder="Ej. Campaña de temporada — banners">
+        <label class="t" for="mkDesc">Descripción</label>
+        <textarea id="mkDesc" maxlength="5000" placeholder="Detalles, medidas, objetivos…"></textarea>
+        <div class="mk-2c">
+          <div><label class="t" for="mkEtapa">Etapa</label><select id="mkEtapa"></select></div>
+          <div><label class="t" for="mkPrio">Prioridad</label><select id="mkPrio"></select></div>
+          <div><label class="t" for="mkIni">Fecha inicial</label><input type="date" id="mkIni"></div>
+          <div><label class="t" for="mkFin">Fecha límite</label><input type="date" id="mkFin"></div>
+        </div>
+        <label class="t" for="mkEti">Etiqueta (opcional)</label>
+        <input type="text" id="mkEti" maxlength="120" placeholder="Ej. Redes, Evento, Impreso">
+        <label class="t" for="mkPro">Prospecto relacionado (opcional)</label>
+        <select id="mkPro"></select>
+        <label class="t">Responsables (se les avisa por correo)</label>
+        <div class="mk-resp" id="mkResp"></div>
+        <div class="mk-acc">
+          <button type="button" class="mk-btn nar" id="mkGuardar" onclick="mkGuardar()">Guardar</button>
+          <button type="button" class="mk-btn rojo" id="mkElimina" onclick="mkElimina()" style="display:none">Eliminar</button>
+          <button type="button" class="mk-btn sec" onclick="mkCierra()">Cerrar</button>
+        </div>
+      </div>
+      <div class="mk-der2">
+        <div class="mk-tabs">
+          <button type="button" id="mkTC" class="on" onclick="mkTab('c')">Comentarios <span id="mkNC"></span></button>
+          <button type="button" id="mkTA" onclick="mkTab('a')">Archivos <span id="mkNA"></span></button>
+          <button type="button" id="mkTH" onclick="mkTab('h')">Historial</button>
+        </div>
+        <div id="mkPC">
+          <div class="mk-lista" id="mkLCom"></div>
+          <div class="mk-redacta" id="mkRed">
+            <div class="mk-sug" id="mkSug" style="display:none"></div>
+            <textarea id="mkTxt" placeholder="Escribe un comentario. Usa @ para mencionar a alguien: le llegará un correo." maxlength="3000"></textarea>
+            <div style="margin-top:6px"><button type="button" class="mk-btn" id="mkEnvia" onclick="mkComenta()">Comentar</button></div>
+          </div>
+        </div>
+        <div id="mkPA" style="display:none">
+          <div id="mkSube">
+            <div class="mk-drop" id="mkDrop" onclick="document.getElementById('mkFile').click()">Arrastra archivos aquí o haz clic para elegirlos<br><small>PDF, JPG, PNG o AI · máx. 8 MB por archivo · se quedan con la actividad al cambiarla de etapa</small></div>
+            <input type="file" id="mkFile" multiple accept=".pdf,.jpg,.jpeg,.png,.ai" style="display:none" onchange="mkSubir(this.files); this.value=''">
+          </div>
+          <div class="mk-lista" id="mkLArc"></div>
+        </div>
+        <div id="mkPH" style="display:none"><div class="mk-lista mk-hist" id="mkLHis"></div></div>
+        <p class="mk-vacio" id="mkNota" style="display:none">Guarda la actividad para poder agregar comentarios y archivos.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var MK = { d: null, vista: 'tablero', mes: null, cur: null, tab: 'c', det: null, sel: [] };
+var MK_COL = { 'BRIEF': '#8A5CF6', 'PLANEACIÓN': '#2D7FF9', 'PRODUCCIÓN': '#F0A80C', 'EJECUCIÓN': '#FF6A13', 'FINALIZADO': '#1E8E5A' };
+
+function mkApi(accion, datos){
+  var intento = 0;
+  return new Promise(function(res, rej){
+    (function ir(){
+      google.script.run
+        .withSuccessHandler(res)
+        .withFailureHandler(function(err){
+          if (esSesionPerdida(err)) { sesionPerdida(); return rej(err); }
+          if (/candado|lock/i.test(String(err && err.message)) && intento++ < 2) { return setTimeout(ir, 1200); }
+          rej(err);
+        })
+        .mktApi(accion, JSON.stringify(datos || {}), CLAVE);
+    })();
+  });
+}
+function mkE(s){ return esc(s == null ? '' : s); }
+function mkMsg(m){ ptToast(m); }
+function mkErr(e){ ptToast((e && e.message) ? e.message.replace(/^Error:\s*/, '') : 'No se pudo completar.'); }
+function mkIso(d){ var m = d.getMonth() + 1, x = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (x < 10 ? '0' : '') + x; }
+function mkHoy(){ return mkIso(new Date()); }
+function mkFmt(f){ if (!f) { return ''; } if (!/^\d{4}-\d{2}-\d{2}/.test(String(f))) { return String(f); } var p = String(f).slice(0, 10).split('-'); var M = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return p[2] + ' ' + M[+p[1] - 1] + (String(f).length > 10 ? ' ' + String(f).slice(11, 16) : ''); }
+function mkNombre(c){ var e = MK.d.equipo.filter(function(x){ return x.correo === c; })[0]; return e ? e.nombre : c; }
+function mkIni(c){ var n = mkNombre(c).split(' '); return ((n[0] || '?')[0] + (n[1] ? n[1][0] : '')).toUpperCase(); }
+function mkPuedeEditar(t){
+  var n = MK.d.nivel; if (n >= 3) { return true; } if (n < 2) { return false; }
+  return t.creadoPor === MK.d.yo || t.responsables.indexOf(MK.d.yo) >= 0;
+}
+
+function abrirMkt(){
+  document.getElementById('appPortal').className = 'oculto';
+  document.getElementById('appMkt').className = '';
+  window.scrollTo(0, 0);
+  var l = document.getElementById('mkLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
+  document.getElementById('mkTablero').innerHTML = '<div class="mk-vacio" style="grid-column:1/-1">Cargando…</div>';
+  mkApi('inicio').then(function(d){
+    MK.d = d;
+    if (!MK.mes) { var h = new Date(); MK.mes = new Date(h.getFullYear(), h.getMonth(), 1); }
+    document.getElementById('mkQuien').innerHTML = '<b>' + mkE(d.yo) + '</b><br>' + ['', 'Solo consulta', 'Ver y escribir', 'Ver, escribir y editar'][d.nivel];
+    document.getElementById('mkNueva').style.display = d.nivel >= 2 ? '' : 'none';
+    var sel = document.getElementById('mkFPers'), v = sel.value || 'todos';
+    sel.innerHTML = '<option value="todos">Todas las personas</option><option value="mias">Mis actividades</option>' +
+      d.equipo.map(function(e){ return '<option value="' + mkE(e.correo) + '">' + mkE(e.nombre) + '</option>'; }).join('');
+    sel.value = v;
+    document.getElementById('mkEtapa').innerHTML = d.etapas.map(function(e){ return '<option>' + mkE(e) + '</option>'; }).join('');
+    document.getElementById('mkPrio').innerHTML = d.prioridades.map(function(e){ return '<option>' + mkE(e) + '</option>'; }).join('');
+    mkPinta();
+  }).catch(function(e){ document.getElementById('mkTablero').innerHTML = '<div class="mk-vacio" style="grid-column:1/-1">' + mkE(e && e.message) + '</div>'; });
+}
+function mkSalir(){
+  mkCierra();
+  document.getElementById('appMkt').className = 'oculto';
+  document.getElementById('appPortal').className = '';
+  window.scrollTo(0, 0);
+}
+function mkVista(v){
+  MK.vista = v;
+  document.getElementById('mkVTab').className = v === 'tablero' ? 'on' : '';
+  document.getElementById('mkVCal').className = v === 'calendario' ? 'on' : '';
+  document.getElementById('mkVPro').className = v === 'prospectos' ? 'on' : '';
+  mkPinta();
+}
+function mkFiltradas(){
+  var p = document.getElementById('mkFPers').value, q = document.getElementById('mkFTxt').value.trim().toLowerCase();
+  return MK.d.tareas.filter(function(t){
+    if (p === 'mias' && t.responsables.indexOf(MK.d.yo) < 0 && t.creadoPor !== MK.d.yo) { return false; }
+    if (p !== 'todos' && p !== 'mias' && t.responsables.indexOf(p) < 0) { return false; }
+    var pp = t.prospecto ? mkPros(t.prospecto) : null;
+    if (q && (t.titulo + ' ' + t.descripcion + ' ' + t.etiquetas + ' ' + (pp ? pp.nombre + ' ' + pp.empresa : '')).toLowerCase().indexOf(q) < 0) { return false; }
+    return true;
+  });
+}
+function mkPinta(){
+  if (!MK.d) { return; }
+  document.getElementById('mkTablero').style.display = MK.vista === 'tablero' ? '' : 'none';
+  document.getElementById('mkCal').style.display = MK.vista === 'calendario' ? '' : 'none';
+  document.getElementById('mkPros').style.display = MK.vista === 'prospectos' ? '' : 'none';
+  document.getElementById('mkFPers').style.display = MK.vista === 'prospectos' ? 'none' : '';
+  document.getElementById('mkNueva').textContent = MK.vista === 'prospectos' ? '+ Nuevo prospecto' : '+ Nueva actividad';
+  if (MK.vista === 'tablero') { mkTableroPinta(); } else if (MK.vista === 'calendario') { mkCalPinta(); } else { mkProsPinta(); }
+}
+
+/* ---------- Prospectos ---------- */
+function mkPros(id){ return (MK.d.prospectos || []).filter(function(x){ return x.id === id; })[0]; }
+function mkProSelect(sel){
+  var l = (MK.d.prospectos || []).filter(function(x){ return x.estatus !== 'Descartado' || x.id === sel; });
+  document.getElementById('mkPro').innerHTML = '<option value="">— Sin prospecto (actividad libre) —</option>' +
+    l.map(function(x){ return '<option value="' + x.id + '">' + mkE(x.nombre + (x.empresa ? ' · ' + x.empresa : '') + ' (' + x.estatus + ')') + '</option>'; }).join('');
+  document.getElementById('mkPro').value = sel || '';
+}
+function mkNuevoBtn(){ if (MK.vista === 'prospectos') { mkPAbre(null); } else { mkAbre(null); } }
+function mkProsPinta(){
+  var el = document.getElementById('mkPros'), fte = (document.getElementById('mkPF1') || {}).value || '', est = (document.getElementById('mkPF2') || {}).value || '';
+  var q = document.getElementById('mkFTxt').value.trim().toLowerCase();
+  var l = MK.d.prospectos.filter(function(x){
+    if (fte && x.fuente !== fte) { return false; } if (est && x.estatus !== est) { return false; }
+    return !q || (x.nombre + ' ' + x.empresa + ' ' + x.correo + ' ' + x.celular + ' ' + x.solicitud).toLowerCase().indexOf(q) >= 0;
+  });
+  var cuenta = {}; MK.d.prospectos.forEach(function(x){ cuenta[x.estatus] = (cuenta[x.estatus] || 0) + 1; });
+  var h = '<div class="mk-pfil"><b>' + l.length + ' de ' + MK.d.prospectos.length + ' prospectos</b>' +
+    '<select id="mkPF1" onchange="mkProsPinta()"><option value="">Todas las fuentes</option>' + MK.d.fuentes.map(function(f){ return '<option' + (f === fte ? ' selected' : '') + '>' + f + '</option>'; }).join('') + '</select>' +
+    '<select id="mkPF2" onchange="mkProsPinta()"><option value="">Todos los estatus</option>' + ['Nuevo','Contactado','Cotizando','Cliente','Descartado'].map(function(f){ return '<option' + (f === est ? ' selected' : '') + ' value="' + f + '">' + f + (cuenta[f] ? ' (' + cuenta[f] + ')' : '') + '</option>'; }).join('') + '</select></div>' +
+    '<div style="overflow-x:auto"><table class="mk-tabla"><thead><tr><th>Fecha y hora</th><th>Capturó</th><th>Contacto</th><th>Empresa</th><th>Fuente</th><th>Celular</th><th>Correo</th><th>Solicitud</th><th>Estatus</th><th>Tareas</th><th></th></tr></thead><tbody>';
+  if (!l.length) { h += '<tr><td colspan="11" class="mk-vacio">Sin prospectos. Usa «+ Nuevo prospecto».</td></tr>'; }
+  l.forEach(function(x){
+    var edita = MK.d.nivel >= 3 || (MK.d.nivel >= 2 && x.usuario === MK.d.yo);
+    h += '<tr><td>' + mkE(mkFmt(x.fecha)) + '<br><small>' + mkE(x.hora) + ' h</small></td><td>' + mkE(mkNombre(x.usuario)) + '</td><td><b>' + mkE(x.nombre) + '</b></td><td>' + mkE(x.empresa) + '</td>' +
+      '<td><span class="mk-fte">' + mkE(x.fuente) + '</span></td><td>' + mkE(x.celular) + '</td><td>' + mkE(x.correo) + '</td><td class="sol">' + mkE(x.solicitud.length > 180 ? x.solicitud.slice(0, 180) + '…' : x.solicitud) + '</td>' +
+      '<td><span class="mk-est ' + x.estatus + '">' + x.estatus + '</span>' + (x.clienteId ? '<br><small>ERP ' + mkE(x.clienteId) + '</small>' : '') + '</td><td>' + (x.tareas || '') + '</td>' +
+      '<td><div class="acc"><button type="button" class="mk-btn sec chico" onclick="mkPAbre(\'' + x.id + '\')">' + (edita ? 'Editar' : 'Ver') + '</button>' +
+      (MK.d.nivel >= 2 ? '<button type="button" class="mk-btn sec chico" onclick="mkPTareaDe(\'' + x.id + '\')">+ Tarea</button>' : '') +
+      (MK.d.nivel >= 2 && !x.clienteId ? '<button type="button" class="mk-btn chico" title="Crea el cliente en el ERP para poder cotizarle" onclick="mkPConvierte(\'' + x.id + '\')">Crear cliente ERP</button>' : '') +
+      (edita ? '<button type="button" class="mk-btn rojo chico" onclick="mkPBorra(\'' + x.id + '\')">×</button>' : '') + '</div></td></tr>';
+  });
+  el.innerHTML = h + '</tbody></table></div>';
+}
+function mkPAbre(id){
+  var x = id ? mkPros(id) : null; if (!x && MK.d.nivel < 2) { return; }
+  MK.pcur = x;
+  var ed = !x || MK.d.nivel >= 3 || (MK.d.nivel >= 2 && x.usuario === MK.d.yo);
+  document.getElementById('mkPTit').textContent = x ? 'Prospecto ' + x.id : 'Nuevo prospecto';
+  document.getElementById('mkPFte').innerHTML = '<option value="">Elige…</option>' + MK.d.fuentes.map(function(f){ return '<option>' + f + '</option>'; }).join('');
+  document.getElementById('mkPEst').innerHTML = ['Nuevo','Contactado','Descartado'].map(function(f){ return '<option>' + f + '</option>'; }).join('');
+  document.getElementById('mkPNom').value = x ? x.nombre : ''; document.getElementById('mkPEmp').value = x ? x.empresa : '';
+  document.getElementById('mkPFte').value = x ? x.fuente : ''; document.getElementById('mkPCel').value = x ? x.celular : '';
+  document.getElementById('mkPCor').value = x ? x.correo : ''; document.getElementById('mkPSol').value = x ? x.solicitud : '';
+  var auto = x && (x.estatus === 'Cotizando' || x.estatus === 'Cliente');
+  document.getElementById('mkPEst').value = x && !auto ? x.estatus : 'Nuevo';
+  document.getElementById('mkPEst').disabled = !ed || !x || auto;
+  ['mkPNom','mkPEmp','mkPFte','mkPCel','mkPCor','mkPSol'].forEach(function(k){ document.getElementById(k).disabled = !ed; });
+  document.getElementById('mkPGuarda').style.display = ed ? '' : 'none';
+  document.getElementById('mkPTarea').style.display = x && MK.d.nivel >= 2 ? '' : 'none';
+  document.getElementById('mkPInfo').innerHTML = x ? 'Capturado el ' + mkE(mkFmt(x.fecha)) + ' a las ' + mkE(x.hora) + ' h por <b>' + mkE(mkNombre(x.usuario)) + '</b> (' + mkE(x.usuario) + ').' +
+    (auto ? '<br>Estatus <b>' + x.estatus + '</b>: lo calcula el ERP según sus cotizaciones y ODP.' : '') : 'La fecha, la hora y tu usuario se guardan solos al capturar.';
+  var ts = x ? MK.d.tareas.filter(function(t){ return t.prospecto === x.id; }) : [];
+  document.getElementById('mkPTar').innerHTML = ts.length ? '<b>Tareas ligadas:</b> ' + ts.map(function(t){ return '<a href="#" style="color:var(--azul)" onclick="mkPCierra();mkAbre(\'' + t.id + '\');return false">' + mkE(t.titulo) + ' (' + mkE(t.etapa) + ')</a>'; }).join(' · ') : '';
+  document.getElementById('mkVeloP').className = 'mk-velo';
+}
+function mkPCierra(){ document.getElementById('mkVeloP').className = 'mk-velo oculto'; MK.pcur = null; }
+function mkPGuarda(){
+  var b = document.getElementById('mkPGuarda'); b.disabled = true;
+  var d = { id: MK.pcur ? MK.pcur.id : '', nombre: document.getElementById('mkPNom').value, empresa: document.getElementById('mkPEmp').value, fuente: document.getElementById('mkPFte').value,
+            celular: document.getElementById('mkPCel').value, correo: document.getElementById('mkPCor').value, solicitud: document.getElementById('mkPSol').value, estatus: document.getElementById('mkPEst').value };
+  mkApi('guardarProspecto', d).then(function(r){
+    b.disabled = false; MK.d.prospectos = r.prospectos; mkPCierra(); mkMsg(d.id ? 'Prospecto actualizado.' : 'Prospecto guardado.'); mkPinta();
+  }).catch(function(e){ b.disabled = false; mkErr(e); });
+}
+function mkPBorra(id){
+  var x = mkPros(id);
+  if (!confirm('¿Eliminar el prospecto «' + x.nombre + '»? Las tareas ligadas se conservan, solo pierden la relación.')) { return; }
+  mkApi('eliminarProspecto', { id: id }).then(function(r){
+    MK.d.prospectos = r.prospectos; MK.d.tareas.forEach(function(t){ if (t.prospecto === id) { t.prospecto = ''; } }); mkPinta(); mkMsg('Prospecto eliminado.');
+  }).catch(mkErr);
+}
+function mkPConvierte(id){
+  var x = mkPros(id);
+  if (!confirm('¿Crear (o ligar) el cliente «' + (x.empresa || x.nombre) + '» en el ERP para poder cotizarle?')) { return; }
+  mkApi('convertirProspecto', { id: id }).then(function(r){ MK.d.prospectos = r.prospectos; mkPinta(); mkMsg(r.mensaje || 'Listo.'); }).catch(mkErr);
+}
+function mkPTareaDe(id){ MK.preP = id; mkVista('tablero'); mkAbre(null); }
+function mkPNuevaTarea(){ if (MK.pcur) { var id = MK.pcur.id; mkPCierra(); mkPTareaDe(id); } }
+
+/* ---------- Tablero ---------- */
+function mkTarjeta(t, i){
+  var venc = t.fin && t.fin < mkHoy() && t.etapa !== 'FINALIZADO';
+  var av = t.responsables.slice(0, 4).map(function(c){ return '<span class="mk-av" title="' + mkE(mkNombre(c)) + '">' + mkE(mkIni(c)) + '</span>'; }).join('');
+  var fl = '';
+  if (mkPuedeEditar(t)) {
+    fl = '<span class="mk-flechas">' + (i > 0 ? '<button type="button" title="Etapa anterior" onclick="event.stopPropagation();mkMueve(\'' + t.id + '\',-1)">‹</button>' : '') +
+      (i < MK.d.etapas.length - 1 ? '<button type="button" title="Siguiente etapa" onclick="event.stopPropagation();mkMueve(\'' + t.id + '\',1)">›</button>' : '') + '</span>';
+  }
+  return '<div class="mk-card" style="--c:' + MK_COL[t.etapa] + '" draggable="' + (mkPuedeEditar(t) ? 'true' : 'false') + '" data-id="' + t.id + '" onclick="mkAbre(\'' + t.id + '\')"' +
+    ' ondragstart="mkArrastra(event,\'' + t.id + '\')" ondragend="this.classList.remove(\'arr\')">' +
+    '<div class="tt">' + mkE(t.titulo) + '</div>' +
+    '<div class="mt"><span class="mk-pill ' + mkE(t.prioridad) + '">' + mkE(t.prioridad) + '</span>' +
+    (t.fin ? '<span class="' + (venc ? 'mk-venc' : '') + '">' + (venc ? '⚠ ' : '') + mkFmt(t.fin) + '</span>' : '') +
+    (t.etiquetas ? '<span>#' + mkE(t.etiquetas) + '</span>' : '') + '</div>' +
+    (t.prospecto && mkPros(t.prospecto) ? '<div style="margin-top:6px"><span class="mk-chipP" title="Prospecto">👤 ' + mkE(mkPros(t.prospecto).nombre + (mkPros(t.prospecto).empresa ? ' · ' + mkPros(t.prospecto).empresa : '')) + '</span></div>' : '') +
+    '<div class="ft"><span>' + av + (t.responsables.length > 4 ? ' <small>+' + (t.responsables.length - 4) + '</small>' : '') +
+    '</span><span class="mt">' + (t.comentarios ? '💬 ' + t.comentarios + ' ' : '') + (t.archivos ? '📎 ' + t.archivos : '') + '</span>' + fl + '</div></div>';
+}
+function mkTableroPinta(){
+  var fil = mkFiltradas(), h = '';
+  MK.d.etapas.forEach(function(et, i){
+    var ts = fil.filter(function(t){ return t.etapa === et; });
+    ts.sort(function(a, b){ return (a.fin || '9999') < (b.fin || '9999') ? -1 : (a.fin || '9999') > (b.fin || '9999') ? 1 : (a.creadoEn < b.creadoEn ? -1 : 1); });
+    h += '<div class="mk-col" data-etapa="' + mkE(et) + '" ondragover="mkSobre(event,this)" ondragleave="this.classList.remove(\'sobre\')" ondrop="mkSuelta(event,this)">' +
+      '<h3 style="border-bottom:3px solid ' + MK_COL[et] + '; padding-bottom:6px">' + mkE(et) + '<span>' + ts.length + '</span></h3>' +
+      (ts.length ? ts.map(function(t){ return mkTarjeta(t, i); }).join('') : '<div class="mk-vacio">Sin actividades</div>') + '</div>';
+  });
+  document.getElementById('mkTablero').innerHTML = h;
+}
+function mkArrastra(ev, id){ ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; ev.currentTarget.classList.add('arr'); }
+function mkSobre(ev, el){ ev.preventDefault(); el.classList.add('sobre'); }
+function mkSuelta(ev, el){
+  ev.preventDefault(); el.classList.remove('sobre');
+  var id = ev.dataTransfer.getData('text/plain'); if (id) { mkMoverA(id, el.getAttribute('data-etapa')); }
+}
+function mkMueve(id, d){
+  var t = mkBusca(id), i = MK.d.etapas.indexOf(t.etapa) + d;
+  if (i >= 0 && i < MK.d.etapas.length) { mkMoverA(id, MK.d.etapas[i]); }
+}
+function mkBusca(id){ return MK.d.tareas.filter(function(t){ return t.id === id; })[0]; }
+function mkMoverA(id, etapa){
+  var t = mkBusca(id); if (!t || t.etapa === etapa) { return; }
+  if (!mkPuedeEditar(t)) { return mkMsg('Solo quien creó la actividad, a quien se asignó o un editor puede moverla.'); }
+  var antes = t.etapa; t.etapa = etapa; mkPinta();   /* optimista */
+  mkApi('moverTarea', { id: id, etapa: etapa }).then(function(r){ mkReemplaza(r.tarea); mkPinta(); })
+    .catch(function(e){ t.etapa = antes; mkPinta(); mkErr(e); });
+}
+function mkReemplaza(n){
+  var a = MK.d.tareas, i;
+  for (i = 0; i < a.length; i++) { if (a[i].id === n.id) { n.comentarios = n.comentarios || a[i].comentarios; n.archivos = n.archivos || a[i].archivos; a[i] = n; return; } }
+  a.push(n);
+}
+
+/* ---------- Calendario (semana inicia en lunes) ---------- */
+function mkMesMover(d){ MK.mes = d === 0 ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : new Date(MK.mes.getFullYear(), MK.mes.getMonth() + d, 1); mkPinta(); }
+function mkCalPinta(){
+  var M = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var y = MK.mes.getFullYear(), m = MK.mes.getMonth(), primero = new Date(y, m, 1), off = (primero.getDay() + 6) % 7;
+  var ini = new Date(y, m, 1 - off), nSem = Math.ceil((off + new Date(y, m + 1, 0).getDate()) / 7), fil = mkFiltradas(), hoy = mkHoy();
+  var h = '<div class="mk-calcab"><button type="button" class="mk-btn sec chico" onclick="mkMesMover(-1)">‹</button><h2>' + M[m] + ' ' + y + '</h2>' +
+    '<button type="button" class="mk-btn sec chico" onclick="mkMesMover(1)">›</button><button type="button" class="mk-btn sec chico" onclick="mkMesMover(0)">Hoy</button></div><div class="mk-grid">';
+  ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].forEach(function(d){ h += '<div class="mk-dsem">' + d + '</div>'; });
+  for (var i = 0; i < nSem * 7; i++) {
+    var d = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i), iso = mkIso(d);
+    var ts = fil.filter(function(t){ var a = t.inicio || t.fin, b = t.fin || t.inicio; return a && iso >= a && iso <= b; });
+    h += '<div class="mk-dia' + (d.getMonth() !== m ? ' fuera' : '') + (iso === hoy ? ' hoy' : '') + '" onclick="mkAbre(null,\'' + iso + '\')"><div class="n">' + d.getDate() + '</div>';
+    ts.slice(0, 3).forEach(function(t){
+      h += '<span class="mk-ev" style="--c:' + MK_COL[t.etapa] + '" title="' + mkE(t.titulo + ' · ' + t.etapa) + '" onclick="event.stopPropagation();mkAbre(\'' + t.id + '\')">' + mkE(t.titulo) + '</span>';
+    });
+    if (ts.length > 3) { h += '<span class="mk-mas">+' + (ts.length - 3) + ' más</span>'; }
+    h += '</div>';
+  }
+  h += '</div>';
+  var sin = fil.filter(function(t){ return !t.inicio && !t.fin; });
+  if (sin.length) {
+    h += '<div class="mk-sinfecha"><b>Sin fecha (no salen en el calendario):</b> ' + sin.map(function(t){ return '<a href="#" onclick="mkAbre(\'' + t.id + '\');return false" style="color:var(--azul)">' + mkE(t.titulo) + '</a>'; }).join(' · ') + '</div>';
+  }
+  h += '<div class="mk-sinfecha" style="display:flex;gap:14px;flex-wrap:wrap">' + MK.d.etapas.map(function(e){ return '<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:' + MK_COL[e] + ';margin-right:5px"></i>' + mkE(e) + '</span>'; }).join('') + '</div>';
+  document.getElementById('mkCal').innerHTML = h;
+}
+
+/* ---------- Ficha de la actividad ---------- */
+function mkAbre(id, fecha){
+  var t = id ? mkBusca(id) : null;
+  if (!t && MK.d.nivel < 2) { return; }
+  MK.cur = t; MK.det = null; MK.tab = 'c';
+  var ed = t ? mkPuedeEditar(t) : true;
+  document.getElementById('mkMTit').textContent = t ? 'Actividad' : 'Nueva actividad';
+  document.getElementById('mkTitulo').value = t ? t.titulo : '';
+  document.getElementById('mkDesc').value = t ? t.descripcion : '';
+  document.getElementById('mkEtapa').value = t ? t.etapa : MK.d.etapas[0];
+  document.getElementById('mkPrio').value = t ? t.prioridad : 'Media';
+  document.getElementById('mkIni').value = t ? t.inicio : (fecha || '');
+  document.getElementById('mkFin').value = t ? t.fin : (fecha || '');
+  document.getElementById('mkEti').value = t ? t.etiquetas : '';
+  mkProSelect(t ? t.prospecto : (MK.preP || ''));
+  MK.preP = '';
+  MK.sel = t ? t.responsables.slice() : [];
+  ['mkTitulo','mkDesc','mkEtapa','mkPrio','mkIni','mkFin','mkEti','mkPro'].forEach(function(k){ document.getElementById(k).disabled = !ed; });
+  mkRespPinta(ed);
+  document.getElementById('mkGuardar').style.display = ed ? '' : 'none';
+  document.getElementById('mkElimina').style.display = (t && (MK.d.nivel >= 3 || t.creadoPor === MK.d.yo) && MK.d.nivel >= 2) ? '' : 'none';
+  document.getElementById('mkVelo').className = 'mk-velo';
+  mkTab('c'); mkPanel();
+  if (t) { mkCargaDetalle(); }
+}
+function mkRespPinta(ed){
+  document.getElementById('mkResp').innerHTML = MK.d.equipo.map(function(e){
+    var on = MK.sel.indexOf(e.correo) >= 0;
+    return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" ' + (on ? 'checked ' : '') + (ed ? '' : 'disabled ') + 'onchange="mkTogResp(\'' + e.correo + '\',this.checked)">' + mkE(e.nombre) + '</label>';
+  }).join('') || '<small>Nadie tiene acceso a Marketing todavía.</small>';
+}
+function mkTogResp(c, on){
+  var i = MK.sel.indexOf(c);
+  if (on && i < 0) { MK.sel.push(c); } if (!on && i >= 0) { MK.sel.splice(i, 1); }
+  mkRespPinta(true);
+}
+function mkCierra(){ document.getElementById('mkVelo').className = 'mk-velo oculto'; MK.cur = null; }
+function mkPanel(){
+  var hay = !!MK.cur;
+  document.getElementById('mkNota').style.display = hay ? 'none' : '';
+  ['mkPC','mkPA','mkPH'].forEach(function(k){ document.getElementById(k).style.display = 'none'; });
+  document.getElementById('mkNC').textContent = hay && MK.cur.comentarios ? '(' + MK.cur.comentarios + ')' : '';
+  document.getElementById('mkNA').textContent = hay && MK.cur.archivos ? '(' + MK.cur.archivos + ')' : '';
+  if (hay) { document.getElementById({ c: 'mkPC', a: 'mkPA', h: 'mkPH' }[MK.tab]).style.display = ''; }
+  document.getElementById('mkRed').style.display = MK.d.nivel >= 2 ? '' : 'none';
+  document.getElementById('mkSube').style.display = MK.d.nivel >= 2 ? '' : 'none';
+}
+function mkTab(t){
+  MK.tab = t;
+  ['C','A','H'].forEach(function(k){ document.getElementById('mkT' + k).className = (k.toLowerCase() === t) ? 'on' : ''; });
+  mkPanel();
+}
+function mkCargaDetalle(){
+  var id = MK.cur.id;
+  document.getElementById('mkLCom').innerHTML = '<div class="mk-vacio">Cargando…</div>';
+  mkApi('detalle', { id: id }).then(function(r){
+    if (!MK.cur || MK.cur.id !== id) { return; }
+    MK.det = r; MK.cur.comentarios = r.tarea.comentarios; MK.cur.archivos = r.tarea.archivos;
+    mkDetPinta();
+  }).catch(function(e){ mkErr(e); mkCierra(); });
+}
+function mkTextoCom(t){
+  var tokens = MK.d.equipo.map(function(e){ return e.token; });
+  return mkE(t).replace(/(^|[\s(\[¡¿])@([\w.\-+]+@[\w.\-]+|[\w.\-+]+)/g, function(m, pre, tok){
+    var limpio = tok.replace(/[.\-]+$/, ''), ok = tokens.some(function(x){ return x.toLowerCase() === limpio.toLowerCase(); }) || MK.d.equipo.some(function(e){ return e.correo === limpio.toLowerCase(); });
+    return ok ? pre + '<span class="mk-men">@' + limpio + '</span>' + tok.slice(limpio.length) : m;
+  });
+}
+function mkDetPinta(){
+  var r = MK.det; if (!r) { return; }
+  var h = r.comentarios.length ? r.comentarios.map(function(c){
+    var borra = (c.autor === MK.d.yo && c.tipo !== 'sistema' && MK.d.nivel >= 2) || MK.d.nivel >= 3;
+    return '<div class="mk-com' + (c.tipo === 'sistema' ? ' sis' : '') + '"><div class="q"><span><b>' + mkE(mkNombre(c.autor)) + '</b> · ' + mkFmt(c.fecha) + '</span>' +
+      (borra ? '<button type="button" onclick="mkBorraCom(\'' + c.id + '\')">Eliminar</button>' : '') + '</div><div class="x">' + mkTextoCom(c.texto) + '</div></div>';
+  }).join('') : '<div class="mk-vacio">Aún no hay comentarios.</div>';
+  var lc = document.getElementById('mkLCom'); lc.innerHTML = h; lc.scrollTop = lc.scrollHeight;
+  var puedeArch = function(a){ return MK.d.nivel >= 3 || (MK.d.nivel >= 2 && a.subidoPor === MK.d.yo); };
+  document.getElementById('mkLArc').innerHTML = r.archivos.length ? r.archivos.map(function(a){
+    var img = /^image\/(jpeg|png)$/.test(a.mime);
+    return '<div class="mk-arch"><div class="im" id="mkIm' + a.id + '">' + (img ? '…' : mkE(a.nombre.split('.').pop().toUpperCase())) + '</div>' +
+      '<div class="dt"><b>' + mkE(a.nombre) + '</b><small>' + mkTam(a.tamano) + ' · ' + mkE(mkNombre(a.subidoPor)) + ' · ' + mkFmt(a.fecha) + ' · subido en ' + mkE(a.etapa) + '</small></div>' +
+      '<button type="button" class="mk-btn sec chico" onclick="mkBaja(\'' + a.id + '\')">Descargar</button>' +
+      (puedeArch(a) ? '<button type="button" class="mk-btn rojo chico" onclick="mkBorraArc(\'' + a.id + '\')">×</button>' : '') + '</div>';
+  }).join('') : '<div class="mk-vacio">Sin archivos. Los archivos viajan con la actividad en todas las etapas.</div>';
+  r.archivos.forEach(function(a){ if (/^image\/(jpeg|png)$/.test(a.mime) && a.tamano <= 1500000) { mkMini(a); } });
+  document.getElementById('mkLHis').innerHTML = r.historial.slice().reverse().map(function(x){ return '<div>' + mkE(x.t) + '<small>' + mkE(mkNombre(x.p)) + ' · ' + mkFmt(x.f) + '</small></div>'; }).join('') || '<div class="mk-vacio">Sin movimientos.</div>';
+  document.getElementById('mkNC').textContent = MK.cur.comentarios ? '(' + MK.cur.comentarios + ')' : '';
+  document.getElementById('mkNA').textContent = MK.cur.archivos ? '(' + MK.cur.archivos + ')' : '';
+}
+function mkTam(b){ return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function mkMini(a){
+  mkApi('archivo', { id: a.id }).then(function(r){
+    var el = document.getElementById('mkIm' + a.id); if (el) { el.innerHTML = '<img alt="" src="data:' + r.mime + ';base64,' + r.b64 + '">'; }
+  }).catch(function(){ /* sin miniatura */ });
+}
+function mkBaja(id){
+  mkMsg('Preparando archivo…');
+  mkApi('archivo', { id: id }).then(function(r){
+    var bin = atob(r.b64), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+    var url = URL.createObjectURL(new Blob([arr], { type: r.mime })), a = document.createElement('a');
+    a.href = url; a.download = r.nombre; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }).catch(mkErr);
+}
+
+/* ---------- Guardar / eliminar ---------- */
+function mkGuardar(){
+  var b = document.getElementById('mkGuardar'); b.disabled = true;
+  var d = { id: MK.cur ? MK.cur.id : '', titulo: document.getElementById('mkTitulo').value, descripcion: document.getElementById('mkDesc').value,
+    etapa: document.getElementById('mkEtapa').value, prioridad: document.getElementById('mkPrio').value, inicio: document.getElementById('mkIni').value,
+    fin: document.getElementById('mkFin').value, prospecto: document.getElementById('mkPro').value, etiquetas: document.getElementById('mkEti').value, responsables: MK.sel,
+    comentarios: MK.cur ? MK.cur.comentarios : 0, archivos: MK.cur ? MK.cur.archivos : 0 };
+  mkApi('guardarTarea', d).then(function(r){
+    b.disabled = false;
+    var nuevo = !MK.cur; mkReemplaza(r.tarea);
+    MK.cur = mkBusca(r.tarea.id);
+    var av = r.avisos || {};
+    mkMsg(nuevo ? 'Actividad creada.' + (av.enviados ? ' Aviso enviado a ' + av.enviados + ' persona(s).' : '') : 'Cambios guardados.' + (av.enviados ? ' Aviso enviado a ' + av.enviados + ' persona(s).' : ''));
+    if (av.fallidos) { mkMsg('No se pudo enviar ' + av.fallidos + ' correo(s) (¿cuota diaria?).'); }
+    document.getElementById('mkMTit').textContent = 'Actividad';
+    document.getElementById('mkElimina').style.display = '';
+    MK.d.prospectos.forEach(function(x){ x.tareas = MK.d.tareas.filter(function(t){ return t.prospecto === x.id; }).length; });
+    mkPinta(); mkPanel(); if (nuevo) { MK.det = null; mkCargaDetalle(); mkTab('a'); }
+  }).catch(function(e){ b.disabled = false; mkErr(e); });
+}
+function mkElimina(){
+  if (!MK.cur || !confirm('¿Eliminar la actividad «' + MK.cur.titulo + '» con sus comentarios y archivos? No se puede deshacer.')) { return; }
+  var id = MK.cur.id;
+  mkApi('eliminarTarea', { id: id }).then(function(){
+    MK.d.tareas = MK.d.tareas.filter(function(t){ return t.id !== id; });
+    mkCierra(); mkPinta(); mkMsg('Actividad eliminada.');
+  }).catch(mkErr);
+}
+
+/* ---------- Comentarios y @menciones ---------- */
+function mkComenta(){
+  var tx = document.getElementById('mkTxt'), texto = tx.value.trim(); if (!texto || !MK.cur) { return; }
+  var b = document.getElementById('mkEnvia'); b.disabled = true;
+  mkApi('comentar', { tarea: MK.cur.id, texto: texto }).then(function(r){
+    b.disabled = false; tx.value = ''; mkSugOculta();
+    if (MK.det) { MK.det.comentarios.push(r.comentario); }
+    MK.cur.comentarios++; mkDetPinta(); mkPinta();
+    var av = r.avisos || {};
+    if (av.enviados) { mkMsg('Comentario enviado. Se avisó por correo a ' + av.enviados + ' persona(s) mencionada(s).'); }
+    if (av.fallidos) { mkMsg('No se pudo enviar ' + av.fallidos + ' aviso(s) por correo.'); }
+  }).catch(function(e){ b.disabled = false; mkErr(e); });
+}
+function mkBorraCom(id){
+  if (!confirm('¿Eliminar este comentario?')) { return; }
+  mkApi('eliminarComentario', { id: id }).then(function(){
+    var c = MK.det.comentarios.filter(function(x){ return x.id === id; })[0];
+    MK.det.comentarios = MK.det.comentarios.filter(function(x){ return x.id !== id; });
+    if (c && c.tipo !== 'sistema') { MK.cur.comentarios = Math.max(0, MK.cur.comentarios - 1); }
+    mkDetPinta(); mkPinta();
+  }).catch(mkErr);
+}
+var MK_SUG = { lista: [], i: 0, ini: -1 };
+function mkSugOculta(){ document.getElementById('mkSug').style.display = 'none'; MK_SUG.lista = []; }
+function mkSugBusca(){
+  var tx = document.getElementById('mkTxt'), pos = tx.selectionStart, antes = tx.value.slice(0, pos);
+  var m = /(^|[\s(\[¡¿])@([\w.\-+]*)$/.exec(antes);
+  if (!m) { return mkSugOculta(); }
+  var q = m[2].toLowerCase(); MK_SUG.ini = pos - q.length - 1;
+  MK_SUG.lista = MK.d.equipo.filter(function(e){ return e.token.toLowerCase().indexOf(q) === 0 || e.nombre.toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+  MK_SUG.i = 0; mkSugPinta();
+}
+function mkSugPinta(){
+  var el = document.getElementById('mkSug');
+  if (!MK_SUG.lista.length) { el.style.display = 'none'; return; }
+  el.innerHTML = MK_SUG.lista.map(function(e, i){ return '<div class="' + (i === MK_SUG.i ? 'on' : '') + '" onmousedown="event.preventDefault();mkSugElige(' + i + ')">' + mkE(e.nombre) + '<small>@' + mkE(e.token) + '</small></div>'; }).join('');
+  el.style.display = '';
+}
+function mkSugElige(i){
+  var e = MK_SUG.lista[i]; if (!e) { return; }
+  var tx = document.getElementById('mkTxt'), pos = tx.selectionStart;
+  tx.value = tx.value.slice(0, MK_SUG.ini) + '@' + e.token + ' ' + tx.value.slice(pos);
+  var np = MK_SUG.ini + e.token.length + 2; tx.focus(); tx.setSelectionRange(np, np); mkSugOculta();
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var tx = document.getElementById('mkTxt'); if (!tx) { return; }
+  tx.addEventListener('input', mkSugBusca);
+  tx.addEventListener('click', mkSugBusca);
+  tx.addEventListener('blur', function(){ setTimeout(mkSugOculta, 150); });
+  tx.addEventListener('keydown', function(ev){
+    if (MK_SUG.lista.length) {
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); MK_SUG.i = (MK_SUG.i + 1) % MK_SUG.lista.length; mkSugPinta(); return; }
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); MK_SUG.i = (MK_SUG.i - 1 + MK_SUG.lista.length) % MK_SUG.lista.length; mkSugPinta(); return; }
+      if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); mkSugElige(MK_SUG.i); return; }
+      if (ev.key === 'Escape') { mkSugOculta(); return; }
+    }
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); mkComenta(); }
+  });
+  var dr = document.getElementById('mkDrop');
+  dr.addEventListener('dragover', function(ev){ ev.preventDefault(); dr.classList.add('sobre'); });
+  dr.addEventListener('dragleave', function(){ dr.classList.remove('sobre'); });
+  dr.addEventListener('drop', function(ev){ ev.preventDefault(); dr.classList.remove('sobre'); mkSubir(ev.dataTransfer.files); });
+});
+
+/* ---------- Archivos ---------- */
+function mkSubir(files){
+  if (!MK.cur || !files || !files.length) { return; }
+  var lista = Array.prototype.slice.call(files), id = MK.cur.id, dr = document.getElementById('mkDrop'), orig = dr.innerHTML;
+  (function sig(){
+    var f = lista.shift();
+    if (!f) { dr.innerHTML = orig; return; }
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (MK.d.extensiones.indexOf(ext) < 0) { mkMsg(f.name + ': tipo no permitido (solo PDF, JPG, PNG y AI).'); return sig(); }
+    if (f.size > 8 * 1048576) { mkMsg(f.name + ': pesa más de 8 MB.'); return sig(); }
+    dr.textContent = 'Subiendo ' + f.name + '…';
+    var rd = new FileReader();
+    rd.onerror = function(){ mkMsg('No se pudo leer ' + f.name); sig(); };
+    rd.onload = function(){
+      var b64 = String(rd.result).split(',')[1] || '';
+      mkApi('subirArchivo', { tarea: id, nombre: f.name, b64: b64 }).then(function(r){
+        if (MK.cur && MK.cur.id === id) { if (MK.det) { MK.det.archivos.push(r.archivo); } MK.cur.archivos++; mkDetPinta(); }
+        var t = mkBusca(id); if (t && (!MK.cur || MK.cur !== t)) { t.archivos++; }
+        mkPinta(); sig();
+      }).catch(function(e){ mkErr(e); sig(); });
+    };
+    rd.readAsDataURL(f);
+  })();
+}
+function mkBorraArc(id){
+  if (!confirm('¿Eliminar este archivo?')) { return; }
+  mkApi('eliminarArchivo', { id: id }).then(function(){
+    MK.det.archivos = MK.det.archivos.filter(function(a){ return a.id !== id; });
+    MK.cur.archivos = Math.max(0, MK.cur.archivos - 1); mkDetPinta(); mkPinta();
+  }).catch(mkErr);
+}
+</script>

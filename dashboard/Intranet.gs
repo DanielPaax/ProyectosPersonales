@@ -14,15 +14,19 @@ var HOJAS_INTRANET = {
   /* PERMISOS POR CORREO, sin tocar codigo: una fila por persona. AREAS = modulos que ve (separados por coma:
      dashboard, erp, direccion, finanzas (operaciones y comercial equivalen a erp); solo Talento Humano lo ve todo el mundo).
      VER_VENTAS = SI: ve ventas, costos y margen. CAPTURAR = SI: puede capturar trabajos y ventas. */
-  ACCESOS: ['CORREO', 'AREAS', 'VER_VENTAS', 'CAPTURAR', 'NOTAS']
+  ACCESOS: ['CORREO', 'AREAS', 'VER_VENTAS', 'CAPTURAR', 'NOTAS', 'PERMISOS', 'INVITADO_POR', 'INVITADO_EN', 'ULTIMO_ACCESO']
 };
+
+/* PERMISOS (los llena el modulo Administracion): nivel por area, "dashboard=3;erp=2;direccion=1".
+   0 sin acceso, 1 ver, 2 escribir (crear), 3 editar (modificar y eliminar). Si PERMISOS esta vacio rigen AREAS y CAPTURAR. */
 
 /* Filas que se siembran cuando la hoja se crea por primera vez. */
 var SEMILLAS_INTRANET = {
-  ACCESOS: [['carmen.ponce@bfprint.com.mx', 'erp', '', 'SI', 'Alta inicial (ERP: rol COMERCIAL)']]
+  ACCESOS: [['carmen.ponce@bfprint.com.mx', 'erp', '', 'SI', 'Alta inicial (ERP: rol COMERCIAL)', 'erp=3', '', '', '']]
 };
 
 /* ===================== HOJAS ===================== */
+var _I_COLS_ = {};
 
 /* Devuelve la hoja; si no existe la crea con sus encabezados. */
 function _hojaI_(nombre) {
@@ -30,6 +34,15 @@ function _hojaI_(nombre) {
   if (!enc) { throw new Error('Hoja desconocida: ' + nombre); }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var h = ss.getSheetByName(nombre);
+  if (h && !_I_COLS_[nombre]) {
+    /* una hoja creada con una version anterior: se agregan al final las columnas nuevas (nunca se mueve nada) */
+    var lc = h.getLastColumn(), tiene = lc ? h.getRange(1, 1, 1, lc).getValues()[0] : [];
+    if (tiene.length < enc.length) {
+      _aseguraColumnas_(h, enc.length);
+      h.getRange(1, tiene.length + 1, 1, enc.length - tiene.length).setValues([enc.slice(tiene.length)]);
+    }
+    _I_COLS_[nombre] = true;
+  }
   if (!h) {
     h = ss.insertSheet(nombre);
     h.getRange(1, 1, 1, enc.length).setValues([enc]);
@@ -185,20 +198,56 @@ function _normAreas_(txt) {
   return out;
 }
 
-/* { correo: {areas:[...], verVentas, capturar} } desde la hoja ACCESOS (memoria de 5 min; se vacia al editarla). */
+/* { correo: {areas, niveles, verVentas, capturar, invitadoPor, invitadoEn, ultimoAcceso} } desde la hoja ACCESOS
+   (memoria de 5 min; se vacia al editarla). niveles = {area: 1 ver | 2 escribir | 3 editar}. */
 function _leerAccesos_() {
   var cache = CacheService.getScriptCache();
   var g = cache.get('accesos_v' + JG_SELLO.esquema);
   if (g) { try { return JSON.parse(g); } catch (e) { /* se relee */ } }
   var tabla = _tablaI_('ACCESOS'), out = {};
+  var si = function (v) { return /^\s*(si|sí|s|x|1|true|yes)\s*$/i.test(String(v || '')); };
   for (var i = 0; i < tabla.filas.length; i++) {
     var f = tabla.filas[i], c = String(f.CORREO || '').trim().toLowerCase();
     if (!c || c.indexOf('@') < 0) { continue; }
-    var si = function (v) { return /^\s*(si|sí|s|x|1|true|yes)\s*$/i.test(String(v || '')); };
-    out[c] = { areas: _normAreas_(f.AREAS), verVentas: si(f.VER_VENTAS), capturar: si(f.CAPTURAR) };
+    var cap = si(f.CAPTURAR), niveles = _parsePermisos_(f.PERMISOS), conPerm = String(f.PERMISOS || '').trim() !== '';
+    var areas = _normAreas_(f.AREAS);
+    if (!conPerm) { for (var a = 0; a < areas.length; a++) { niveles[areas[a]] = (cap && (areas[a] === 'dashboard' || areas[a] === 'erp')) ? 3 : 1; } }
+    var lista = [];
+    for (var id in niveles) { if (niveles.hasOwnProperty(id) && niveles[id] >= 1 && id !== 'admin') { lista.push(id); } }
+    out[c] = { areas: lista, niveles: niveles, verVentas: si(f.VER_VENTAS),
+               capturar: conPerm ? (niveles.dashboard >= 2 || niveles.erp >= 2) : cap,
+               invitadoPor: String(f.INVITADO_POR || ''), invitadoEn: String(f.INVITADO_EN || ''), ultimoAcceso: String(f.ULTIMO_ACCESO || ''),
+               notas: String(f.NOTAS || '') };
   }
   try { cache.put('accesos_v' + JG_SELLO.esquema, JSON.stringify(out), 300); } catch (e) {}
   return out;
+}
+
+/* "dashboard=3;erp=2" -> { dashboard: 3, erp: 2 } (areas con nombre conocido, niveles de 0 a 3) */
+function _parsePermisos_(txt) {
+  var out = {}, partes = String(txt || '').split(/[;,]+/);
+  for (var i = 0; i < partes.length; i++) {
+    var m = /^\s*([^=:\s]+)\s*[=:]\s*([0-3])\s*$/.exec(partes[i]);
+    if (!m) { continue; }
+    var id = _normAreas_(m[1])[0];
+    if (id) { out[id] = Number(m[2]); }
+  }
+  return out;
+}
+
+/* Arma el texto de la columna PERMISOS a partir de {area: nivel}. */
+function _textoPermisos_(niveles) {
+  var p = [];
+  for (var id in niveles) { if (niveles.hasOwnProperty(id) && niveles[id] > 0) { p.push(id + '=' + niveles[id]); } }
+  return p.join(';');
+}
+
+/* Fecha y hora del ultimo ingreso con codigo (informativo para el administrador). */
+function _marcaAcceso_(correo) {
+  var t = _tablaI_('ACCESOS'), f = null, k = String(correo).toLowerCase();
+  for (var i = 0; i < t.filas.length; i++) { if (String(t.filas[i].CORREO).trim().toLowerCase() === k) { f = t.filas[i]; break; } }
+  if (!f) { return; }
+  _ponI_(t, f._fila, { ULTIMO_ACCESO: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') });
 }
 
 function _accesoDeCorreo_(correo) {

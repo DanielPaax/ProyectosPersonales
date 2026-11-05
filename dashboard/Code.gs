@@ -46,13 +46,16 @@ var ROLES = {
      pedirlo todos los correos de estos DOMINIOS y los correos sueltos de ACCESO_EXTRA (o de
      cualquier lista de roles). Su rol sale de las mismas listas de arriba; sin lista = LECTOR.
      BLOQUEADOS nunca entran. */
-  DOMINIOS:     ['gpowib.com', 'bfprint.com.mx', 'imjmedia.com.mx'],
+  DOMINIOS:     ['gpowib.com', 'bfprint.com.mx', 'imjmedia.com.mx', 'imjfest.com'],
   ACCESO_EXTRA: [],
   BLOQUEADOS:   [],
   /* FINANZAS: solo MASTER y los correos de esta lista (los socios NO entran, salvo que se les dé el área). */
   FINANZAS:    [],
   COMERCIAL:   [],
-  OPERACIONES: []
+  OPERACIONES: [],
+  /* ADMIN: el modulo de Administracion (invitar personas y darles permisos por area). Solo estos correos, y solo en codigo:
+     ni la hoja ACCESOS ni nadie desde la intranet puede agregar a otro administrador. */
+  ADMIN:       ['danielpaax@gmail.com']
 };
 
 /* ===================== AREAS DE LA INTRANET ===================== */
@@ -68,26 +71,60 @@ var ROLES = {
    modulos: tarjetas dentro del area. estado: 'activo' (tiene destino), 'proximamente'.
    planeados: texto de lo que se va a construir (solo se muestra como pista). */
 var AREAS = [
-  { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
-    desc: 'Producción y comercial: ventas, costos, merma y productividad.',
-    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
-  { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
-    desc: 'Información estratégica y de gestión. Acceso restringido.',
-    acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
-  { id: 'finanzas', nombre: 'Finanzas', icono: 'monedas',
-    desc: 'Estado financiero de la empresa. Acceso restringido.',
-    acceso: { roles: [], lista: 'FINANZAS', socios: false }, modulos: [], planeados: [] },
   { id: 'talento', nombre: 'Talento Humano', icono: 'personas',
     desc: 'Solicitudes y documentos de consulta: políticas y formatos.',
     acceso: { todos: true }, modulos: [], planeados: [] },
+  { id: 'finanzas', nombre: 'Finanzas', icono: 'monedas',
+    desc: 'Estado financiero de la empresa. Acceso restringido.',
+    acceso: { roles: [], lista: 'FINANZAS', socios: false }, modulos: [], planeados: [] },
+  { id: 'direccion', nombre: 'Dirección', icono: 'brujula',
+    desc: 'Información estratégica y de gestión. Acceso restringido.',
+    acceso: { roles: [], lista: 'DIRECCION', socios: true }, vista: 'direccion' },
+  { id: 'marketing', nombre: 'Marketing', icono: 'megafono',
+    desc: 'Tablero Kanban de actividades, calendario, archivos y comentarios con menciones.',
+    acceso: { roles: [], socios: false }, vista: 'marketing' },
+  { id: 'admin', nombre: 'Administración', icono: 'llave',
+    desc: 'Invita personas a la intranet y define qué puede ver, escribir y editar cada una. Solo administradores.',
+    acceso: { roles: [], socios: false }, vista: 'admin', soloAdmin: true },
   { id: 'erp', nombre: 'ERP', icono: 'engrane',
     desc: 'Clientes, cotizaciones, órdenes de producción, compras, inventario y facturación.',
-    acceso: { roles: [], socios: true }, vista: 'erp' }
+    acceso: { roles: [], socios: true }, vista: 'erp' },
+  { id: 'calidad', nombre: 'Calidad', icono: 'escudo',
+    desc: 'Control de calidad, no conformidades y mejora continua. En construcción.',
+    acceso: { roles: [], socios: false }, modulos: [], planeados: [] },
+  { id: 'dashboard', nombre: 'Dashboard BFp', icono: 'grafica',
+    desc: 'Producción y comercial: ventas, costos, merma y productividad.',
+    acceso: { roles: [], lista: 'DASHBOARD', socios: false }, vista: 'dashboard' },
+  { id: 'soporte', nombre: 'Soporte y Sistemas', icono: 'soporte',
+    desc: 'Solicitudes de soporte, equipos y sistemas. En construcción.',
+    acceso: { roles: [], socios: false }, modulos: [], planeados: [] }
 ];
 
 function _areaPorId_(id) {
   for (var i = 0; i < AREAS.length; i++) { if (AREAS[i].id === id) { return AREAS[i]; } }
   return null;
+}
+
+/* NIVEL de permiso de una persona en un area: 0 sin acceso, 1 ver, 2 escribir (crear), 3 editar (modificar y eliminar).
+   MASTER = 3 en todo. La hoja ACCESOS (columna PERMISOS) fija el nivel por area; sin ese dato, quien esta en una lista de ROLES
+   tiene 3 en Dashboard y ERP si es de la lista CAPTURA, y 1 en lo demas a lo que entra. Los enlaces personales solo ven. */
+function _nivelArea_(ses, id) {
+  if (!ses) { return 0; }
+  if (ses.rol === 'MASTER' && !ses.porClave) { return 3; }
+  var area = _areaPorId_(id);
+  if (!area || !_accesoArea_(ses, area)) { return 0; }
+  if (ses.porClave) { return 1; }
+  var ac = _accesoDeCorreo_(ses.correo);
+  if (ac && ac.niveles && ac.niveles[id] !== undefined) { return ac.niveles[id]; }
+  if ((id === 'dashboard' || id === 'erp') && _enLista_(ROLES.CAPTURA || [], String(ses.correo).toLowerCase())) { return 3; }
+  if (ac && ac.areas.indexOf(id) >= 0) { return ac.capturar && (id === 'dashboard' || id === 'erp') ? 3 : 1; }
+  return 1;
+}
+
+function _exigeNivel_(ses, id, nivel) {
+  if (_nivelArea_(ses, id) >= nivel) { return true; }
+  _bitacora_(ses.correo, 'ACCESO_NEGADO', 'nivel ' + id + ' requeria=' + nivel);
+  throw new Error('Sin autorizacion para esta accion.');
 }
 
 /* Los datos del tablero solo salen a quien tiene Dashboard BFp o Direccion (que lo replica en lectura). */
@@ -98,8 +135,13 @@ function _exigeTablero_(ses) {
 }
 
 /* ¿Esta sesion entra a esta area? MASTER entra a todas. */
+function _esAdmin_(ses) {
+  return !!(ses && ses.correo && !ses.porClave && _enLista_(ROLES.ADMIN || [], String(ses.correo).toLowerCase()));
+}
+
 function _accesoArea_(ses, area) {
   if (!area) { return false; }
+  if (area.soloAdmin) { return _esAdmin_(ses); }   /* ni MASTER ni la hoja ACCESOS: solo ROLES.ADMIN */
   var a = area.acceso || {};
   if (ses.rol === 'MASTER') { return true; }
   if (a.todos) { return true; }
@@ -204,6 +246,7 @@ function doGet(e) {
   /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
   t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
   t.vista = JSON.stringify(_areaPorId_(a) ? a : '');
+  t.neg = JSON.stringify(/^NG-\d{3,8}$/.test((e && e.parameter && e.parameter.neg) || '') ? String(e.parameter.neg) : '');
   t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
   t.logoBlanco = JSON.stringify(typeof LOGO_BLANCO_DATA_URI === 'string' ? LOGO_BLANCO_DATA_URI : '');
   return t.evaluate()
@@ -248,8 +291,18 @@ function portalArea(id, clave) {
            planeados: a.planeados || [], enlaces: _leerEnlaces_(a.id), puedeEscribir: !(ses.rol === 'SOCIO' || ses.porClave) };
 }
 
+/* Une un archivo HTML del proyecto a index.html. Si el archivo trae el contenido equivocado (otro archivo pegado por error),
+   no rompe la pagina: quita escrituras de plantilla sueltas y deja avisado cual archivo es, para que el portal lo diga. */
+var INCLUIR_ESPERADO = { ErpUI: 'function abrirErp', AdminUI: 'function abrirAdmin', MarketingUI: 'function abrirMkt' };
 function incluir(nombre) {
-  return HtmlService.createHtmlOutputFromFile(nombre).getContent();
+  var c = HtmlService.createHtmlOutputFromFile(nombre).getContent();
+  c = c.replace(/<\?!?=[\s\S]*?\?>/g, '');
+  var marca = INCLUIR_ESPERADO[nombre];
+  if (marca && c.indexOf(marca) < 0) {
+    var ini = c.replace(/\s+/g, ' ').trim().slice(0, 90);
+    return '<script>window.INC_MAL = window.INC_MAL || {}; window.INC_MAL[' + JSON.stringify(nombre) + '] = ' + JSON.stringify(ini).replace(/</g, '\\u003c') + ';</script>';
+  }
+  return c;
 }
 
 /* ===================== IDENTIDAD Y ROL ===================== */
@@ -444,10 +497,21 @@ function verificarCodigo(correo, codigo) {
   cache.remove(clave);
   if (!_correoPermitido_(c)) { throw new Error('Este correo no tiene acceso a la intranet.'); }
   _bitacora_(c, 'LOGIN_CODIGO', 'sesion de ' + SESION_DIAS + ' dias');
+  try { _marcaAcceso_(c); } catch (e) { /* solo informativo */ }
   return { ok: true, token: _crearToken_(c), correo: c, dias: SESION_DIAS };
 }
 
 /* Menu: Produccion > Acceso por correo. Solo MASTER. */
+/* Cierra en todos sus navegadores las sesiones de un correo (sin menus). */
+function _revocaSesiones_(correo) {
+  var c = String(correo || '').trim().toLowerCase();
+  if (!c) { return; }
+  var p = PropertiesService.getScriptProperties(), rev = {};
+  try { rev = JSON.parse(p.getProperty('sesion_revocadas') || '{}'); } catch (e) { rev = {}; }
+  rev[c] = Math.floor(new Date().getTime() / 1000) + 1;
+  p.setProperty('sesion_revocadas', JSON.stringify(rev));
+}
+
 function cerrarSesionesCorreo() {
   var ses = _exigeMasterMenu_(), ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Cerrar sesiones', 'Correo cuya sesión quieres cerrar (en todos sus navegadores):', ui.ButtonSet.OK_CANCEL);
@@ -1230,6 +1294,11 @@ function _agregaTablero_(filas) {
   };
 }
 
+/* Negociaciones del ERP (kanban): etapas, perdidas por motivo y por responsable, con los filtros generales de fecha. */
+function _negocios_(q) {
+  try { return ERP.resumenNegociaciones(q); } catch (e) { return null; }
+}
+
 /* ===================== COSTOS OPERATIVOS DE BASE (por renglon de produccion) ===================== */
 /* Las columnas MANO DE OBRA, HORAS EXTRAS, OTROS COSTOS e INSTALACIÓN de BASE son los MISMOS importes que VENTAS (renglon con
    renglon, por ID): aqui se ven por MAQUINA para saber donde se gasta, y NO se suman a los costos que salen de VENTAS (seria
@@ -1473,6 +1542,7 @@ function cargarTablero(filtros, sub, clave) {
     alertas: res.alertas,
     costos: ses.venta ? _costosProd_(q, base) : null,
     costosOp: ses.venta ? _costosOp_(filas) : null,
+    negocios: ses.venta ? _negocios_(q) : null,
     ms: new Date().getTime() - t0
   };
 }
@@ -1481,6 +1551,7 @@ function cargarTablero(filtros, sub, clave) {
 function cargarCatalogos(clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  _exigeNivel_(ses, 'dashboard', 2);
   return _leerCatalogos_();
 }
 
@@ -1576,6 +1647,7 @@ function _etiquetaSemana_(lunesIso, existentes) {
 function guardarTrabajo(d, clave) {
   var ses = _ses_(clave, true);
   _exigeRol_(ses, ['CAPTURA', 'MASTER']);
+  _exigeNivel_(ses, 'dashboard', 2);
   return _guardarTrabajoCore_(d, ses);
 }
 
@@ -2228,6 +2300,7 @@ function _tarifaMat_(material, tar, cats) {
 function cargarCatalogosVenta(clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 2);
   var cats = _leerCatalogos_();
   var tar = _leerTarifas_();
   var filas = _leerVentas_();
@@ -2286,6 +2359,7 @@ function listarVentas(filtro, clave) {
 function guardarVenta(d, clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 2);
   if (!d) { throw new Error('No llego nada que guardar.'); }
 
   var cats = _leerCatalogos_();
@@ -2416,6 +2490,7 @@ function guardarVenta(d, clave) {
 function actualizarVenta(d, clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
+  _exigeNivel_(ses, 'dashboard', 3);
   if (!d || !d.id) { throw new Error('Falta el ID del proyecto.'); }
   var cats = _leerCatalogos_();
   var id = _num_(d.id);
@@ -2659,10 +2734,12 @@ function _crearAccesoSocio_(nombre, dias, perfil, areas) {
    Quitando "/a/macros/DOMINIO" queda https://script.google.com/macros/s/ID/exec,
    que abre para cualquier persona si la implementacion lo permite. */
 function _urlPublica_() {
-  if (URL_APP) { return URL_APP; }
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
-  return url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
+  url = url.replace(/\/a\/macros\/[^\/]+\//, '/macros/');
+  /* La implementacion que esta atendiendo la solicitud manda; URL_APP es solo respaldo (ya no se usa si hay URL /exec). */
+  if (/\/exec$/.test(url)) { return url; }
+  return URL_APP || url;
 }
 
 function _revocarSocios_(nombre) {
@@ -2773,6 +2850,12 @@ function onOpen() {
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar'))
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('Migración de propietario')
+        .addItem('1. Diagnóstico (cuenta actual)', 'migracionDiagnostico')
+        .addItem('2. Compartir archivos de Marketing con la cuenta nueva', 'migracionCompartirArchivos')
+        .addItem('3. Reubicar archivos de Marketing (en la copia)', 'migracionReubicarArchivos')
+        .addItem('4. Cambiar un correo por otro en las hojas', 'migracionCambiarCorreo'))
+      .addItem('Instalar Marketing (hojas y carpeta de archivos)', 'mktInstalar')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
   } catch (e) { /* sin UI cuando corre por trigger */ }
