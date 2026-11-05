@@ -151,7 +151,7 @@
 <div id="appErp" class="oculto">
   <div class="erp-top">
     <img id="erpLogo" alt="bigfoot print">
-    <h1>ERP</h1>
+    <h1>ERP <small id="erpBuild" style="font:600 10px Montserrat,sans-serif;opacity:.7;letter-spacing:0;text-transform:none"></small></h1>
     <button type="button" class="b-inicio" onclick="erpSalir()" style="margin-left:8px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>Inicio</button>
     <button type="button" class="erp-bell" id="erpBell" onclick="notifAbre()" title="Notificaciones" aria-label="Notificaciones">🔔<b id="erpBellN" style="display:none">0</b></button>
     <div class="erp-quien" id="erpQuien" style="margin-left:12px"></div>
@@ -166,6 +166,7 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
+var ERPUI_BUILD = 'v2026-11-05.3 · negociaciones';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
 function erp(accion, payload, intento){
@@ -284,7 +285,8 @@ function abrirErp(){
   eq('erpMain').innerHTML = '<div class="erp-vacio">Cargando el ERP…</div>';
   Promise.all([erp('init'), erp('lookups'), erp('catalogosProd').catch(function(){ return {}; })]).then(function(r){
     E.init = r[0]; E.lk = r[1]; E.cat = r[2] || {};
-    eq('erpQuien').innerHTML = '<b>' + esc(E.init.user.nombre) + '</b><br>' + esc(E.init.user.rol);
+    eq('erpQuien').innerHTML = '<b>' + esc(E.init.user.nombre) + '</b><br>' + esc(E.init.user.rol) + ' · ' + esc(E.init.user.email) + (window.PT && PT.ses && PT.ses.porSesion ? ' · <a href="#" onclick="cerrarSesion();return false" style="color:#FFC9AD;font-weight:700">Cerrar sesión</a>' : '');
+    eq('erpBuild').textContent = ERPUI_BUILD;
     var l = eq('erpLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
     erpNav(); notifIniciar();
     if (E.pendiente) { NAVEST.abiertas['Negociaciones'] = true; erpNav(); erpVista('negociaciones'); } else { erpVista('inicio'); }
@@ -682,7 +684,7 @@ function ngAbre(id, etapa){
     '<div id="ngPA" style="display:none"><div class="ng-drop" id="ngDrop" onclick="eq(\'ngDFile\').click()">Arrastra aquí los archivos de diseño o haz clic para elegirlos<br><small>Cualquier archivo, máx. 8 MB. Al subirlo se avisa por correo a diseño.</small></div>' +
     '<input type="file" id="ngDFile" multiple style="display:none" onchange="ngSube(this.files);this.value=\'\'"><div class="ng-lista" id="ngLA"></div></div>' +
     '<div id="ngPH" style="display:none"><div class="ng-lista" id="ngLH"></div></div><p class="erp-vacio" id="ngNota" style="display:none">Guarda la negociación para habilitar comentarios y archivos.</p></div></div>',
-    (n && !perd && puede ? '<button type="button" class="erp-btn" id="ngPerd" style="background:var(--rojo);color:#fff;margin-right:auto">PERDIDO</button>' : '') +
+    (!perd && puede ? '<button type="button" class="erp-btn" id="ngPerd" style="background:var(--rojo);color:#fff;margin-right:auto"' + (n ? '' : ' disabled title="Guarda primero la negociación"') + '>PERDIDO</button>' : '') +
     (perd && puede ? '<button type="button" class="erp-btn sec" id="ngReab" style="margin-right:auto">Reabrir</button>' : '') +
     '<button type="button" class="erp-btn ver" id="ngCot" style="display:none"></button>' +
     (puede && dueno ? '<button type="button" class="erp-btn" id="ngGuardar">Guardar</button>' : ''), true);
@@ -730,7 +732,8 @@ function ngPanel(){
   if (hay) { eq({ c: 'ngPC', a: 'ngPA', h: 'ngPH' }[NG.tab]).style.display = ''; }
   eq('ngNC').textContent = hay && n.comentarios ? '(' + n.comentarios + ')' : ''; eq('ngNA').textContent = hay && n.archivos ? '(' + n.archivos + ')' : '';
   var bc = eq('ngCot');
-  if (hay && P('neg') && n.Etapa !== NG.d.perdido) {
+  if (!hay && P('neg')) { bc.style.display = ''; bc.className = 'erp-btn ver'; bc.textContent = 'Crear cotización'; bc.onclick = ngCotizar; }
+  else if (hay && P('neg') && n.Etapa !== NG.d.perdido) {
     bc.style.display = ''; bc.className = 'erp-btn ver';
     bc.textContent = n.Cotizacion ? 'Abrir cotización ' + n.Cotizacion : 'Crear cotización'; bc.onclick = ngCotizar;
   } else if (hay && n.Cotizacion) { bc.style.display = ''; bc.className = 'erp-btn ver'; bc.textContent = 'Ver cotización ' + n.Cotizacion; bc.onclick = ngCotizar; }
@@ -822,8 +825,8 @@ function ngAltaCliente(){
 }
 
 /* ---------- guardar / cotizar ---------- */
-function ngGuarda(){
-  var b = eq('ngGuardar'), d = leer(NG.w.el);
+function ngGuarda(despues){
+  var b = eq('ngGuardar') || { disabled: false, textContent: '' }, d = leer(NG.w.el);
   if (NG.cur) { d.ID = NG.cur.ID; }
   eGuardar(b, function(){ return erp('saveNeg', d); }).then(function(r){
     var nuevo = !NG.cur;
@@ -831,10 +834,12 @@ function ngGuarda(){
     NG.cur = ngBusca(r.ID); ptToast(nuevo ? 'Negociación creada.' : 'Cambios guardados.');
     ngPinta();
     if (nuevo) { var w = NG.w; NG.w = null; w.cerrar(); ngAbre(r.ID); ngTab('c'); }
+    if (typeof despues === 'function') { despues(); }
   }, function(){});
 }
 function ngCotizar(){
-  var n = NG.cur; if (!n) { return; }
+  var n = NG.cur;
+  if (!n) { return ngGuarda(ngCotizar); }   /* negociación nueva: se guarda primero y luego se abre la cotización */
   if (n.Cotizacion) { return cotForm(n.Cotizacion, null, function(){ ngRefresca(n.ID); }); }
   if (!n.ClienteID) { return ptToast('Primero da de alta al cliente «' + n.Cliente + '» (campo Cliente → «Darlo de alta ahora») y guarda la negociación.'); }
   var ag = (E.cat.VENDEDOR || []).filter(function(v){ return String(v).toLowerCase() === ngNombre(n.ResponsableEmail).toLowerCase(); })[0] || '';
