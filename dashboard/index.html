@@ -244,6 +244,7 @@ button.kpi.sel{background:var(--teal-l); border-color:var(--teal); box-shadow:0 
 .gc{position:relative; height:330px; padding:8px 14px 14px}
 .ggrid .gc{height:350px}
 .gc.alto{height:440px}
+.sub-t{margin:8px 14px 0; font-size:13px; color:var(--tinta-2); font-weight:600}
 .gc.bajo{height:260px}
 .card>.gc{border-bottom:1px solid var(--linea)}
 .hamb{position:relative; align-self:flex-end}
@@ -611,6 +612,24 @@ a.pt-card:hover{transform:translateY(-4px); border-color:var(--naranja); box-sha
     <div class="tscroll"><table id="tOper"></table></div>
   </section>
 
+  <section class="card" id="cNeg" style="display:none">
+    <header><h2>Negociaciones (ERP)</h2>
+      <span class="sub">Kanban de negociaciones del ERP: cuántas hay en cada etapa y su monto, lo que se pierde y por qué. Usa el rango de fechas y el mes o año de la barra de filtros (por fecha de creación de la negociación).</span>
+    </header>
+    <div class="cuerpo">
+      <div class="kpis s" id="kpisN"></div>
+      <div class="ggrid g2">
+        <div><h3 class="sub-t">Negociaciones por etapa (monto en pesos)</h3><div class="gc"><canvas id="cvNegEtapa"></canvas></div></div>
+        <div><h3 class="sub-t">Negociaciones perdidas por motivo</h3><div class="gc"><canvas id="cvNegMotivo"></canvas></div></div>
+      </div>
+    </div>
+    <div class="ggrid g2" style="padding:0 18px 18px">
+      <div class="tscroll"><table id="tNegEtapa"></table></div>
+      <div class="tscroll"><table id="tNegMotivo"></table></div>
+    </div>
+    <div class="tscroll"><table id="tNegResp"></table></div>
+  </section>
+
   <div class="ggrid g3 solo-dash" id="gridCostos">
     <section class="card span2"><header><h2>Costo de producción y merma por semana</h2></header><div class="gc"><canvas id="cvCosSem"></canvas></div></section>
     <section class="card"><header><h2>Costo por cliente (top 10)</h2></header><div class="gc"><canvas id="cvCosCli"></canvas></div></section>
@@ -938,7 +957,7 @@ var SES_KEY = 'bfp_sesion_v1';
 function sesionGuardada(){ try { return window.localStorage.getItem(SES_KEY) || ''; } catch (e) { return ''; } }
 function sesionGuardar(t){ try { if (t) { window.localStorage.setItem(SES_KEY, t); } else { window.localStorage.removeItem(SES_KEY); } } catch (e) { /* sin almacenamiento: pedira codigo cada vez */ } }
 if (!CLAVE) { CLAVE = sesionGuardada(); }
-var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>;
+var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>, NEG0 = <?!= neg ?>;
 var MODO = 'dashboard';     /* 'dashboard' (todo) o 'direccion' (informativo, seleccion de lo anterior) */
 var DASH_LISTO = false;     /* el tablero se carga la primera vez que se entra */
 var perTendDir = 'mes';     /* Direccion: la tendencia abre mensual */
@@ -1793,6 +1812,49 @@ function pintaCostosOp(){
   document.getElementById('tOper').innerHTML = h;
 }
 
+/* ---------- negociaciones del ERP (kanban) ---------- */
+var NEG_COLORES = ['#8A5CF6', '#2D7FF9', '#1E8E5A', '#14B8A6', '#F0A80C', '#FF6A13', '#0EA5E9', '#16A34A', '#C9402F'];
+function pintaNegocios(){
+  var card = document.getElementById('cNeg');
+  var N = D && D.negocios;
+  if (!N) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  var h = '', i, kc = [
+    ['Negociaciones', n0(N.total.n), peso(N.total.monto) + ' en total', ''],
+    ['Abiertas (cotización)', n0(N.abiertas.n), peso(N.abiertas.monto), ''],
+    ['Aprobadas', n0(N.ganadas.n), peso(N.ganadas.monto) + ' · ' + n0(N.enCurso.n) + ' en curso, ' + n0(N.terminadas.n) + ' terminadas', 'mq'],
+    ['Perdidas', n0(N.perdidas.n), peso(N.perdidas.monto), ''],
+    ['Conversión', N.conversion === null ? '—' : n1(N.conversion) + '%', 'aprobadas ÷ (aprobadas + perdidas)', ''],
+    ['Ticket promedio', N.ticket === null ? '—' : peso(N.ticket), 'por negociación aprobada', ''],
+    ['Días promedio a aprobar', N.diasCierre === null ? '—' : n1(N.diasCierre), 'desde que se crea', '']
+  ];
+  for (i = 0; i < kc.length; i++) { h += '<div class="kpi ' + kc[i][3] + '"><div class="et">' + kc[i][0] + '</div><div class="vl">' + kc[i][1] + '</div><div class="un">' + kc[i][2] + '</div></div>'; }
+  document.getElementById('kpisN').innerHTML = h;
+  var E8 = N.etapas;
+  graf('cvNegEtapa', cfgHBar(E8.map(function(e){ return e.etapa + ' (' + e.n + ')'; }), E8.map(function(e){ return e.monto; }), NEG_COLORES.slice(0, E8.length),
+    function(v){ return peso(v); }, 'Monto', function(v){ return corto(v); }));
+  var M = N.motivos;
+  if (N.perdidas.n) {
+    graf('cvNegMotivo', cfgDona(M.map(function(m){ return m.motivo; }), M.map(function(m){ return m.n; }), PALETA, function(v, i){ return v + ' negociaciones (' + n1(M[i].pct) + '%) · ' + peso(M[i].monto); }));
+  } else { graf('cvNegMotivo', { type: 'bar', data: { labels: [], datasets: [{ data: [] }] } }); }
+  h = '<thead><tr><th>Etapa</th><th>Negociaciones</th><th>Monto</th></tr></thead><tbody>';
+  for (i = 0; i < E8.length; i++) { h += '<tr><td>' + esc(E8[i].etapa) + '</td>' + celda(E8[i].n, 0) + '<td class="num"><b>' + peso(E8[i].monto) + '</b></td></tr>'; }
+  h += '<tr class="tot"><td>TOTAL</td>' + celda(N.total.n, 0) + '<td class="num">' + peso(N.total.monto) + '</td></tr></tbody>';
+  document.getElementById('tNegEtapa').innerHTML = h;
+  h = '<thead><tr><th>Motivo de pérdida</th><th>Cantidad</th><th>%</th><th>Monto perdido</th></tr></thead><tbody>';
+  for (i = 0; i < M.length; i++) { h += '<tr><td>' + esc(M[i].motivo) + '</td>' + celda(M[i].n, 0) + '<td class="num">' + n1(M[i].pct) + '%</td><td class="num">' + peso(M[i].monto) + '</td></tr>'; }
+  h += '<tr class="tot"><td>TOTAL</td>' + celda(N.perdidas.n, 0) + '<td class="num">' + (N.perdidas.n ? '100.0%' : '—') + '</td><td class="num">' + peso(N.perdidas.monto) + '</td></tr></tbody>';
+  document.getElementById('tNegMotivo').innerHTML = h;
+  var R = N.responsables;
+  h = '<thead><tr><th>Responsable</th><th>Abiertas</th><th>Monto abiertas</th><th>Aprobadas</th><th>Monto aprobadas</th><th>Perdidas</th><th>Monto perdidas</th></tr></thead><tbody>';
+  if (!R.length) { h += '<tr><td class="vacio" colspan="7">Aún no hay negociaciones en el periodo.</td></tr>'; }
+  for (i = 0; i < R.length; i++) {
+    h += '<tr><td>' + esc(R[i].responsable) + '</td>' + celda(R[i].abiertas, 0) + '<td class="num">' + peso(R[i].montoAbiertas) + '</td>' + celda(R[i].ganadas, 0) + '<td class="num">' + peso(R[i].montoGanadas) +
+      '</td>' + celda(R[i].perdidas, 0) + '<td class="num">' + peso(R[i].montoPerdidas) + '</td></tr>';
+  }
+  document.getElementById('tNegResp').innerHTML = h + '</tbody>';
+}
+
 /* ---------- % de uso de maquina ---------- */
 function usoExplica(U){
   var t = U ? U.horasTurno : 11;
@@ -2005,6 +2067,7 @@ function pintar(){
   pintaMatrices();
   pintaUso();
   pintaCostosOp();
+  pintaNegocios();
 
   /* calidad del dato */
   var cel = [
@@ -2877,6 +2940,13 @@ function ptInicioPinta(info, aviso){
     if (ar && ar.acceso) { ptEntrar(ar.id); }
   }
   ptInicioPinta.hecho = true;
+  /* enlace directo a una negociacion (?neg=NG-00001): abre el ERP en esa negociacion */
+  if (NEG0 && !ptInicioPinta.hechoNeg) {
+    ptInicioPinta.hechoNeg = true;
+    var ae = info.areas.filter(function(x){ return x.id === 'erp'; })[0];
+    if (ae && typeof E !== 'undefined') { E.pendiente = NEG0; ptEntrar('erp'); }
+    else { ptToast('Para abrir la negociación ' + NEG0 + ' necesitas acceso al ERP. Pídelo a la administración.'); }
+  }
 }
 function ptSinAcceso(n){ ptToast('No tienes acceso a ' + n + '. Si lo necesitas, solicítalo a la administración.'); }
 function ptFalla(err){

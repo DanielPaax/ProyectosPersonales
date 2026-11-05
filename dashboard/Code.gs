@@ -246,6 +246,7 @@ function doGet(e) {
   /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
   t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
   t.vista = JSON.stringify(_areaPorId_(a) ? a : '');
+  t.neg = JSON.stringify(/^NG-\d{3,8}$/.test((e && e.parameter && e.parameter.neg) || '') ? String(e.parameter.neg) : '');
   t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
   t.logoBlanco = JSON.stringify(typeof LOGO_BLANCO_DATA_URI === 'string' ? LOGO_BLANCO_DATA_URI : '');
   return t.evaluate()
@@ -1293,6 +1294,11 @@ function _agregaTablero_(filas) {
   };
 }
 
+/* Negociaciones del ERP (kanban): etapas, perdidas por motivo y por responsable, con los filtros generales de fecha. */
+function _negocios_(q) {
+  try { return ERP.resumenNegociaciones(q); } catch (e) { return null; }
+}
+
 /* ===================== COSTOS OPERATIVOS DE BASE (por renglon de produccion) ===================== */
 /* Las columnas MANO DE OBRA, HORAS EXTRAS, OTROS COSTOS e INSTALACIÓN de BASE son los MISMOS importes que VENTAS (renglon con
    renglon, por ID): aqui se ven por MAQUINA para saber donde se gasta, y NO se suman a los costos que salen de VENTAS (seria
@@ -1536,6 +1542,7 @@ function cargarTablero(filtros, sub, clave) {
     alertas: res.alertas,
     costos: ses.venta ? _costosProd_(q, base) : null,
     costosOp: ses.venta ? _costosOp_(filas) : null,
+    negocios: ses.venta ? _negocios_(q) : null,
     ms: new Date().getTime() - t0
   };
 }
