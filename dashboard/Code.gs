@@ -2843,6 +2843,11 @@ function onOpen() {
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar'))
+      .addSubMenu(SpreadsheetApp.getUi().createMenu('Migración de propietario')
+        .addItem('1. Diagnóstico (cuenta actual)', 'migracionDiagnostico')
+        .addItem('2. Compartir archivos de Marketing con la cuenta nueva', 'migracionCompartirArchivos')
+        .addItem('3. Reubicar archivos de Marketing (en la copia)', 'migracionReubicarArchivos')
+        .addItem('4. Cambiar un correo por otro en las hojas', 'migracionCambiarCorreo'))
       .addItem('Instalar Marketing (hojas y carpeta de archivos)', 'mktInstalar')
       .addItem('Ver version instalada', 'verVersion')
       .addToUi();
