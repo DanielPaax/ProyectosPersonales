@@ -67,6 +67,9 @@
 .ng-arch{display:flex; align-items:center; gap:10px; padding:7px 8px; border:1px solid var(--linea); border-radius:9px; margin-bottom:7px; font-size:12.5px}
 .ng-arch .dt{flex:1; min-width:0} .ng-arch .dt b{display:block; word-break:break-all} .ng-arch small{color:var(--tinta-3)}
 .ng-cli{font-size:12px; margin-top:4px}
+.ng-wrap{position:relative} .ng-sug.abajo{top:100%; bottom:auto; left:0; right:0; min-width:0; margin-top:2px}
+.erp-btn.ver{background:var(--verde); color:#fff} .erp-btn.ver:hover{background:#17724a}
+.ng-solo{background:var(--ambar-l); color:#9A6A00; border-radius:8px; padding:7px 10px; font-size:12.5px; margin-bottom:10px}
 .ng-cli.ok{color:var(--verde)} .ng-cli.mal{color:#9A6A00}
 .erp-bell{position:relative; background:rgba(255,255,255,.14); border:none; color:#fff; border-radius:999px; width:38px; height:38px; font-size:17px; cursor:pointer}
 .erp-bell b{position:absolute; top:-4px; right:-4px; background:var(--naranja); color:#fff; border-radius:999px; font:700 10px Montserrat,sans-serif; min-width:18px; height:18px; line-height:18px; text-align:center; padding:0 4px}
@@ -654,15 +657,17 @@ function ngAbre(id, etapa){
   NG.cur = n; NG.det = null; NG.tab = 'c'; NG.arch = null;
   var puede = P('neg'), perd = n && n.Etapa === NG.d.perdido;
   var yo = E.init.user.email, resp = n ? n.ResponsableEmail : yo;
+  var dueno = !n || String(n.CreadoPor || '').toLowerCase() === yo;   /* los campos principales solo los modifica quien creó la negociación */
+  NG.pre = {}; NG.auto = {}; NG.cliPrev = n ? n.ClienteID : '';
   var etapas = NG.d.etapas.map(function(e){ return { v: e, t: e }; });
   var w = ventana(n ? 'Negociación ' + esc(n.ID) + ' · ' + esc(n.Etapa) : 'Nueva negociación',
-    '<div class="ng-mb"><div><div class="erp-form">' + campo('Nombre', 'Nombre de la negociación', n ? n.Nombre : '', 'text', { c2: 1, ph: 'Ej. Lonas campaña de temporada' }) +
+    '<div class="ng-mb"><div>' + (n && !dueno ? '<div class="ng-solo">Solo quien creó la negociación (<b>' + esc(ngNombre(n.CreadoPor)) + '</b>) puede modificar estos datos. Tú puedes comentar, subir archivos de diseño y mover la etapa.</div>' : '') + '<div class="erp-form">' + campo('Nombre', 'Nombre de la negociación', n ? n.Nombre : '', 'text', { c2: 1, ph: 'Ej. Lonas campaña de temporada' }) +
     campo('Monto', 'Monto ($ MXN)', n ? n.Monto : '', 'number', { step: '0.01' }) +
     '<div><label>Fecha de creación</label><input type="text" value="' + esc(n ? ngFH(n.Fecha, n.Hora) : fFecha(hoyIso()) + ' (automática)') + '" disabled></div>' +
     (n ? '<div><label>Etapa</label><input type="text" value="' + esc(n.Etapa) + '" disabled></div>' : selCampo('Etapa', 'Etapa', etapas, etapa || NG.d.etapas[0], false)) +
-    selCampo('ResponsableEmail', 'Responsable', ngUsuarios().map(function(u){ return { v: u.Email, t: u.Nombre }; }), resp, false) +
-    '<div class="c2"><label>Cliente</label><input data-k="Cliente" id="ngCli" list="ngCliL" autocomplete="off" value="' + esc(n ? n.Cliente : '') + '" placeholder="Elige un cliente o escribe el nombre">' +
-    '<datalist id="ngCliL">' + (E.lk.clientes || []).map(function(c){ return '<option value="' + esc(c.Nombre) + '">'; }).join('') + '</datalist>' +
+    '<div><label>Responsable</label><input type="text" value="' + esc(ngNombre(resp)) + '" disabled title="Es quien creó la negociación y no cambia"></div>' +
+    '<div class="c2 ng-wrap"><label>Cliente</label><input data-k="Cliente" id="ngCli" autocomplete="off" value="' + esc(n ? n.Cliente : '') + '" placeholder="Escribe para buscar un cliente">' +
+    '<div class="ng-sug abajo" id="ngCliSug" style="display:none"></div>' +
     '<input type="hidden" data-k="ClienteID" id="ngCliId" value="' + esc(n ? n.ClienteID : '') + '"><div class="ng-cli" id="ngCliEst"></div></div></div>' +
     '<h3 style="margin:12px 0 6px;font-size:13px;color:var(--azul)">Contacto del cliente</h3><div class="erp-form">' +
     campo('ContactoCargo', 'Cargo', n ? n.ContactoCargo : '') + campo('ContactoNombre', 'Nombre', n ? n.ContactoNombre : '') +
@@ -677,15 +682,25 @@ function ngAbre(id, etapa){
     '<div id="ngPA" style="display:none"><div class="ng-drop" id="ngDrop" onclick="eq(\'ngDFile\').click()">Arrastra aquí los archivos de diseño o haz clic para elegirlos<br><small>Cualquier archivo, máx. 8 MB. Al subirlo se avisa por correo a diseño.</small></div>' +
     '<input type="file" id="ngDFile" multiple style="display:none" onchange="ngSube(this.files);this.value=\'\'"><div class="ng-lista" id="ngLA"></div></div>' +
     '<div id="ngPH" style="display:none"><div class="ng-lista" id="ngLH"></div></div><p class="erp-vacio" id="ngNota" style="display:none">Guarda la negociación para habilitar comentarios y archivos.</p></div></div>',
-    '<button type="button" class="erp-btn sec" id="ngCot" style="display:none"></button>' +
-    (n && !perd && puede ? '<button type="button" class="erp-btn rojo" id="ngPerd" style="background:var(--rojo)">PERDIDO</button>' : '') +
-    (perd && puede ? '<button type="button" class="erp-btn sec" id="ngReab">Reabrir</button>' : '') +
-    (puede ? '<button type="button" class="erp-btn" id="ngGuardar">Guardar</button>' : ''), true);
+    (n && !perd && puede ? '<button type="button" class="erp-btn" id="ngPerd" style="background:var(--rojo);color:#fff;margin-right:auto">PERDIDO</button>' : '') +
+    (perd && puede ? '<button type="button" class="erp-btn sec" id="ngReab" style="margin-right:auto">Reabrir</button>' : '') +
+    '<button type="button" class="erp-btn ver" id="ngCot" style="display:none"></button>' +
+    (puede && dueno ? '<button type="button" class="erp-btn" id="ngGuardar">Guardar</button>' : ''), true);
   NG.w = w;
-  var ed = puede;
+  var ed = puede && dueno;
   if (!ed) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ if (!/^ng(Txt|CFile|DFile)$/.test(i.id)) { i.disabled = true; } }); }
   ngCliEstado();
-  eq('ngCli').addEventListener('input', ngCliEstado); eq('ngCli').addEventListener('change', ngCliEstado);
+  var ci = eq('ngCli');
+  ci.addEventListener('input', function(){ ngCliEstado(); ngCliSugerir(); });
+  ci.addEventListener('focus', ngCliSugerir);
+  ci.addEventListener('blur', function(){ setTimeout(ngCliOculta, 150); });
+  ci.addEventListener('keydown', function(ev){
+    if (!NG_CS.lista.length) { return; }
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); NG_CS.i = (NG_CS.i + 1) % NG_CS.lista.length; ngCliSugPinta(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); NG_CS.i = (NG_CS.i - 1 + NG_CS.lista.length) % NG_CS.lista.length; ngCliSugPinta(); }
+    else if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); ngCliElige(NG_CS.i); }
+    else if (ev.key === 'Escape') { ngCliOculta(); }
+  });
   var tx = eq('ngTxt');
   tx.addEventListener('input', ngSugBusca); tx.addEventListener('click', ngSugBusca); tx.addEventListener('blur', function(){ setTimeout(ngSugOculta, 150); });
   tx.addEventListener('keydown', function(ev){
@@ -716,9 +731,9 @@ function ngPanel(){
   eq('ngNC').textContent = hay && n.comentarios ? '(' + n.comentarios + ')' : ''; eq('ngNA').textContent = hay && n.archivos ? '(' + n.archivos + ')' : '';
   var bc = eq('ngCot');
   if (hay && P('neg') && n.Etapa !== NG.d.perdido) {
-    bc.style.display = ''; bc.className = 'erp-btn ' + (n.Cotizacion ? 'sec' : 'nar');
+    bc.style.display = ''; bc.className = 'erp-btn ver';
     bc.textContent = n.Cotizacion ? 'Abrir cotización ' + n.Cotizacion : 'Crear cotización'; bc.onclick = ngCotizar;
-  } else if (hay && n.Cotizacion) { bc.style.display = ''; bc.className = 'erp-btn sec'; bc.textContent = 'Ver cotización ' + n.Cotizacion; bc.onclick = ngCotizar; }
+  } else if (hay && n.Cotizacion) { bc.style.display = ''; bc.className = 'erp-btn ver'; bc.textContent = 'Ver cotización ' + n.Cotizacion; bc.onclick = ngCotizar; }
   else { bc.style.display = 'none'; }
 }
 function ngTab(t){ NG.tab = t; ['C', 'A', 'H'].forEach(function(k){ eq('ngT' + k).className = k.toLowerCase() === t ? 'on' : ''; }); ngPanel(); }
@@ -764,11 +779,38 @@ function ngBaja(id){
 }
 
 /* ---------- cliente: lista o alta sin perder lo capturado ---------- */
+function ngNorm(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+var NG_CS = { lista: [], i: 0 };
+function ngCliOculta(){ var e = eq('ngCliSug'); if (e) { e.style.display = 'none'; } NG_CS.lista = []; }
+function ngCliSugerir(){
+  var v = ngNorm(eq('ngCli').value).trim();
+  var ex = (E.lk.clientes || []).filter(function(c){ return ngNorm(c.Nombre) === v; })[0];
+  if (!v || ex) { return ngCliOculta(); }
+  var pal = v.split(/\s+/);
+  NG_CS.lista = (E.lk.clientes || []).filter(function(c){ var n = ngNorm(c.Nombre + ' ' + (c.RazonSocial || '')); return pal.every(function(x){ return n.indexOf(x) >= 0; }); })
+    .sort(function(a, b){ return (ngNorm(a.Nombre).indexOf(v) === 0 ? 0 : 1) - (ngNorm(b.Nombre).indexOf(v) === 0 ? 0 : 1) || a.Nombre.localeCompare(b.Nombre); }).slice(0, 8);
+  NG_CS.i = 0; ngCliSugPinta();
+}
+function ngCliSugPinta(){
+  var el = eq('ngCliSug'); if (!NG_CS.lista.length) { el.style.display = 'none'; return; }
+  el.innerHTML = NG_CS.lista.map(function(c, i){ return '<div class="' + (i === NG_CS.i ? 'on' : '') + '" onmousedown="event.preventDefault();ngCliElige(' + i + ')">' + esc(c.Nombre) + (c.Contacto ? '<small>' + esc(c.Contacto) + '</small>' : '') + '</div>'; }).join('');
+  el.style.display = '';
+}
+function ngCliElige(i){ var c = NG_CS.lista[i]; if (!c) { return; } eq('ngCli').value = c.Nombre; ngCliOculta(); ngCliEstado(); }
+/* al elegir un cliente se cargan los datos de contacto que tiene registrados (sin pisar lo que el usuario ya escribió a mano) */
+function ngAutoContacto(c){
+  [['ContactoNombre', c.Contacto], ['ContactoTelefono', c.Telefono], ['ContactoCorreo', c.Email]].forEach(function(p){
+    var inp = NG.w.el.querySelector('[data-k=' + p[0] + ']'); if (!inp || !p[1]) { return; }
+    if (!inp.value || inp.value === NG.auto[p[0]]) { inp.value = p[1]; NG.auto[p[0]] = p[1]; }
+  });
+}
 function ngCliEstado(){
-  var v = (eq('ngCli').value || '').trim(), c = (E.lk.clientes || []).filter(function(x){ return x.Nombre.toLowerCase() === v.toLowerCase(); })[0], est = eq('ngCliEst');
+  var v = (eq('ngCli').value || '').trim(), c = (E.lk.clientes || []).filter(function(x){ return ngNorm(x.Nombre) === ngNorm(v); })[0], est = eq('ngCliEst');
   eq('ngCliId').value = c ? c.ID : '';
+  if (c && c.ID !== NG.cliPrev) { NG.cliPrev = c.ID; ngAutoContacto(c); }
+  if (!c) { NG.cliPrev = ''; }
   if (!v) { est.className = 'ng-cli'; est.innerHTML = ''; }
-  else if (c) { est.className = 'ng-cli ok'; est.innerHTML = '✔ Cliente registrado (' + esc(c.ID) + ')'; }
+  else if (c) { est.className = 'ng-cli ok'; est.innerHTML = '✔ Cliente registrado (' + esc(c.ID) + ')' + (c.Contacto || c.Telefono || c.Email ? ' · contacto cargado automáticamente' : ''); }
   else { est.className = 'ng-cli mal'; est.innerHTML = '⚠ «' + esc(v) + '» no está registrado como cliente. ' + (P('crm') ? '<a href="#" onclick="ngAltaCliente();return false" style="font-weight:700;color:var(--naranja-d)">Darlo de alta ahora</a> (no pierdes lo capturado).' : 'Se guarda el nombre escrito; pide a un comercial que lo dé de alta.'); }
 }
 function ngAltaCliente(){

@@ -282,7 +282,7 @@ function a_lookups(u) {
   const st = stockMap_();
   const verProv = can_(u, 'compras') || can_(u, 'cxp') || can_(u, 'cxp_ver');
   return {
-    clientes: scope_(u, read_('Clientes')).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: c.Comercial, DiasCredito: c.DiasCredito, RazonSocial: c.RazonSocial || '' }; })
+    clientes: scope_(u, read_('Clientes')).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: c.Comercial, DiasCredito: c.DiasCredito, RazonSocial: c.RazonSocial || '', Contacto: str_(c.Contacto), Telefono: str_(c.Telefono), Email: str_(c.Email) }; })
       .sort(function (a, b) { return str_(a.Nombre).localeCompare(str_(b.Nombre)); }),
     proveedores: verProv ? read_('Proveedores').map(function (p) { return { ID: p.ID, Nombre: p.Nombre, DiasCredito: p.DiasCredito, RFC: str_(p.RFC).toUpperCase() }; })
       .sort(function (a, b) { return str_(a.Nombre).localeCompare(str_(b.Nombre)); }) : [],
@@ -1856,27 +1856,25 @@ function negValida_(p) {
            ContactoTelefono: str_(p.ContactoTelefono).slice(0, 30), ContactoCorreo: correo, ContactoCumple: fechaOpc_(p.ContactoCumple, 'Cumpleaños') };
 }
 
+/** El RESPONSABLE es siempre quien crea la negociacion y no cambia. Los campos principales (nombre, monto, cliente, contacto) solo los modifica
+ *  quien la creo; comentarios, archivos e historial son de todos los usuarios del ERP (a_negComentar / a_negSubir). */
 function a_saveNeg(u, p) {
   need_(u, 'neg');
   const d = negValida_(p);
-  let resp = str_(p.ResponsableEmail).toLowerCase() || u.email;
-  if (!negUsuarios_().some(function (x) { return x.Email === resp; })) throw new Error('El responsable no es un usuario activo del ERP.');
   let n;
   if (str_(p.ID)) {
     n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
-    const antes = str_(n.ResponsableEmail).toLowerCase();
-    Object.assign(n, d, { ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), ActualizadoEn: hoy_() });
+    if (str_(n.CreadoPor).toLowerCase() !== u.email) throw new Error('Solo quien creó la negociación (' + negNombreDe_(n.CreadoPor) + ') puede modificar estos datos. Tú puedes comentar, subir archivos y mover la etapa.');
+    Object.assign(n, d, { ActualizadoEn: hoy_() });
     negHist_(n, 'Modificó la negociación', u);
     update_('Negociaciones', n);
-    if (resp !== antes) negNotifica_([resp], u, 'Te asignaron una negociación', u.nombre + ' te asignó la negociación «' + n.Nombre + '» (' + n.Cliente + ').', n.ID);
   } else {
     const etapa = str_(p.Etapa) || NEG_ETAPAS[0];
     if (NEG_ETAPAS.indexOf(etapa) < 0) throw new Error('Etapa inválida.');
-    n = Object.assign({ ID: seq_('SEQ_NEG', 'NG-', 5), Fecha: hoy_(), Hora: negHora_(), ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), Etapa: etapa, Cotizacion: '', ODP: '',
+    n = Object.assign({ ID: seq_('SEQ_NEG', 'NG-', 5), Fecha: hoy_(), Hora: negHora_(), ResponsableEmail: u.email, ResponsableNombre: u.nombre, Etapa: etapa, Cotizacion: '', ODP: '',
                         MotivoPerdido: '', MotivoDetalle: '', PerdidoEn: '', EtapaDesde: hoy_(), CreadoPor: u.email, ActualizadoEn: hoy_(), Historial: '[]' }, d);
     negHist_(n, 'Creó la negociación en ' + etapa, u);
     insert_('Negociaciones', n);
-    if (resp !== u.email) negNotifica_([resp], u, 'Te asignaron una negociación', u.nombre + ' creó la negociación «' + n.Nombre + '» (' + n.Cliente + ') y te la asignó.', n.ID);
   }
   return negOut_(n);
 }
