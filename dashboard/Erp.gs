@@ -134,7 +134,7 @@ const SCHEMA_VER = '8';
 function fixSheets_(ss) {
   Object.keys(SCHEMA).forEach(function (name) {
     let s = ss.getSheetByName(PREF + name);
-    if (!s) s = ss.insertSheet(PREF + name);
+    if (!s) { try { s = ss.insertSheet(PREF + name); } catch (e) { s = ss.getSheetByName(PREF + name); if (!s) throw e; } }
     const want = SCHEMA[name];
     const lc = s.getLastColumn();
     const have = lc ? s.getRange(1, 1, 1, lc).getValues()[0].map(str_) : [];
@@ -1468,9 +1468,18 @@ function instalar() {
   PropertiesService.getScriptProperties().setProperty('ERP_SCHEMA_VER', SCHEMA_VER);
   return 'ERP listo: hojas ' + Object.keys(SCHEMA).length + ', consecutivo ODP desde ' + cfg_('CONSEC_ODP', '?') + '.';
 }
-function asegura_() {
-  if (PropertiesService.getScriptProperties().getProperty('ERP_SCHEMA_VER') === SCHEMA_VER && ss_().getSheetByName(PREF + 'Config')) return;
-  instalar();
+function schemaAlDia_() { return PropertiesService.getScriptProperties().getProperty('ERP_SCHEMA_VER') === SCHEMA_VER && !!ss_().getSheetByName(PREF + 'Config'); }
+/** Instala o repara las hojas si el esquema cambio. La pantalla lanza varias consultas a la vez: sin candado dos de ellas intentaban crear
+ *  la misma hoja y una fallaba con "Ya existe una hoja con el nombre…". Quien ya tiene el candado (acciones de escritura) pasa true. */
+function asegura_(yaTengoCandado) {
+  if (schemaAlDia_()) return;
+  let l = null;
+  if (!yaTengoCandado) { l = LockService.getScriptLock(); l.waitLock(60000); }
+  try {
+    resetCache_();
+    if (schemaAlDia_()) return;
+    instalar();
+  } finally { if (l) { try { l.releaseLock(); } catch (_) {} } }
 }
 
 // ==================== QUIEN ERES EN EL ERP ====================
@@ -1724,7 +1733,7 @@ function run(action, p, ses) {
   if (usa) lock.waitLock(30000);
   try {
     resetCache_();
-    asegura_();
+    asegura_(usa);
     return fn(usuarioDe_(ses), p || {});
   } finally { if (usa) { try { lock.releaseLock(); } catch (_) {} } }
 }
@@ -2099,7 +2108,7 @@ function estadoComercial() {
 
 /* Crea el cliente del ERP desde un prospecto (o devuelve el que ya existe con ese nombre). El candado lo tiene quien llama. */
 function clienteDeProspecto(ses, p) {
-  resetCache_(); asegura_();
+  resetCache_(); asegura_(true);
   const u = usuarioDe_(ses), ex = find_('Clientes', 'Nombre', p.Nombre);
   if (ex) return { ID: ex.ID, Nombre: ex.Nombre, nuevo: false };
   const c = a_saveCliente(u, p);
