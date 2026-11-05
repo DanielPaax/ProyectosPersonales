@@ -26,10 +26,10 @@
 .erp-nav .erp-items{display:none; padding:2px 0 4px 6px}
 .erp-nav .erp-grp.abierta .erp-items{display:block}
 .erp-nav button.sub{margin-left:12px; width:calc(100% - 12px); color:var(--naranja-d); font-weight:700; border-left:3px solid var(--naranja); border-radius:0 8px 8px 0}
-.erp-nav.min{width:50px; padding:12px 6px; overflow:hidden}
-.erp-nav.min>*:not(.erp-ctl){display:none}
-.erp-nav.min .erp-ctl button:not(.mini){display:none}
-.erp-nav.min .erp-ctl button.erpmin{margin:0 auto}
+.erp-nav.min{display:none}
+.erp-navabre{display:none; position:fixed; left:10px; top:74px; z-index:45; background:var(--naranja); color:#fff; border:none; border-radius:999px; padding:9px 16px; font:700 13px Montserrat,sans-serif; cursor:pointer; box-shadow:0 4px 14px rgba(223,74,16,.45)}
+.erp-navabre:hover{background:var(--naranja-d)}
+.erp-navabre.on{display:inline-flex; align-items:center; gap:8px}
 .ng-barra{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:0 0 10px}
 .ng-barra select,.ng-barra input{padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff; min-width:0}
 .ng-tablero{display:flex; gap:12px; overflow-x:auto; padding-bottom:14px; align-items:flex-start}
@@ -78,6 +78,14 @@
 .erp-notif .it{padding:10px 14px; border-bottom:1px solid var(--linea); cursor:pointer; font-size:12.5px} .erp-notif .it.nl{background:#FFF6EE}
 .erp-notif .it:hover{background:var(--azul-t)} .erp-notif .it b{display:block; margin-bottom:2px} .erp-notif .it small{color:var(--tinta-3)}
 @media (max-width:900px){ .ng-mb{grid-template-columns:1fr} }
+.arm-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px; align-items:start}
+.arm-card,.arm-out{background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px; box-shadow:var(--sombra)}
+.arm-f{display:inline-block; border:1px solid var(--linea); border-radius:8px; padding:6px 10px; cursor:pointer; font-size:12px; background:#fff; white-space:nowrap}
+.arm-tit{font:700 20px Khand,Poppins,sans-serif; color:var(--azul); text-transform:uppercase}
+.arm-hoja{margin:10px 0 16px} .arm-ht{font:700 12.5px Montserrat,sans-serif; color:var(--tinta-2); margin-bottom:4px}
+.arm-cv{max-width:100%; height:auto; border:1px solid var(--linea); border-radius:8px; background:#fff}
+.arm-costo .erp-kpis{margin-bottom:6px}
+@media (max-width:1100px){ .arm-grid{grid-template-columns:1fr} }
 .erp-dev{max-width:560px; margin:40px auto; text-align:center; background:#fff; border:1px solid var(--linea); border-radius:14px; padding:34px 24px; box-shadow:var(--sombra)}
 .erp-dev h2{margin:10px 0 6px; color:var(--azul)} .erp-dev p{color:var(--tinta-2); margin:0}
 .erp-main{flex:1; min-width:0; padding:20px 24px 60px; max-width:1400px}
@@ -157,6 +165,7 @@
     <div class="erp-quien" id="erpQuien" style="margin-left:12px"></div>
   </div>
   <div class="erp-body">
+    <button type="button" class="erp-navabre" id="erpNavAbre" onclick="erpNavMin()" aria-label="Mostrar el menú">☰ Menú</button>
     <nav class="erp-nav" id="erpNav" aria-label="Módulos del ERP"></nav>
     <main class="erp-main" id="erpMain"><div class="erp-vacio">Cargando…</div></main>
   </div>
@@ -166,7 +175,7 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
-var ERPUI_BUILD = 'v2026-11-05.3 · negociaciones';
+var ERPUI_BUILD = 'v2026-11-05.4 · armados';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
 function erp(accion, payload, intento){
@@ -262,7 +271,8 @@ var NAV = [
   { sec: 'Comercial', items: [
     { id: 'clientes', t: 'Clientes', ver: function(){ return PA(['crm', 'crm_ver', 'facturas', 'cxc']); } },
     { id: 'cotizaciones', t: 'Cotizaciones', ver: function(){ return PA(['crm', 'crm_ver']); } },
-    { id: 'seguimiento', t: 'Seguimiento', ver: function(){ return PA(['crm', 'crm_ver']); } } ] },
+    { id: 'seguimiento', t: 'Seguimiento', ver: function(){ return PA(['crm', 'crm_ver']); } },
+    { id: 'armados', t: 'Cálculo de armados', ver: function(){ return PA(['crm', 'crm_ver', 'neg', 'neg_ver']); } } ] },
   { sec: 'Operaciones', items: [
     { id: 'odp', t: 'Órdenes de producción', ver: function(){ return P('odp_ver'); } },
     { id: 'inventario', t: 'Inventario', sub: true, ver: function(){ return PA(['inv', 'inv_ver', 'conteo', 'odp_ver']); } } ] },
@@ -277,6 +287,7 @@ var NAV = [
 var NAVEST = { min: false, abiertas: {} };   /* siempre arranca con el menu abierto y las secciones plegadas */
 function abrirErp(){
   NAVEST = { min: false, abiertas: {} };
+  eq('erpNavAbre').classList.remove('on');
   if (E.init) { erpNav(); }
   document.getElementById('appPortal').className = 'oculto';
   eq('appErp').className = '';
@@ -293,6 +304,7 @@ function abrirErp(){
   }, function(e){ erpError(eq('erpMain'), e); });
 }
 function erpSalir(){
+  eq('erpNavAbre').classList.remove('on');
   clearInterval(NT.h); NT.h = null; eq('erpNotif').classList.remove('on');
   eq('appErp').className = 'oculto';
   document.getElementById('appPortal').className = '';
@@ -309,7 +321,7 @@ function erpNav(){
     its.forEach(function(i){ h += '<button type="button"' + (i.sub ? ' class="sub"' : '') + ' data-v="' + i.id + '" onclick="erpVista(\'' + i.id + '\')">' + esc(i.t) + '</button>'; });
     h += '</div></div>';
   });
-  var nav = eq('erpNav'); nav.innerHTML = h; nav.classList.toggle('min', NAVEST.min);
+  var nav = eq('erpNav'); nav.innerHTML = h; nav.classList.toggle('min', NAVEST.min); eq('erpNavAbre').classList.toggle('on', NAVEST.min);
   nav.querySelectorAll('button[data-v]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-v') === E.vista); });
 }
 function erpSecTog(n){ NAVEST.abiertas[n] = !NAVEST.abiertas[n]; erpNav(); }
@@ -321,7 +333,7 @@ function erpVista(v, arg){
   var m = eq('erpMain');
   m.innerHTML = '<div class="erp-vacio">Cargando…</div>';
   window.scrollTo(0, 0);
-  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
+  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, armados: vArmados, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
   if (f) { f(m, arg); }
 }
 function vDesarrollo(m){
@@ -491,6 +503,10 @@ function cotForm(folio, pre, after){
     var clis = (E.lk.clientes || []).map(function(x){ return { v: x.ID, t: x.Nombre }; });
     var ests = E.init.cat.EST_COT.filter(function(x){ return x !== 'Aprobada'; });
     var lin = r.lineas.length ? r.lineas : [{}];
+    if (pre && pre.agregar && pre.agregar.length) {
+      if (bloq) { ptToast('La cotización ' + folio + ' ya está aprobada (ODP ' + (c.ODP || '') + ') y no se puede editar: crea otra o pide a quien corresponda.'); return; }
+      lin = (r.lineas.length ? r.lineas : []).concat(pre.agregar);
+    }
     var pcts = (E.init.cat.DESCUENTOS_COT || [0, 5, 10, 15, 20, 25]).map(function(x){ return { v: x, t: x + '%' }; });
     var pie = '<button class="erp-btn sec" id="cotPdf"' + (folio ? '' : ' disabled') + '>PDF</button>' +
       (folio && !c.NegociacionID && P('neg') ? '<button class="erp-btn sec" id="cotLigar" type="button">Ligar a negociación</button>' : '') +
@@ -556,7 +572,7 @@ function cotForm(folio, pre, after){
 }
 
 /* ===================== NEGOCIACIONES (kanban) ===================== */
-var NG = { d: null, resp: '', q: '', perdidas: false, cur: null, det: null, tab: 'c', pre: '', sel: { cli: '' }, arch: null };
+var NG = { d: null, resp: '', q: '', tiempo: '', desde: '', hasta: '', perdidas: false, cur: null, det: null, tab: 'c', pre: '', sel: { cli: '' }, arch: null };
 var NG_COL = ['#8A5CF6', '#2D7FF9', '#1E8E5A', '#14B8A6', '#F0A80C', '#FF6A13', '#0EA5E9', '#16A34A'];
 var NT = { h: null, lista: [] };
 function ngUsuarios(){ return (E.lk && E.lk.usuarios) || []; }
@@ -574,17 +590,28 @@ function vNegociaciones(m){
       '<div class="ng-barra"><select id="ngResp" onchange="NG.resp=this.value;ngPinta()"><option value="">Todos los responsables</option><option value="' + esc(d.yo) + '">Mis negociaciones</option>' +
       ngUsuarios().map(function(u){ return '<option value="' + esc(u.Email) + '">' + esc(u.Nombre) + '</option>'; }).join('') + '</select>' +
       '<input id="ngQ" placeholder="Buscar nombre, cliente o folio" oninput="NG.q=this.value;ngPinta()" style="min-width:230px">' +
+      '<select id="ngTiempo" onchange="NG.tiempo=this.value;ngTiempoUi();ngPinta()" title="Filtra por fecha de creación">' + eOpts([{ v: '30', t: 'Últimos 30 días' }, { v: '90', t: 'Último trimestre' }, { v: '182', t: 'Último semestre' }, { v: '365', t: 'Último año' }, { v: 'rango', t: 'Rango personalizado…' }], NG.tiempo, 'Todo el tiempo') + '</select>' +
+      '<span id="ngRango" style="display:none;gap:6px;align-items:center"><input type="date" id="ngDesde" onchange="NG.desde=this.value;ngPinta()"> a <input type="date" id="ngHasta" onchange="NG.hasta=this.value;ngPinta()"></span>' +
       '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="ngPer" onchange="NG.perdidas=this.checked;ngPinta()"> Mostrar perdidas</label><span class="sp"></span>' +
       (P('neg') ? '<button type="button" class="erp-btn nar" onclick="ngAbre(null)">+ Nueva negociación</button>' : '') + '</div><div id="ngTab" class="ng-tablero"></div>';
-    eq('ngResp').value = NG.resp; eq('ngQ').value = NG.q; eq('ngPer').checked = NG.perdidas;
+    eq('ngResp').value = NG.resp; eq('ngQ').value = NG.q; eq('ngPer').checked = NG.perdidas; eq('ngDesde').value = NG.desde; eq('ngHasta').value = NG.hasta; ngTiempoUi();
     ngPinta();
     if (E.pendiente) { var id = E.pendiente; E.pendiente = ''; ngAbre(id); }
   }, function(e){ erpError(m, e); });
 }
+function ngTiempoUi(){ eq('ngRango').style.display = NG.tiempo === 'rango' ? 'inline-flex' : 'none'; }
+function ngLimites(){
+  if (NG.tiempo === 'rango') { return { d: NG.desde, h: NG.hasta }; }
+  if (!NG.tiempo) { return { d: '', h: '' }; }
+  var f = new Date(); f.setDate(f.getDate() - Number(NG.tiempo));
+  return { d: f.getFullYear() + '-' + ('0' + (f.getMonth() + 1)).slice(-2) + '-' + ('0' + f.getDate()).slice(-2), h: '' };
+}
 function ngFiltradas(){
-  var q = NG.q.trim().toLowerCase();
+  var q = NG.q.trim().toLowerCase(), lim = ngLimites();
   return NG.d.rows.filter(function(n){
     if (NG.resp && n.ResponsableEmail !== NG.resp) { return false; }
+    if (lim.d && String(n.Fecha) < lim.d) { return false; }
+    if (lim.h && String(n.Fecha) > lim.h) { return false; }
     return !q || [n.ID, n.Nombre, n.Cliente, n.Cotizacion, n.ODP, n.ContactoNombre].join(' ').toLowerCase().indexOf(q) >= 0;
   });
 }
@@ -681,7 +708,7 @@ function ngAbre(id, etapa){
     '<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="erp-btn" id="ngEnvia" onclick="ngComenta()">Comentar</button>' +
     '<button type="button" class="erp-btn sec" onclick="eq(\'ngCFile\').click()">📎 Adjuntar</button><span id="ngCNom" style="font-size:12px;color:var(--tinta-2)"></span>' +
     '<input type="file" id="ngCFile" style="display:none" onchange="ngCEleg(this)"></div></div></div>' +
-    '<div id="ngPA" style="display:none"><div class="ng-drop" id="ngDrop" onclick="eq(\'ngDFile\').click()">Arrastra aquí los archivos de diseño o haz clic para elegirlos<br><small>Cualquier archivo, máx. 8 MB. Al subirlo se avisa por correo a diseño.</small></div>' +
+    '<div id="ngPA" style="display:none"><div class="ng-drop" id="ngDrop" onclick="eq(\'ngDFile\').click()">Arrastra aquí los archivos de diseño o haz clic para elegirlos<br><small>Cualquier archivo, hasta 100 MB. Al subirlo se avisa por correo a diseño.</small></div>' +
     '<input type="file" id="ngDFile" multiple style="display:none" onchange="ngSube(this.files);this.value=\'\'"><div class="ng-lista" id="ngLA"></div></div>' +
     '<div id="ngPH" style="display:none"><div class="ng-lista" id="ngLH"></div></div><p class="erp-vacio" id="ngNota" style="display:none">Guarda la negociación para habilitar comentarios y archivos.</p></div></div>',
     (!perd && puede ? '<button type="button" class="erp-btn" id="ngPerd" style="background:var(--rojo);color:#fff;margin-right:auto"' + (n ? '' : ' disabled title="Guarda primero la negociación"') + '>PERDIDO</button>' : '') +
@@ -773,6 +800,7 @@ function ngDetPinta(){
 function ngBaja(id){
   ptToast('Preparando archivo…');
   erp('negArchivo', { ID: id }).then(function(r){
+    if (r.enlace) { window.open(r.enlace, '_blank'); return ptToast('Archivo grande: se abre en Drive. Si no te deja, pide acceso al propietario.'); }
     var bin = atob(r.b64), arr = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
     var url = URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/octet-stream' })), a = document.createElement('a');
@@ -900,13 +928,40 @@ function ngSugElige(i){
   tx.value = tx.value.slice(0, NG_S.ini) + '@' + ngTok(u) + ' ' + tx.value.slice(pos);
   var np = NG_S.ini + ngTok(u).length + 2; tx.focus(); tx.setSelectionRange(np, np); ngSugOculta();
 }
+var NG_MAX = 100 * 1048576, NG_CHICO = 6 * 1048576, NG_TROZO = 8 * 1048576;
 function ngLee(f){
   return new Promise(function(res, rej){
-    if (f.size > 8 * 1048576) { return rej(new Error(f.name + ': pesa más de 8 MB.')); }
+    if (f.size > NG_CHICO) { return rej(new Error(f.name + ': pesa más de 6 MB; se sube por partes.')); }
     var rd = new FileReader(); rd.onerror = function(){ rej(new Error('No se pudo leer ' + f.name)); };
     rd.onload = function(){ res({ nombre: f.name, mime: f.type, b64: String(rd.result).split(',')[1] || '' }); };
     rd.readAsDataURL(f);
   });
+}
+/* archivos grandes (hasta 100 MB): el servidor abre una carga reanudable en Drive y el navegador le manda trozos de 8 MB */
+function ngTrozo(f, ini){
+  return new Promise(function(res, rej){
+    var rd = new FileReader(); rd.onerror = function(){ rej(new Error('No se pudo leer ' + f.name)); };
+    rd.onload = function(){ res(String(rd.result).split(',')[1] || ''); };
+    rd.readAsDataURL(f.slice(ini, Math.min(ini + NG_TROZO, f.size)));
+  });
+}
+function ngGrande(f, tipo, comId, avance){
+  var id = NG.cur.ID;
+  return erp('negSubirInicio', { ID: id, nombre: f.name, mime: f.type, tamano: f.size, tipo: tipo, comentario: comId || '' }).then(function(r){
+    var ini = 0;
+    return (function sig(){
+      if (avance) { avance(Math.round(ini / f.size * 100)); }
+      return ngTrozo(f, ini).then(function(b64){ return erp('negSubirParte', { token: r.token, inicio: ini, b64: b64 }); }).then(function(x){
+        if (x.continua) { ini = x.recibido; return sig(); }
+        return x;
+      });
+    })();
+  });
+}
+function ngSubeUno(f, avance){
+  if (f.size > NG_MAX) { return Promise.reject(new Error(f.name + ': pesa más de 100 MB.')); }
+  if (f.size <= NG_CHICO) { return ngLee(f).then(function(a){ return erp('negSubir', { ID: NG.cur.ID, archivo: a }); }); }
+  return ngGrande(f, 'diseno', '', avance);
 }
 function ngCEleg(inp){ NG.arch = inp.files[0] || null; eq('ngCNom').textContent = NG.arch ? NG.arch.name : ''; }
 function ngComenta(){
@@ -914,8 +969,14 @@ function ngComenta(){
   var tx = eq('ngTxt'), t = tx.value.trim();
   if (!t && !NG.arch) { return; }
   var b = eq('ngEnvia'); b.disabled = true;
-  (NG.arch ? ngLee(NG.arch) : Promise.resolve(null)).then(function(a){
-    return erp('negComentar', { ID: NG.cur.ID, Texto: t, archivo: a });
+  var grande = NG.arch && NG.arch.size > NG_CHICO, af = NG.arch;
+  if (af && af.size > NG_MAX) { b.disabled = false; return ptToast(af.name + ': pesa más de 100 MB.'); }
+  (af && !grande ? ngLee(af) : Promise.resolve(null)).then(function(a){
+    return erp('negComentar', { ID: NG.cur.ID, Texto: t || (grande ? 'Archivo adjunto: ' + af.name : ''), archivo: a });
+  }).then(function(r){
+    if (!grande) { return r; }
+    eq('ngCNom').textContent = 'Subiendo ' + af.name + '…';
+    return ngGrande(af, 'comentario', r.comentario.ID, function(pc){ eq('ngCNom').textContent = 'Subiendo ' + af.name + ' ' + pc + '%'; }).then(function(x){ r.archivo = x.archivo; return r; });
   }).then(function(r){
     b.disabled = false; tx.value = ''; NG.arch = null; eq('ngCNom').textContent = ''; eq('ngCFile').value = ''; ngSugOculta();
     if (NG.det) { NG.det.comentarios.push(r.comentario); if (r.archivo) { NG.det.archivos.push(r.archivo); } }
@@ -930,7 +991,7 @@ function ngSube(files){
   (function sig(){
     var f = lista.shift(); if (!f) { dr.innerHTML = orig; return; }
     dr.textContent = 'Subiendo ' + f.name + '…';
-    ngLee(f).then(function(a){ return erp('negSubir', { ID: id, archivo: a }); }).then(function(r){
+    ngSubeUno(f, function(pc){ dr.textContent = 'Subiendo ' + f.name + ' ' + pc + '%…'; }).then(function(r){
       if (NG.cur && NG.cur.ID === id) { if (NG.det) { NG.det.archivos.push(r.archivo); } NG.cur.archivos = (NG.cur.archivos || 0) + 1; ngDetPinta(); }
       ngPinta(); ptToast('Archivo subido. Se avisó por correo a diseño (' + r.avisados + ').'); sig();
     }).catch(function(e){ ptToast(e.message); sig(); });
@@ -960,6 +1021,294 @@ function notifIr(id, neg){
   if (!neg) { return; }
   NAVEST.abiertas['Negociaciones'] = true; E.pendiente = neg;
   if (E.vista === 'negociaciones') { E.pendiente = ''; ngAbre(neg); } else { erpNav(); erpVista('negociaciones'); }
+}
+
+/* ===================== CALCULO DE ARMADOS: acomodo de piezas en laminas (MaxRects) ===================== */
+function MaxRects(W, H){ this.W = W; this.H = H; this.libres = [{ x: 0, y: 0, w: W, h: H }]; }
+MaxRects.prototype.coloca = function(w, h, rota, heur){
+  var mejor = null, EPS = 1e-6, pruebas = [[w, h, false]];
+  if (rota && Math.abs(w - h) > EPS) { pruebas.push([h, w, true]); }
+  for (var t = 0; t < pruebas.length; t++) {
+    var pw = pruebas[t][0], ph = pruebas[t][1];
+    for (var i = 0; i < this.libres.length; i++) {
+      var f = this.libres[i];
+      if (pw <= f.w + EPS && ph <= f.h + EPS) {
+        var lw = f.w - pw, lh = f.h - ph, a, b;
+        if (heur === 'bssf') { a = Math.min(lw, lh); b = Math.max(lw, lh); }
+        else if (heur === 'blsf') { a = Math.max(lw, lh); b = Math.min(lw, lh); }
+        else if (heur === 'baf') { a = f.w * f.h - pw * ph; b = Math.min(lw, lh); }
+        else { a = f.y + ph; b = f.x; }   /* bl: abajo-izquierda */
+        if (!mejor || a < mejor.a - EPS || (Math.abs(a - mejor.a) <= EPS && b < mejor.b)) { mejor = { x: f.x, y: f.y, w: pw, h: ph, r: pruebas[t][2], a: a, b: b }; }
+      }
+    }
+  }
+  if (!mejor) { return null; }
+  this.parte(mejor);
+  return mejor;
+};
+MaxRects.prototype.parte = function(r){
+  var nuevos = [], EPS = 1e-6;
+  for (var i = 0; i < this.libres.length; i++) {
+    var f = this.libres[i];
+    if (r.x >= f.x + f.w - EPS || r.x + r.w <= f.x + EPS || r.y >= f.y + f.h - EPS || r.y + r.h <= f.y + EPS) { nuevos.push(f); continue; }
+    if (r.x > f.x + EPS) { nuevos.push({ x: f.x, y: f.y, w: r.x - f.x, h: f.h }); }
+    if (r.x + r.w < f.x + f.w - EPS) { nuevos.push({ x: r.x + r.w, y: f.y, w: f.x + f.w - (r.x + r.w), h: f.h }); }
+    if (r.y > f.y + EPS) { nuevos.push({ x: f.x, y: f.y, w: f.w, h: r.y - f.y }); }
+    if (r.y + r.h < f.y + f.h - EPS) { nuevos.push({ x: f.x, y: r.y + r.h, w: f.w, h: f.y + f.h - (r.y + r.h) }); }
+  }
+  this.libres = nuevos.filter(function(a, i){
+    return !nuevos.some(function(b, j){ return i !== j && a.x >= b.x - EPS && a.y >= b.y - EPS && a.x + a.w <= b.x + b.w + EPS && a.y + a.h <= b.y + b.h + EPS && (i > j || Math.abs(a.w - b.w) > EPS || Math.abs(a.h - b.h) > EPS); });
+  });
+};
+var ARM_ORDENES = {
+  area: function(a, b){ return b.w * b.h - a.w * a.h; },
+  lado: function(a, b){ return Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h; },
+  alto: function(a, b){ return b.h - a.h || b.w - a.w; },
+  ancho: function(a, b){ return b.w - a.w || b.h - a.h; },
+  perim: function(a, b){ return (b.w + b.h) - (a.w + a.h); }
+};
+/* piezas: [{pi, w, h}] ya con el espacio de corte sumado; devuelve {hojas:[{col:[{pi,x,y,w,h,r}]}]} o {error} */
+function armEmpaca(piezas, W, H, rota, orden, heur){
+  var hojas = [];
+  var lista = piezas.slice().sort(ARM_ORDENES[orden]);
+  for (var i = 0; i < lista.length; i++) {
+    var p = lista[i], pl = null, b;
+    for (b = 0; b < hojas.length && !pl; b++) { pl = hojas[b].mr.coloca(p.w, p.h, rota, heur); if (pl) { pl.pi = p.pi; hojas[b].col.push(pl); } }
+    if (!pl) {
+      var nueva = { mr: new MaxRects(W, H), col: [] };
+      pl = nueva.mr.coloca(p.w, p.h, rota, heur);
+      if (!pl) { return { error: p }; }
+      pl.pi = p.pi; nueva.col.push(pl); hojas.push(nueva);
+    }
+  }
+  return { hojas: hojas.map(function(h){ return { col: h.col }; }) };
+}
+/* ¿caben todas las piezas en UNA lamina de W x H? prueba varias estrategias */
+function armCabe(piezas, W, H, rota){
+  var mejor = null, o, h;
+  for (o in ARM_ORDENES) { for (h = 0; h < 4; h++) {
+    var r = armEmpaca(piezas, W, H, rota, o, ['bssf', 'blsf', 'baf', 'bl'][h]);
+    if (!r.error && r.hojas.length === 1) { return r.hojas[0].col; }
+  } }
+  return mejor;
+}
+/* mejor acomodo del trabajo completo. dim: {W, H, k, rota}. prods: [{w,h,q}] en cm. Devuelve {hojas, laminas, media, ...} o {error:'texto'} */
+function armCalcula(prods, W, H, k, rota){
+  var piezas = [], i, j;
+  for (i = 0; i < prods.length; i++) { for (j = 0; j < prods[i].q; j++) { piezas.push({ pi: i, w: prods[i].w + k, h: prods[i].h + k }); } }
+  if (!piezas.length) { return { error: 'Agrega al menos un producto con medidas y cantidad.' }; }
+  var BW = W + k, BH = H + k, mejor = null;
+  for (i = 0; i < prods.length; i++) {
+    var a = prods[i].w + k, b = prods[i].h + k;
+    var cabe = (a <= BW + 1e-6 && b <= BH + 1e-6) || (rota && b <= BW + 1e-6 && a <= BH + 1e-6);
+    if (!cabe) { return { error: 'La pieza «' + (prods[i].nombre || 'Producto ' + (i + 1)) + '» (' + prods[i].w + ' × ' + prods[i].h + ' cm) no cabe en la lámina de ' + W + ' × ' + H + ' cm' + (rota ? '.' : ' (sin rotar). Activa «Permitir girar 90°».') }; }
+  }
+  var o, h;
+  for (o in ARM_ORDENES) { for (h = 0; h < 4; h++) {
+    var r = armEmpaca(piezas, BW, BH, rota, o, ['bssf', 'blsf', 'baf', 'bl'][h]);
+    if (r.error) { continue; }
+    var n = r.hojas.length, ult = r.hojas[n - 1].col, media = null;
+    /* ¿lo de la ultima lamina cabe en una MEDIA lamina simetrica (mitad del ancho o mitad del alto)? */
+    var ps = ult.map(function(c){ return { pi: c.pi, w: c.r ? c.h : c.w, h: c.r ? c.w : c.h }; });
+    var m1 = armCabe(ps, W / 2 + k, BH, rota), m2 = m1 ? null : armCabe(ps, BW, H / 2 + k, rota);
+    if (m1) { media = { dir: 'ancho', col: m1 }; } else if (m2) { media = { dir: 'alto', col: m2 }; }
+    var need = (n - 1) + (media ? 0.5 : 1), usadoUlt = ult.reduce(function(s, c){ return s + c.w * c.h; }, 0);
+    if (!mejor || need < mejor.need - 1e-9 || (Math.abs(need - mejor.need) < 1e-9 && usadoUlt < mejor.usadoUlt)) { mejor = { hojas: r.hojas, need: need, media: media, usadoUlt: usadoUlt }; }
+  } }
+  if (!mejor) { return { error: 'No se pudo acomodar el trabajo.' }; }
+  var hojas = mejor.hojas.map(function(x){ return x.col; });
+  if (mejor.media) { hojas[hojas.length - 1] = mejor.media.col; }
+  var area = 0; hojas.forEach(function(c){ c.forEach(function(p){ area += (p.w - k) * (p.h - k); }); });
+  var cuenta = prods.map(function(){ return 0; }); hojas.forEach(function(c){ c.forEach(function(p){ cuenta[p.pi]++; }); });
+  return { hojas: hojas, laminas: mejor.need, completas: hojas.length - (mejor.media ? 1 : 0), media: mejor.media ? mejor.media.dir : '', areaPiezas: area, areaUsada: mejor.need * W * H, cuenta: cuenta, W: W, H: H, k: k };
+}
+
+/* ===================== CALCULO DE ARMADOS (vista) ===================== */
+var ARM = { res: null, canv: [], mats: null, mat: '', neg: [], costo: null, filas: 0 };
+var ARM_COL = ['#BFD7FF', '#FFD9B3', '#C9F0D6', '#F5C6E7', '#FFF2B3', '#D4C8F5', '#C7EEF0', '#FAD0D0'];
+var ARM_RIG = /coroplast|trovicel|estireno|alucobond|acr[ií]lico|mdf|l[aá]mina|pvc|sintra|poliestireno/i;
+function armFila(){
+  return '<tr><td><input class="an" placeholder="Ej. Letrero entrada"></td><td><input class="aw" type="number" step="0.1" min="0.1" placeholder="cm"></td><td><input class="ah" type="number" step="0.1" min="0.1" placeholder="cm"></td>' +
+    '<td><input class="aq" type="number" step="1" min="1" value="1"></td><td><label class="arm-f">📎 Arte<input class="af" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display:none" onchange="armArte(this)"></label><small class="afn"></small></td>' +
+    '<td><button type="button" class="erp-btn chico rojo" onclick="armQuita(this)">×</button></td></tr>';
+}
+function armQuita(b){ var tb = b.closest('tbody'); if (tb.rows.length > 1) { b.closest('tr').remove(); } }
+function armMas(){ eq('armFilas').insertAdjacentHTML('beforeend', armFila()); }
+function armArte(inp){
+  var f = inp.files[0], tr = inp.closest('tr'), nm = tr.querySelector('.afn'); tr._img = null; nm.textContent = '';
+  if (!f) { return; }
+  if (!/^image\/(jpeg|png)$/.test(f.type)) { inp.value = ''; return ptToast('Solo se aceptan imágenes JPG o PNG.'); }
+  if (f.size > 1048576) { inp.value = ''; return ptToast(f.name + ': pesa más de 1 MB.'); }
+  var u = URL.createObjectURL(f), im = new Image();
+  im.onload = function(){ tr._img = im; nm.textContent = f.name; };
+  im.onerror = function(){ inp.value = ''; ptToast('No se pudo leer la imagen.'); };
+  im.src = u;
+}
+function vArmados(m){
+  erp('armadoMateriales').then(function(d){
+    ARM.mats = d.materiales; ARM.margen = d.margen;
+    m.innerHTML = '<h2>Cálculo de armados</h2><p class="erp-sub">Cuántas láminas de material rígido (coroplast, trovicel, estireno, alucobond, acrílico, MDF…) necesitas para un pedido, con vista previa del acomodo. Se suma el espacio de corte del CNC entre piezas.</p>' +
+      '<div class="arm-grid"><div class="arm-card"><div class="erp-form"><div class="c2"><label>Material</label><select id="armMat"></select></div>' +
+      '<div class="c2"><label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="checkbox" id="armTodos" onchange="armMatLista()"> Mostrar todos los materiales del catálogo</label></div>' +
+      '<div><label>Lámina: ancho (cm)</label><input id="armW" type="number" step="0.1" value="120"></div><div><label>Lámina: alto (cm)</label><input id="armH" type="number" step="0.1" value="240"></div>' +
+      '<div><label>Espacio de corte entre piezas (cm)</label><input id="armK" type="number" step="0.1" min="0" value="0.5"></div>' +
+      '<div style="display:flex;align-items:flex-end"><label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="checkbox" id="armRota" checked> Permitir girar las piezas 90°</label></div></div>' +
+      '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Productos del pedido</h3>' +
+      '<div class="erp-scroll"><table class="erp-tabla" id="armT"><thead><tr><th>Producto</th><th>Ancho cm</th><th>Alto cm</th><th>Cantidad</th><th>Arte (JPG/PNG, máx. 1 MB)</th><th></th></tr></thead><tbody id="armFilas">' + armFila() + '</tbody></table></div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button type="button" class="erp-btn sec chico" onclick="armMas()">+ Producto</button><span class="sp"></span><button type="button" class="erp-btn nar" onclick="armCalcular()">Calcular armado</button></div></div>' +
+      '<div class="arm-out" id="armOut"><div class="erp-vacio">Captura las medidas y pulsa <b>Calcular armado</b>.</div></div></div>';
+    armMatLista();
+  }, function(e){ erpError(m, e); });
+}
+function armMatLista(){
+  var todos = eq('armTodos') && eq('armTodos').checked, l = ARM.mats.filter(function(x){ return todos || ARM_RIG.test(x.material); });
+  if (!l.length) { l = ARM.mats; }
+  var sel = eq('armMat'), v = sel.value; sel.innerHTML = l.map(function(x){ return '<option value="' + esc(x.material) + '">' + esc(x.material) + (x.tieneCosto ? '' : ' (sin costo)') + '</option>'; }).join('');
+  if (v) { sel.value = v; }
+}
+function armLeeFilas(){
+  return [].map.call(eq('armFilas').rows, function(tr, i){
+    return { nombre: tr.querySelector('.an').value.trim() || ('Producto ' + (i + 1)), w: Number(tr.querySelector('.aw').value), h: Number(tr.querySelector('.ah').value), q: Math.floor(Number(tr.querySelector('.aq').value)), img: tr._img || null };
+  }).filter(function(p){ return p.w > 0 || p.h > 0; });
+}
+function armCalcular(){
+  var W = Number(eq('armW').value), H = Number(eq('armH').value), k = Number(eq('armK').value);
+  if (!(W > 0 && H > 0) || !(k >= 0)) { return ptToast('Revisa el tamaño de la lámina y el espacio de corte.'); }
+  var prods = armLeeFilas();
+  if (!prods.length) { return ptToast('Agrega al menos un producto con medidas.'); }
+  for (var i = 0; i < prods.length; i++) { if (!(prods[i].w > 0 && prods[i].h > 0 && prods[i].q >= 1)) { return ptToast('Completa ancho, alto y cantidad de «' + prods[i].nombre + '».'); } }
+  var mat = eq('armMat').value, res = armCalcula(prods, W, H, k, eq('armRota').checked);
+  var out = eq('armOut');
+  if (res.error) { ARM.res = null; out.innerHTML = '<div class="erp-err">' + esc(res.error) + '</div>'; return; }
+  res.prods = prods; res.mat = mat; ARM.res = res; ARM.mat = mat; ARM.costo = null;
+  ARM.canv = res.hojas.map(function(h, i){ return armDibuja(res, i); });
+  out.innerHTML = '<div class="arm-res"><div class="arm-tit">' + esc(armTitular(res)) + '</div><p class="erp-sub" style="margin:4px 0 10px">' + esc(armDetalle(res)) + '</p></div><div id="armCanv"></div>' +
+    '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Producto</th><th class="n">Medida</th><th class="n">Pedido</th><th class="n">Acomodadas</th></tr></thead><tbody>' +
+    prods.map(function(p, i){ return '<tr><td><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:' + ARM_COL[i % ARM_COL.length] + ';margin-right:6px"></i>' + esc(p.nombre) + '</td><td class="n">' + p.w + ' × ' + p.h + ' cm</td><td class="n">' + p.q + '</td><td class="n">' + res.cuenta[i] + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+    '<div id="armCosto" class="arm-costo"><div class="erp-vacio">Calculando costo…</div></div><div id="armLiga"></div>';
+  var cv = eq('armCanv');
+  ARM.canv.forEach(function(c, i){ var w = document.createElement('div'); w.className = 'arm-hoja'; w.innerHTML = '<div class="arm-ht">Lámina ' + (i + 1) + ' de ' + ARM.canv.length + (i === ARM.canv.length - 1 && res.media ? ' · se usa MEDIA lámina' : '') + ' · aprovechamiento ' + n1p(armUsoHoja(res, i)) + '</div>'; c.className = 'arm-cv'; w.appendChild(c); cv.appendChild(w); });
+  erp('armadoCosto', { Material: mat, Laminas: res.laminas, Ancho: W, Alto: H }).then(function(c){ ARM.costo = c; armPintaCosto(); }, function(e){ ARM.costo = null; eq('armCosto').innerHTML = '<div class="erp-err">No se pudo calcular el costo: ' + esc(e.message) + '</div>'; armPintaLiga(); });
+}
+function n1p(v){ return (Math.round(v * 10) / 10) + '%'; }
+function armUsoHoja(res, i){
+  var a = 0; res.hojas[i].forEach(function(p){ a += (p.w - res.k) * (p.h - res.k); });
+  var ult = i === res.hojas.length - 1 && res.media, base = res.W * res.H * (ult ? 0.5 : 1);
+  return a / base * 100;
+}
+function armTitular(res){
+  var c = res.completas, md = res.media;
+  if (!c && md) { return 'Necesitas MEDIA lámina de ' + res.W + ' × ' + res.H + ' cm'; }
+  return 'Necesitas ' + c + (c === 1 ? ' lámina completa' : ' láminas completas') + (md ? ' y 1 media lámina' : '') + ' de ' + res.W + ' × ' + res.H + ' cm' + (md ? ' (' + res.laminas + ' láminas en total)' : '');
+}
+function armDetalle(res){
+  var piezas = res.cuenta.reduce(function(a, b){ return a + b; }, 0);
+  return res.mat + ' · ' + piezas + ' piezas · espacio de corte ' + res.k + ' cm · aprovechamiento del material cobrado: ' + n1p(res.areaPiezas / res.areaUsada * 100) + (res.media ? ' · la media lámina se corta a lo ' + (res.media === 'ancho' ? 'ancho' : 'largo') + ' (mitad simétrica)' : '');
+}
+/* dibuja una lámina a escala real; la orientación se muestra con el lado largo horizontal */
+function armDibuja(res, idx){
+  var W = res.W, H = res.H, k = res.k, hoja = res.hojas[idx], giro = H > W, mg = 30, largo = 880, s = largo / Math.max(W, H);
+  var dw = (giro ? H : W) * s, dh = (giro ? W : H) * s, cv = document.createElement('canvas');
+  cv.width = Math.round(dw + mg * 2); cv.height = Math.round(dh + mg * 2);
+  var c = cv.getContext('2d'), ult = idx === res.hojas.length - 1 && res.media;
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  var T = function(x, y){ return giro ? [mg + y * s, mg + (W - x) * s] : [mg + x * s, mg + y * s]; };
+  /* cuerpo de la lámina (en cm, rotado si hace falta) */
+  c.save(); c.translate(mg, mg); if (giro) { c.translate(0, W * s); c.rotate(-Math.PI / 2); } c.scale(s, s);
+  c.fillStyle = '#F7F9FB'; c.fillRect(0, 0, W, H);
+  if (ult) {   /* mitad sobrante rayada */
+    c.save(); c.beginPath();
+    if (res.media === 'ancho') { c.rect(W / 2, 0, W / 2, H); } else { c.rect(0, H / 2, W, H / 2); }
+    c.clip(); c.fillStyle = '#EEF1F4'; c.fillRect(0, 0, W, H); c.strokeStyle = '#C9D1D9'; c.lineWidth = 0.5;
+    for (var d = -H; d < W + H; d += 8) { c.beginPath(); c.moveTo(d, 0); c.lineTo(d + H, H); c.stroke(); }
+    c.restore();
+  }
+  hoja.forEach(function(p){
+    var ow = res.prods[p.pi].w, oh = res.prods[p.pi].h, im = res.prods[p.pi].img, bw = p.w - k, bh = p.h - k;
+    c.save(); c.beginPath(); c.rect(p.x, p.y, bw, bh); c.clip();
+    c.fillStyle = ARM_COL[p.pi % ARM_COL.length]; c.fillRect(p.x, p.y, bw, bh);
+    if (im) {
+      c.translate(p.x + bw / 2, p.y + bh / 2); if (p.r) { c.rotate(Math.PI / 2); }
+      var sc = Math.max(ow / im.width, oh / im.height), sw = ow / sc, sh = oh / sc;
+      c.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, -ow / 2, -oh / 2, ow, oh);
+    }
+    c.restore();
+    c.strokeStyle = '#1F2937'; c.lineWidth = 1.2 / s; c.strokeRect(p.x, p.y, bw, bh);
+  });
+  c.strokeStyle = '#111827'; c.lineWidth = 2 / s; c.strokeRect(0, 0, W, H);
+  if (ult) { c.setLineDash([6 / s, 4 / s]); c.strokeStyle = '#DF4A10'; c.lineWidth = 2 / s; c.beginPath(); if (res.media === 'ancho') { c.moveTo(W / 2, 0); c.lineTo(W / 2, H); } else { c.moveTo(0, H / 2); c.lineTo(W, H / 2); } c.stroke(); c.setLineDash([]); }
+  c.restore();
+  /* textos siempre derechos */
+  c.fillStyle = '#374151'; c.font = '600 12px Montserrat, Arial, sans-serif'; c.textAlign = 'center';
+  c.fillText((giro ? H : W) + ' cm', mg + dw / 2, mg - 10);
+  c.save(); c.translate(mg - 10, mg + dh / 2); c.rotate(-Math.PI / 2); c.fillText((giro ? W : H) + ' cm', 0, 0); c.restore();
+  hoja.forEach(function(p){
+    var a = T(p.x, p.y), b = T(p.x + p.w - k, p.y + p.h - k), x0 = Math.min(a[0], b[0]), y0 = Math.min(a[1], b[1]), pw = Math.abs(a[0] - b[0]), ph = Math.abs(a[1] - b[1]);
+    if (Math.min(pw, ph) < 26 || res.prods[p.pi].img) { return; }
+    var q = res.prods[p.pi], tx = q.nombre.length > pw / 7 ? q.nombre.slice(0, Math.max(2, Math.floor(pw / 7))) + '…' : q.nombre;
+    c.fillStyle = '#111827'; c.font = '600 11px Montserrat, Arial, sans-serif'; c.fillText(tx, x0 + pw / 2, y0 + ph / 2 - 2);
+    c.font = '10px Montserrat, Arial, sans-serif'; c.fillText(q.w + '×' + q.h + (p.r ? ' ↻' : ''), x0 + pw / 2, y0 + ph / 2 + 11);
+  });
+  if (ult) { var cx = res.media === 'ancho' ? T(W * 0.75, H / 2) : T(W / 2, H * 0.75); c.fillStyle = '#6B7280'; c.font = '700 13px Montserrat, Arial, sans-serif'; c.fillText('Sobrante (la otra mitad)', cx[0], cx[1]); }
+  return cv;
+}
+function armPintaCosto(){
+  var c = ARM.costo, res = ARM.res; if (!c || !res) { return; }
+  eq('armCosto').innerHTML = '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Costo y precio del material</h3><div class="erp-kpis">' +
+    (c.costo !== null ? kpi('Costo por lámina', $m(c.costoLamina)) + kpi('Costo del material (' + res.laminas + ' lám.)', $m(c.costo)) : '') +
+    kpi('Precio con margen ' + Math.round(c.margen * 100) + '% (÷ ' + (1 - c.margen).toFixed(2) + ')', $m(c.precio)) + kpi('Precio por lámina', $m(c.precioLamina)) + '</div>' +
+    (c.nota ? '<p class="erp-sub">' + esc(c.nota) + '</p>' : '');
+  armPintaLiga();
+}
+function armPintaLiga(){
+  if (!P('neg') && !PA(['neg_ver'])) { return; }
+  var el = eq('armLiga'); if (!el) { return; }
+  erp('negociaciones').then(function(d){
+    ARM.neg = d.rows.filter(function(n){ return n.Etapa !== d.perdido; });
+    el.innerHTML = '<h3 style="margin:14px 0 6px;font-size:13px;color:var(--azul)">Vincular a una negociación</h3><div class="ng-barra"><select id="armNeg" style="min-width:300px">' +
+      eOpts(ARM.neg.map(function(n){ return { v: n.ID, t: n.ID + ' · ' + n.Nombre + ' · ' + n.Cliente }; }), '', 'Elige la negociación') + '</select>' +
+      '<button type="button" class="erp-btn sec" onclick="armGuardaNeg(this)">Guardar en la negociación (imagen + comentario)</button>' +
+      (P('neg') && ARM.costo ? '<button type="button" class="erp-btn ver" onclick="armPartida()">Agregar como partida a la cotización</button>' : '') + '</div>';
+  }, function(){});
+}
+/* imagen compuesta con todas las laminas, para guardarla en la negociacion */
+function armCompuesto(){
+  var res = ARM.res, ancho = 940, esc0 = ancho / ARM.canv[0].width, hh = 96, y = hh, tot = hh;
+  ARM.canv.forEach(function(c){ tot += Math.round(c.height * Math.min(1, esc0)) + 40; });
+  var cv = document.createElement('canvas'); cv.width = ancho; cv.height = tot; var c = cv.getContext('2d');
+  c.fillStyle = '#fff'; c.fillRect(0, 0, ancho, tot); c.fillStyle = '#16327A'; c.font = '700 20px Montserrat, Arial, sans-serif'; c.textAlign = 'left';
+  c.fillText('Cálculo de armado · ' + res.mat, 20, 34); c.fillStyle = '#111827'; c.font = '700 15px Montserrat, Arial, sans-serif'; c.fillText(armTitular(res), 20, 60);
+  c.fillStyle = '#6B7280'; c.font = '12px Montserrat, Arial, sans-serif'; c.fillText(armDetalle(res).slice(0, 140), 20, 82);
+  ARM.canv.forEach(function(k, i){
+    var sc = Math.min(1, esc0), w = Math.round(k.width * sc), h = Math.round(k.height * sc);
+    c.fillStyle = '#374151'; c.font = '700 13px Montserrat, Arial, sans-serif'; c.fillText('Lámina ' + (i + 1) + ' de ' + ARM.canv.length, 20, y + 16);
+    c.drawImage(k, 20, y + 24, w, h); y += h + 40;
+  });
+  return cv.toDataURL('image/png').split(',')[1];
+}
+function armTextoNeg(){
+  var res = ARM.res, c = ARM.costo;
+  return '📐 Cálculo de armado — ' + res.mat + '\n' + armTitular(res) + '.\n' + res.prods.map(function(p, i){ return '• ' + p.nombre + ': ' + res.cuenta[i] + ' de ' + p.q + ' pzas de ' + p.w + ' × ' + p.h + ' cm'; }).join('\n') +
+    '\nEspacio de corte: ' + res.k + ' cm · aprovechamiento ' + n1p(res.areaPiezas / res.areaUsada * 100) +
+    (c ? '\n' + (c.costo !== null ? 'Costo del material: ' + $m(c.costo) + ' · ' : '') + 'Precio con margen ' + Math.round(c.margen * 100) + '%: ' + $m(c.precio) + ' (' + res.laminas + ' láminas)' : '');
+}
+function armGuardaNeg(btn){
+  var id = eq('armNeg').value; if (!id) { return ptToast('Elige la negociación.'); }
+  if (!ARM.res) { return; }
+  btn.disabled = true; var t0 = btn.textContent; btn.textContent = 'Guardando…';
+  var b64 = armCompuesto(), nombre = 'armado-' + ARM.mat.replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40) + '-' + hoyIso() + '.png';
+  var fin = function(){ btn.disabled = false; btn.textContent = t0; };
+  erp('negComentar', { ID: id, Texto: armTextoNeg(), archivo: { nombre: nombre, mime: 'image/png', b64: b64 } }).then(function(){ fin(); ptToast('Armado guardado en la negociación ' + id + ' (imagen y comentario).'); }, function(e){ fin(); ptToast(e.message); });
+}
+function armPartida(){
+  var id = eq('armNeg').value; if (!id) { return ptToast('Elige la negociación a la que vas a ligar la partida.'); }
+  var n = ARM.neg.filter(function(x){ return x.ID === id; })[0], c = ARM.costo, res = ARM.res;
+  if (!c || !n) { return; }
+  var linea = Object.assign({}, c.partida, { Detalle: 'Armado: ' + armTitular(res) + ' · ' + res.cuenta.reduce(function(a, b){ return a + b; }, 0) + ' piezas' });
+  if (n.Cotizacion) { return cotForm(n.Cotizacion, { agregar: [linea] }, function(){ ptToast('Partida agregada a la cotización ' + n.Cotizacion + '.'); }); }
+  if (!n.ClienteID) { return ptToast('La negociación no tiene un cliente registrado: da de alta al cliente primero.'); }
+  var ag = (E.cat.VENDEDOR || []).filter(function(v){ return String(v).toLowerCase() === String(n.ResponsableNombre || '').toLowerCase(); })[0] || '';
+  cotForm(null, { ClienteID: n.ClienteID, Proyecto: n.Nombre, AgenteVentas: ag, NegociacionID: n.ID, agregar: [linea] }, function(){ ptToast('Cotización creada con la partida del armado.'); });
 }
 
 /* ===================== SEGUIMIENTO ===================== */

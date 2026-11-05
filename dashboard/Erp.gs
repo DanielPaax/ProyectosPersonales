@@ -167,7 +167,8 @@ const ACTIONS = {
   facturas: a_facturas, facturaDetalle: a_facturaDetalle, saveFactura: a_saveFactura, cancelarFactura: a_cancelarFactura, registrarCobro: a_registrarCobro,
   reporteVentas: a_reporteVentas, catalogosProd: a_catalogosProd, produccionODP: a_produccionODP, registrarProduccion: a_registrarProduccion,
   negociaciones: a_negociaciones, negDetalle: a_negDetalle, saveNeg: a_saveNeg, moveNeg: a_moveNeg, perdidoNeg: a_perdidoNeg, negLigarCot: a_negLigarCot,
-  negComentar: a_negComentar, negSubir: a_negSubir, negArchivo: a_negArchivo, notifs: a_notifs, notifLeer: a_notifLeer,
+  negComentar: a_negComentar, negSubir: a_negSubir, negSubirInicio: a_negSubirInicio, negSubirParte: a_negSubirParte, negArchivo: a_negArchivo,
+  armadoMateriales: a_armadoMateriales, armadoCosto: a_armadoCosto, notifs: a_notifs, notifLeer: a_notifLeer,
   usuarios: a_usuarios, saveUsuario: a_saveUsuario, config: a_config, saveConfig: a_saveConfig,
 };
 
@@ -1522,7 +1523,7 @@ function claseAccion(accion, p) {
     case 'saveTarifa': return existe('MaterialOriginal') ? 3 : 2;
     case 'saveSeg': case 'aprobarCot': case 'consumir': case 'agregarCosto': case 'saveFactura': case 'registrarCobro': case 'saveCompra': case 'registrarPago':
     case 'conteo': case 'registrarProduccion': return 2;
-    case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': return 2;
+    case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': case 'negSubirInicio': case 'negSubirParte': return 2;
     case 'notifLeer': return 1;
     default: return 3;   // aprobarCot, devolver, anular*, cancelar*, deleteTarifa, saveUsuario, saveConfig...
   }
@@ -1722,7 +1723,7 @@ function resincronizar() {
 // ==================== EJECUCION ====================
 const LECTURAS = { usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
-  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1 };
+  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
 
 function run(action, p, ses) {
@@ -1996,34 +1997,124 @@ function a_negComentar(u, p) {
   return { comentario: clean_(c), archivo: ao, mencionados: ment.length };
 }
 
-/** Archivo de diseño / impresion: avisa por correo (y en la intranet) a los disenadores. */
-function a_negSubir(u, p) {
-  needAny_(u, ['neg', 'neg_ver']);
-  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
-  const a = negGuardaArchivo_(u, n, '', 'diseno', p.archivo || {});
-  negHist_(n, 'Subió el archivo de diseño ' + a.Nombre, u); update_('Negociaciones', n);
-  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema',
-    Texto: 'Subió el archivo de diseño «' + a.Nombre + '». Se avisó a diseño.', Menciones: '' });
+/** Aviso por correo (y en la intranet) a los disenadores cuando se sube un archivo de diseño. */
+function negAvisaDiseno_(u, n, a) {
   const dis = cfg_('NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx').split(/[,;\s]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return x.indexOf('@') > 0; });
   const cuerpo = '<p><b>' + esc_(u.nombre) + '</b> subió un archivo de diseño a la negociación.</p><table style="border-collapse:collapse;font-size:14px">' +
     '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Negociación</td><td><b>' + esc_(n.ID + ' · ' + n.Nombre) + '</b></td></tr>' +
     '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Cliente</td><td>' + esc_(n.Cliente) + '</td></tr>' +
-    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Archivo</td><td>' + esc_(a.Nombre) + ' (' + Math.max(1, Math.round(num_(a.Tamano) / 1024)) + ' KB)</td></tr>' +
+    '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Archivo</td><td>' + esc_(a.Nombre) + ' (' + negTam_(num_(a.Tamano)) + ')</td></tr>' +
     '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Etapa</td><td>' + esc_(n.Etapa) + '</td></tr>' +
     '<tr><td style="padding:3px 12px 3px 0;color:#7b869f">Responsable</td><td>' + esc_(n.ResponsableNombre) + '</td></tr></table>';
   const enviados = negCorreo_(dis, 'Archivo de diseño nuevo: ' + n.Nombre, 'Nuevo archivo de diseño por revisar', cuerpo, n.ID);
   const us = negUsuarios_().map(function (x) { return x.Email; });
   negNotifica_(dis.filter(function (e) { return us.indexOf(e) >= 0; }), u, 'Archivo de diseño nuevo', u.nombre + ' subió «' + a.Nombre + '» a la negociación «' + n.Nombre + '».', n.ID, true);
   negNotifica_([n.ResponsableEmail], u, 'Subieron un archivo a tu negociación', u.nombre + ' subió «' + a.Nombre + '» a «' + n.Nombre + '».', n.ID, true);
+  return enviados;
+}
+function negTam_(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+
+/** Archivo de diseño / impresion (hasta 6 MB en una sola llamada; mas grande, por partes: a_negSubirInicio / a_negSubirParte). */
+function a_negSubir(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const a = negGuardaArchivo_(u, n, '', 'diseno', p.archivo || {});
+  return negCierraDiseno_(u, n, a);
+}
+function negCierraDiseno_(u, n, a) {
+  negHist_(n, 'Subió el archivo de diseño ' + a.Nombre, u); update_('Negociaciones', n);
+  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema',
+    Texto: 'Subió el archivo de diseño «' + a.Nombre + '». Se avisó a diseño.', Menciones: '' });
+  const enviados = negAvisaDiseno_(u, n, a);
   const ao = clean_(a); delete ao.DriveID;
   return { archivo: ao, avisados: enviados };
+}
+
+// ----- archivos grandes (hasta 100 MB): sesion de carga reanudable de Drive; el navegador manda trozos y este servidor los reenvia -----
+const NEG_GRANDE_MAX = 100 * 1048576;
+function negNombreSeguro_(nombre) {
+  const n = str_(nombre).replace(/[\\\/:*?"<>|]+/g, '_').slice(0, 150);
+  if (!n) throw new Error('El archivo no tiene nombre.');
+  const ext = (n.match(/\.([A-Za-z0-9]+)$/) || [])[1];
+  if (ext && NEG_EXT_BLOQ.indexOf(ext.toLowerCase()) >= 0) throw new Error('Por seguridad no se permiten archivos .' + ext.toLowerCase() + '.');
+  return n;
+}
+function a_negSubirInicio(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  const nombre = negNombreSeguro_(p.nombre), tam = Math.floor(num_(p.tamano)), mime = str_(p.mime) || 'application/octet-stream';
+  if (!(tam > 0)) throw new Error('El archivo está vacío.');
+  if (tam > NEG_GRANDE_MAX) throw new Error('El archivo pesa más de 100 MB: ' + nombre);
+  const tipo = p.tipo === 'comentario' ? 'comentario' : 'diseno';
+  const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
+    method: 'post', contentType: 'application/json; charset=UTF-8', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(tam) },
+    payload: JSON.stringify({ name: nombre, parents: [negCarpeta_().getId()], description: 'Negociación ' + n.ID + ' · ' + n.Nombre + ' · ' + u.email }) });
+  const hd = r.getAllHeaders() || {};
+  const uri = hd.Location || hd.location;
+  if (r.getResponseCode() !== 200 || !uri) throw new Error('No se pudo iniciar la carga del archivo grande (' + r.getResponseCode() + '). Revisa que el script tenga autorizado el acceso a Drive y a servicios externos. ' + str_(r.getContentText()).slice(0, 120));
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put('negup_' + token, JSON.stringify({ uri: uri, neg: n.ID, nombre: nombre, mime: mime, tam: tam, tipo: tipo, com: str_(p.comentario), u: u.email }), 21600);
+  return { token: token };
+}
+function a_negSubirParte(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  let m = null; try { m = JSON.parse(CacheService.getScriptCache().get('negup_' + str_(p.token)) || 'null'); } catch (e) { m = null; }
+  if (!m || m.u !== u.email) throw new Error('La carga del archivo venció. Vuelve a subirlo.');
+  const bytes = Utilities.base64Decode(str_(p.b64)), ini = Math.floor(num_(p.inicio));
+  if (!bytes.length || ini < 0 || ini + bytes.length > m.tam) throw new Error('Trozo de archivo inválido.');
+  const r = UrlFetchApp.fetch(m.uri, { method: 'put', contentType: m.mime, payload: bytes, muteHttpExceptions: true,
+    headers: { 'Content-Range': 'bytes ' + ini + '-' + (ini + bytes.length - 1) + '/' + m.tam } });
+  const code = r.getResponseCode();
+  if (code === 308) return { continua: true, recibido: ini + bytes.length };
+  if (code !== 200 && code !== 201) throw new Error('Falló la carga del archivo (' + code + '): ' + str_(r.getContentText()).slice(0, 150));
+  let id = ''; try { id = JSON.parse(r.getContentText()).id; } catch (e) { id = ''; }
+  if (!id) throw new Error('Drive no devolvió el archivo subido.');
+  CacheService.getScriptCache().remove('negup_' + str_(p.token));
+  try { DriveApp.getFileById(id).setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* cuenta sin dominio: se queda privado */ }
+  const n = mustFind_('Negociaciones', 'ID', m.neg, 'Negociación');
+  const a = insert_('NegArchivos', { ID: seq_('SEQ_NARC', 'NA-', 6), Negociacion: n.ID, ComentarioID: m.com || '', Tipo: m.tipo, Nombre: m.nombre, Mime: m.mime, DriveID: id,
+    Tamano: m.tam, Usuario: u.email, UsuarioNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Etapa: n.Etapa });
+  if (m.tipo === 'diseno') return negCierraDiseno_(u, n, a);
+  negHist_(n, 'Adjuntó el archivo ' + a.Nombre + ' en un comentario', u); update_('Negociaciones', n);
+  const ao = clean_(a); delete ao.DriveID;
+  return { archivo: ao, avisados: 0 };
 }
 
 function a_negArchivo(u, p) {
   needAny_(u, ['neg', 'neg_ver']);
   const a = mustFind_('NegArchivos', 'ID', p.ID, 'Archivo');
+  if (num_(a.Tamano) > 8 * 1048576) return { nombre: a.Nombre, enlace: DriveApp.getFileById(a.DriveID).getUrl() };   // grande: se abre en Drive
   const blob = DriveApp.getFileById(a.DriveID).getBlob();
   return { nombre: a.Nombre, mime: str_(a.Mime) || blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+// ----- Calculo de armados (laminas rigidas) -----
+function a_armadoMateriales(u) {
+  needAny_(u, ['crm', 'crm_ver', 'neg', 'neg_ver']);
+  return { margen: margenCot_(), materiales: tarifasDet_().map(function (t) { return { material: t.material, tieneCosto: !!(t.costoLamina || t.costoM2) }; }) };
+}
+/** Costo y precio de N laminas de un material. Costo por lamina = COSTO_LAMINA de TARIFAS; si no tiene, COSTO_M2 x area de la lamina. Precio = costo / (1 - margen). */
+function a_armadoCosto(u, p) {
+  needAny_(u, ['crm', 'crm_ver', 'neg', 'neg_ver']);
+  const t = tarifasDet_().find(function (x) { return x.material.toUpperCase() === str_(p.Material).toUpperCase(); });
+  if (!t) throw new Error('El material "' + str_(p.Material) + '" no está en TARIFAS.');
+  const W = num_(p.Ancho) || 120, H = num_(p.Alto) || 240, area = W * H / 10000, lam = num_(p.Laminas);
+  if (!(lam > 0)) throw new Error('No hay láminas que costear.');
+  let cu = 0, nota = '', unidad = 'lamina';
+  if (t.costoLamina) {
+    const ref = t.ancho * t.largo > 0 ? t.ancho * t.largo : 2.88;   // m² de la lámina que se compra (TARIFAS)
+    const igual = Math.abs(area - 2.88) < 0.001 || Math.abs(area - ref) < 0.001;
+    cu = t.costoLamina * (igual ? 1 : area / ref);
+    if (!igual) nota = 'El costo por lámina de TARIFAS se ajustó proporcionalmente al tamaño de lámina elegido.';
+  }
+  else if (t.costoM2) { cu = t.costoM2 * area; unidad = 'm2'; }
+  else throw new Error('"' + t.material + '" no tiene costo por lámina ni por m² en TARIFAS (NA). Captúralo en Carga de material.');
+  const mg = margenCot_(), costo = r2_(cu * lam), precio = r2_(costo / (1 - mg));
+  const ver = veCostos_(u);
+  return { material: t.material, margen: mg, costoLamina: ver ? r2_(cu) : null, costo: ver ? costo : null, precio: precio, precioLamina: r2_(precio / lam),
+           partida: unidad === 'lamina' ? { Descripcion: t.material, Unidad: 'lamina', Cantidad: lam, Impresion: 'Sin impresión' }
+                                        : { Descripcion: t.material, Unidad: 'm2', Cantidad: 1, M2: r4_(area * lam), Impresion: 'Sin impresión' }, nota: nota };
 }
 
 function a_notifs(u) {
@@ -2135,6 +2226,15 @@ function erpApi(accion, payloadJson, clave) {
 }
 
 /* Menu Produccion > ERP: crea o repara las hojas ERP_*. */
+/** Ejecutar UNA vez desde el editor o el menu (ERP > Autorizar archivos grandes): Google pide el permiso para servicios externos, que usa
+ *  la carga de archivos de hasta 100 MB en Negociaciones. Despues publica una nueva version. */
+function erpAutorizarArchivos() {
+  const r = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/about?fields=user', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  DriveApp.getRootFolder();
+  const msg = r.getResponseCode() === 200 ? 'Permiso concedido: ya se pueden subir archivos de hasta 100 MB. Publica una nueva versión de la aplicación web.' : 'Google respondió ' + r.getResponseCode() + '. Revisa que la cuenta tenga acceso a Drive.';
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* sin interfaz */ }
+  return msg;
+}
 function erpInstalar() {
   var msg = ERP.instalar();
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* sin interfaz */ }
