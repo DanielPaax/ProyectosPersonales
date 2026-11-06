@@ -72,6 +72,11 @@ table.t select{width:auto;padding:3px 6px;font-size:12.5px}
 .card h3{margin:14px 0 2px;font-size:13px}
 .sticky{max-height:calc(100vh - 24px);overflow-y:auto}
 @media (max-width:860px){.sticky{position:static;max-height:none}}
+dialog{border:1px solid var(--line);border-radius:12px;padding:0;max-width:680px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.dlgbox{padding:16px;max-height:calc(100vh - 48px);overflow-y:auto}
+.prodbar{background:var(--soft);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.prodbar .edit{margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -81,6 +86,7 @@ table.t select{width:auto;padding:3px 6px;font-size:12.5px}
 </header>
 <nav id="nav"></nav>
 <main id="app"></main>
+<dialog id="dlg"></dialog>
 
 <script>
 'use strict';
@@ -90,8 +96,9 @@ function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
 // una partida = el trabajo y su material juntos (3D: tiempo + filamento; CP: horas + materiales)
 const nuevaPartida = tipo => tipo === 'CP'
   ? { id: uid(), tipo: 'CP', nombre: '', qty: 1, precio: '', h: 4, m: 0, mat: [{ mat: '', n: 'Triplay 18 mm', q: 1, u: 'hoja', c: 900 }] }
-  : { id: uid(), tipo: '3D', nombre: '', qty: 1, precio: '', h: 2, m: 0, fil: [{ mat: '', n: 'PLA', g: 50, c: 350 }] };
+  : { id: uid(), tipo: '3D', prod: '', nombre: '', qty: 1, precio: '', h: 2, m: 0, fil: [{ mat: '', n: 'PLA', g: 50, c: 350 }] };
 
+const PROD0 = { id: null, nombre: '', mat: '', material: '', c: '', peso: '', h: '', m: '', precio: '', notas: '' };
 const DEF = {
   cfg: {
     moneda: '$', labor: 80, emp: { nombre: 'TOGOMA-CO', tel: '', mail: '', web: '', vigencia: 15,
@@ -103,6 +110,7 @@ const DEF = {
   mats: [], clientes: [],
   inv: { id: null, material: '', marca: '', area: 'Ambos', presentacion: '', unidad: '', proveedor: '', costoPres: '' },
   cli: { id: null, nombre: '', rfc: '', direccion: '', cuenta: '' },
+  productos: [], prod: { ...PROD0 }, pd: { ...PROD0 },
   q: {
     cliente: { id: '', nombre: '', rfc: '', direccion: '', cuenta: '' }, notas: '',
     partidas: [nuevaPartida('3D')],
@@ -119,6 +127,7 @@ const NEWROW = {
 
 let S = load();
 let tab = 'cot';
+let modal = null; // ventana emergente abierta: { pid } = alta de producto desde una partida
 
 function load() {
   try {
@@ -180,6 +189,8 @@ const ESTADOS = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada'];
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const editingQ = () => S.editing ? S.quotes.find(q => q.id === S.editing) : null;
 const cliById = id => id ? S.clientes.find(c => String(c.id) === String(id)) : null;
+const prodById = id => id ? S.productos.find(p => String(p.id) === String(id)) : null;
+const r2 = v => Math.round(v * 100) / 100;
 /* ---------- Google Sheets (solo cuando corre dentro de Apps Script) ---------- */
 const REMOTE = !!(window.google && google.script && google.script.run);
 const srv = (fn, ...args) => new Promise((ok, bad) =>
@@ -208,6 +219,7 @@ async function boot() {
     S.quotes = d.quotes.map(normQ); S.folioN = d.folioN;
     S.mats = await subirLocal('mats', d.mats || [], 'cc_importarMateriales');
     S.clientes = await subirLocal('clientes', d.clientes || [], 'cc_importarClientes');
+    S.productos = await subirLocal('productos', d.productos || [], 'cc_importarProductos');
     save(); setSync('ok'); render();
   } catch (e) { setSync('error', e.message); }
 }
@@ -218,6 +230,14 @@ async function subirLocal(nombre, remoto, fn) {
   if (!ya) { try { if (remoto.length || S[nombre].length) localStorage.setItem(flag, '1'); } catch (e) {} }
   if (remoto.length || ya || !S[nombre].length) return remoto;
   return await srv(fn, S[nombre]);
+}
+async function refrescarProductos(force) {
+  if (!REMOTE) return;
+  try {
+    const l = await srv('cc_productos');
+    if (JSON.stringify(l) !== JSON.stringify(S.productos)) { S.productos = l; save(); if (force || tab === 'prod') render(); else update(); }
+    setSync('ok');
+  } catch (e) { setSync('error', e.message); }
 }
 async function refrescarClientes(force) {
   if (!REMOTE) return;
@@ -277,6 +297,81 @@ async function guardar(asNew) {
     if (i >= 0) S.quotes[i] = r.q; else S.quotes.unshift(r.q);
     S.editing = r.q.id; save(); setSync('ok'); render(); flash(); return true;
   } catch (e) { setSync('error', e.message); alert('No se pudo guardar: ' + e.message); return false; }
+}
+// ----- catálogo de productos -----
+const matByName = t => { const s = String(t || '').trim().toLowerCase(); return s ? S.mats.find(m => factorMasa(m.unidad) && (m.material.toLowerCase() === s || matLabel(m).toLowerCase() === s)) : null; };
+const prodMat = pr => matById(pr.mat) || matByName(pr.material);
+const kgDe = m => costoUnidad(m) / (factorMasa(m.unidad) || 1) * 1000;
+// llena la partida con lo que el producto lleva por pieza: nombre, material, precio, tiempo y gramos
+function aplicarProducto(p, pr) {
+  const m = prodMat(pr);
+  p.qty = Math.max(1, num(p.qty)); p.prod = pr.id; p.nombre = pr.nombre;
+  p.precio = pr.precio === '' || pr.precio == null ? '' : num(pr.precio);
+  p.fil = [{ mat: m ? m.id : '', n: m ? matLabel(m) : (pr.material || 'Filamento'), g: 0, c: m ? kgDe(m) : (pr.c === '' || pr.c == null ? 350 : num(pr.c)) }];
+  escalarProducto(p, pr);
+}
+// tiempo y gramos de las piezas de la partida = lo del producto por pieza × piezas
+function escalarProducto(p, pr) {
+  const k = Math.max(1, num(p.qty)), mins = (num(pr.h) * 60 + num(pr.m)) * k;
+  p.h = Math.floor(mins / 60 + 1e-9); p.m = r2(mins - p.h * 60);
+  if (p.fil && p.fil[0]) p.fil[0].g = r2(num(pr.peso) * k);
+}
+// vuelve a poner en pantalla los campos de una partida sin redibujar el formulario (no se pierde el foco)
+function refrescarInputs(prefix, except) {
+  document.querySelectorAll(`[data-p^="${prefix}"]`).forEach(el => { if (el !== except) el.value = get(el.dataset.p) ?? ''; });
+}
+function elegirProducto(pid, v) {
+  const p = S.q.partidas.find(x => String(x.id) === String(pid)); if (!p) return;
+  if (v === '__new__') { abrirModalProd(p.id); render(); return; } // render deja el selector como estaba
+  if (!v) p.prod = ''; else { const pr = prodById(v); if (pr) aplicarProducto(p, pr); }
+  save(); render();
+}
+// ventana emergente para dar de alta un producto sin salir de la cotización; parte de lo que ya hay en la partida
+function abrirModalProd(pid) {
+  const p = S.q.partidas.find(x => String(x.id) === String(pid)); if (!p) return;
+  const k = Math.max(1, num(p.qty)), f0 = (p.fil || [])[0] || {}, mins = (num(p.h) * 60 + num(p.m)) / k, h = Math.floor(mins / 60 + 1e-9);
+  S.pd = { ...structuredClone(PROD0), nombre: p.nombre || '', mat: f0.mat || '', material: f0.mat ? '' : (f0.n || ''), c: f0.mat ? '' : (f0.c ?? ''),
+    peso: r2(num(f0.g) / k) || '', h: h || '', m: r2(mins - h * 60) || '', precio: p.precio ?? '' };
+  modal = { pid: p.id }; save();
+}
+// pregunta si el nombre escrito no está en el catálogo (se muestra en el mismo lugar, sin redibujar)
+function askProducto(path) {
+  const p = get(path.replace(/\.nombre$/, '')), el = p && document.getElementById('ask-' + p.id); if (!el) return;
+  const nom = String(p.nombre || '').trim().toLowerCase();
+  if (p.tipo === 'CP' || p.prod || !nom) { el.hidden = true; return; }
+  const ex = S.productos.find(x => x.nombre.trim().toLowerCase() === nom);
+  el.hidden = false;
+  el.innerHTML = ex
+    ? `«${esc(p.nombre)}» ya está en tu catálogo de productos. <button class="sm" data-usarprod="${p.id}|${ex.id}">Usar sus datos</button> <button class="sm" data-hideask="${p.id}">Ahora no</button>`
+    : `«${esc(p.nombre)}» no está en tu catálogo de productos. ¿Quieres darlo de alta?<br><button class="sm" data-newprod="${p.id}">Sí, dar de alta</button> <button class="sm" data-hideask="${p.id}">Ahora no</button>`;
+}
+// valida y guarda en el catálogo (local o Sheet); devuelve el producto guardado o null
+async function guardarProd(d) {
+  const m = matById(d.mat);
+  const pr = { id: d.id || uid(), nombre: String(d.nombre || '').trim(), mat: m ? m.id : '', material: m ? matLabel(m) : String(d.material || '').trim(),
+    c: m ? '' : (d.c === '' || d.c == null ? '' : num(d.c)), peso: num(d.peso), h: num(d.h), m: num(d.m),
+    precio: d.precio === '' || d.precio == null ? '' : num(d.precio), notas: String(d.notas || '').trim() };
+  if (!pr.nombre) { alert('Escribe el nombre del producto.'); return null; }
+  if (!(pr.peso > 0)) { alert('Captura el peso por pieza en gramos.'); return null; }
+  if (S.productos.some(x => x.nombre.trim().toLowerCase() === pr.nombre.toLowerCase() && String(x.id) !== String(pr.id))
+    && !confirm(`Ya hay un producto llamado «${pr.nombre}». ¿Guardarlo de todos modos?`)) return null;
+  let sv = pr;
+  if (REMOTE) {
+    setSync('guardando');
+    try { sv = await srv('cc_guardarProducto', pr); setSync('ok'); } catch (e) { setSync('error', e.message); alert('No se pudo guardar: ' + e.message); return null; }
+  }
+  const i = S.productos.findIndex(x => String(x.id) === String(sv.id));
+  if (i >= 0) S.productos[i] = sv; else S.productos.push(sv);
+  save(); return sv;
+}
+async function eliminarProd(pr) {
+  if (REMOTE) {
+    setSync('guardando');
+    try { await srv('cc_eliminarProducto', pr.id); setSync('ok'); } catch (e) { setSync('error', e.message); return alert('No se pudo eliminar: ' + e.message); }
+  }
+  S.productos = S.productos.filter(x => x !== pr);
+  if (String(S.prod.id) === String(pr.id)) S.prod = { ...structuredClone(PROD0) };
+  save(); render();
 }
 // abre una cotización guardada para modificarla (o como copia para hacer otra)
 function abrirQuote(q, copia) {
@@ -443,10 +538,20 @@ function secCliente() {
     <div class="grid" style="margin-top:10px">${field('Dirección', 'q.cliente.direccion', { text: 1 })}${field('Datos de cuenta', 'q.cliente.cuenta', { text: 1, ph: 'Banco, CLABE, titular…' })}${field('Notas para el cliente (opcional)', 'q.notas', { text: 1, ph: 'Ej. Color negro mate' })}</div>
     <div class="actions"><button class="sm" id="savecli">${c.id ? 'Actualizar este cliente en el catálogo' : 'Guardar en el catálogo de clientes'}</button></div></div>`;
 }
+function prodBar(p) {
+  const pr = prodById(p.prod);
+  const opts = '<option value="">— Producto manual —</option>' + S.productos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    .map(x => `<option value="${x.id}"${String(x.id) === String(p.prod) ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('') + '<option value="__new__">➕ Producto nuevo (dar de alta)…</option>';
+  const info = !p.prod ? '' : pr
+    ? `Datos tomados del producto «${esc(pr.nombre)}»: ${pr.peso} g y ${pr.h} h ${pr.m} min por pieza${pr.precio !== '' ? ` · precio ${money(num(pr.precio))}` : ''}. Al cambiar las piezas se recalculan el tiempo y los gramos. <button class="sm" data-reapply="${p.id}">Volver a cargar sus datos</button>`
+    : 'Este producto ya no está en el catálogo; los datos de la partida se conservan.';
+  return `<div class="prodbar"><label>Producto del catálogo</label><select data-selprod="${p.id}">${opts}</select>${info ? `<p class="mut" style="margin:6px 0 0">${info}</p>` : ''}<div class="edit" id="ask-${p.id}" hidden></div></div>`;
+}
 function cardPartida(p, i) {
   const P = `q.partidas.${i}`, es3 = p.tipo !== 'CP';
   return `<div class="card form" id="p-${p.id}"><div class="phead"><h2>Producto ${i + 1} · ${es3 ? 'Impresión 3D' : 'Carpintería'}</h2>
     <span><button class="sm" data-dupp="${p.id}">Duplicar</button> ${S.q.partidas.length > 1 ? `<button class="sm" data-delp="${p.id}">✕ Quitar</button>` : ''}</span></div>
+    ${es3 ? prodBar(p) : ''}
     <p class="hint">${es3 ? 'Usa los datos de tu laminador (Cura, Bambu Studio, PrusaSlicer…) para toda la tirada.' : 'Horas de trabajo y de maquinaria de este producto.'}</p>
     <div class="grid">${field('Nombre del producto', P + '.nombre', { text: 1, ph: 'Ej. Soporte de pared' })}${field(es3 ? 'Piezas en la tirada' : 'Unidades iguales', P + '.qty')}
       ${field(es3 ? 'Tiempo de impresión: horas' : 'Horas de trabajo', P + '.h')}${field('Minutos', P + '.m')}${field('Precio de venta por pieza (opcional)', P + '.precio', { ph: 'Vacío = sugerido' })}</div>
@@ -484,6 +589,40 @@ function formCli() {
     <div class="actions"><button class="pri" id="clisave">${ed ? 'Guardar cambios' : 'Guardar cliente'}</button>${ed ? '<button class="sm" id="clicancel">Cancelar</button>' : ''}</div></div>
   <div class="card"><h2>Catálogo de clientes</h2>${tabla}
     ${REMOTE ? '<div class="actions"><button class="sm" id="refreshcli">Actualizar desde el Sheet</button></div><p class="mut">También puedes escribir clientes directo en la hoja «Clientes» del Sheet.</p>' : ''}</div>`;
+}
+function camposProd(P) {
+  const d = get(P), m = matById(d.mat);
+  return `<div class="grid">${field('Nombre del producto', P + '.nombre', { text: 1, ph: 'Ej. Soporte de pared' })}
+    <div><label>Material</label><select data-selpm="${P}">${matOptions('3D', d.mat)}</select></div>
+    ${m ? '' : field('Material (nombre)', P + '.material', { text: 1, ph: 'Ej. PLA negro' }) + field('Costo por kg del material', P + '.c', { ph: 'Si no está en inventario' })}
+    ${field('Peso por pieza (g)', P + '.peso')}${field('Tiempo de impresión por pieza: horas', P + '.h')}${field('Minutos', P + '.m')}
+    ${field('Precio de venta por pieza (opcional)', P + '.precio', { ph: 'Vacío = sugerido' })}${field('Notas / detalles', P + '.notas', { text: 1 })}</div>`;
+}
+function formProd() {
+  const d = S.prod, ed = !!d.id;
+  const lista = S.productos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const tabla = lista.length
+    ? `<input id="psearch" type="search" placeholder="Buscar producto o material…" style="margin-bottom:10px">
+  <div style="overflow-x:auto"><table class="t"><tr><th class="l">Producto</th><th class="l">Material</th><th>Peso por pieza</th><th>Tiempo por pieza</th><th>Precio</th><th class="l">Notas</th><th class="l"></th></tr>
+  ${lista.map(x => `<tr data-s="${esc([x.nombre, x.material, x.notas].join(' ').toLowerCase())}"><td class="l">${esc(x.nombre)}</td><td class="l">${esc(x.material) || '—'}</td><td>${x.peso} g</td><td>${x.h} h ${x.m} min</td><td>${x.precio === '' ? '<span class="mut">sugerido</span>' : money(num(x.precio))}</td><td class="l">${esc(x.notas) || '—'}</td>
+    <td class="l" style="white-space:nowrap"><button class="sm" data-pedit="${x.id}">Editar</button><button class="sm" data-pdel="${x.id}" title="Eliminar">✕</button></td></tr>`).join('')}
+  </table></div>`
+    : '<p class="hint">Todavía no hay productos. Agrega el primero arriba, o dalo de alta desde la cotización.</p>';
+  return `<div class="card"><h2>${ed ? 'Editar producto' : 'Agregar producto'}</h2>
+    <p class="hint">Captura lo que lleva UNA pieza: material, peso y tiempo de impresión. En la cotización, al elegir el producto se llenan solos el material, los gramos, el tiempo y el precio.</p>
+    ${camposProd('prod')}
+    <div class="actions"><button class="pri" id="prodsave">${ed ? 'Guardar cambios' : 'Guardar producto'}</button>${ed ? '<button class="sm" id="prodcancel">Cancelar</button>' : ''}</div></div>
+  <div class="card"><h2>Catálogo de productos</h2>${tabla}
+    ${REMOTE ? '<div class="actions"><button class="sm" id="refreshprod">Actualizar desde el Sheet</button></div><p class="mut">También puedes escribir productos directo en la hoja «Productos» del Sheet.</p>' : ''}</div>`;
+}
+function renderModal() {
+  const dlg = document.getElementById('dlg');
+  if (!modal) { if (dlg.open) dlg.close(); return; }
+  dlg.innerHTML = `<div class="dlgbox"><h2>Nuevo producto</h2>
+    <p class="hint">Se guarda en tu catálogo de productos y se usa en esta partida. Tu cotización sigue exactamente como la dejaste.</p>
+    ${camposProd('pd')}
+    <div class="actions"><button class="pri" id="pdsave">Guardar y usar en la cotización</button><button class="sm" id="pdcancel">Cancelar</button></div></div>`;
+  if (!dlg.open) dlg.showModal();
 }
 function formInv() {
   const d = S.inv, ed = !!d.id;
@@ -560,14 +699,15 @@ function formQuotes() {
   <input type="file" id="rfile" accept="application/json,.json" hidden></div>`;
 }
 function render() {
-  const tabs = [['cot', 'Cotización'], ['cli', 'Clientes'], ['inv', 'Inventario'], ['cfg', 'Configuración'], ['quotes', 'Guardadas']];
+  const tabs = [['cot', 'Cotización'], ['prod', 'Productos'], ['cli', 'Clientes'], ['inv', 'Inventario'], ['cfg', 'Configuración'], ['quotes', 'Guardadas']];
   document.getElementById('nav').innerHTML = tabs.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
   const app = document.getElementById('app');
   const calc = tab === 'cot';
   app.className = calc ? 'two' : '';
-  const form = tab === 'cot' ? formQ() : tab === 'cli' ? formCli() : tab === 'inv' ? formInv() : tab === 'cfg' ? formCfg() : formQuotes();
+  const form = tab === 'cot' ? formQ() : tab === 'cli' ? formCli() : tab === 'prod' ? formProd() : tab === 'inv' ? formInv() : tab === 'cfg' ? formCfg() : formQuotes();
   app.innerHTML = calc ? `<div style="display:grid;gap:16px">${form}</div><div class="sticky"><div class="card" id="res"></div></div>` : form;
   update();
+  renderModal();
 }
 function update() {
   if (tab === 'cfg') return derived();
@@ -637,6 +777,10 @@ document.addEventListener('input', e => {
   const t = e.target;
   const p = t.dataset.p; if (!p) return;
   set(p, t.type === 'number' ? (t.value === '' ? '' : num(t.value)) : t.value);
+  if (/^q\.partidas\.\d+\.qty$/.test(p)) { // con un producto ligado, al cambiar las piezas se recalculan tiempo y gramos
+    const part = get(p.replace(/\.qty$/, '')), pr = prodById(part.prod);
+    if (pr) { escalarProducto(part, pr); refrescarInputs(p.replace(/qty$/, ''), t); }
+  }
   save(); update();
   if (p.startsWith('cfg.')) pushCfg();
 });
@@ -648,6 +792,7 @@ document.addEventListener('click', e => {
     if (tab === 'quotes') refrescar();
     if (tab === 'inv' || tab === 'cot') refrescarMats();
     if (tab === 'cli' || tab === 'cot') refrescarClientes();
+    if (tab === 'prod' || tab === 'cot') refrescarProductos();
     return;
   }
   if (t.dataset.add) { get(t.dataset.add).push({ ...NEWROW[t.dataset.add.split('.').pop()] }); save(); render(); return; }
@@ -700,6 +845,26 @@ document.addEventListener('click', e => {
   if (t.id === 'refreshmats') { refrescarMats(true); return; }
   if (t.dataset.medit) { const m = matById(t.dataset.medit); if (m) { S.inv = { ...structuredClone(DEF.inv), ...m }; save(); render(); window.scrollTo(0, 0); } return; }
   if (t.dataset.mdel) { const m = matById(t.dataset.mdel); if (m && confirm(`¿Eliminar «${m.material}» del inventario? Las cotizaciones ya guardadas no cambian.`)) eliminarMat(m); return; }
+  if (t.id === 'prodsave') { guardarProd(S.prod).then(sv => { if (sv) { S.prod = { ...structuredClone(PROD0) }; save(); render(); } }); return; }
+  if (t.id === 'prodcancel') { S.prod = { ...structuredClone(PROD0) }; save(); render(); return; }
+  if (t.id === 'refreshprod') { refrescarProductos(true); return; }
+  if (t.dataset.pedit) { const x = prodById(t.dataset.pedit); if (x) { S.prod = { ...structuredClone(PROD0), ...x }; save(); render(); window.scrollTo(0, 0); } return; }
+  if (t.dataset.pdel) { const x = prodById(t.dataset.pdel); if (x && confirm(`¿Eliminar «${x.nombre}» del catálogo? Las cotizaciones y partidas ya capturadas no cambian.`)) eliminarProd(x); return; }
+  if (t.id === 'pdcancel') { document.getElementById('dlg').close(); return; }
+  if (t.id === 'pdsave') {
+    const pid = modal && modal.pid;
+    guardarProd(S.pd).then(sv => {
+      if (!sv) return;
+      const p = S.q.partidas.find(x => String(x.id) === String(pid)); if (p) aplicarProducto(p, sv);
+      modal = null; S.pd = { ...structuredClone(PROD0) }; // antes de cerrar, para que render() no lo reabra
+      document.getElementById('dlg').close(); save(); render();
+    });
+    return;
+  }
+  if (t.dataset.newprod) { abrirModalProd(t.dataset.newprod); renderModal(); return; }
+  if (t.dataset.hideask) { const el = document.getElementById('ask-' + t.dataset.hideask); if (el) el.hidden = true; return; }
+  if (t.dataset.usarprod) { const [pid, prid] = t.dataset.usarprod.split('|'); elegirProducto(pid, prid); return; }
+  if (t.dataset.reapply) { const p = S.q.partidas.find(x => String(x.id) === t.dataset.reapply), pr = p && prodById(p.prod); if (pr) { aplicarProducto(p, pr); save(); render(); } return; }
   if (t.id === 'clisave') { guardarCli(); return; }
   if (t.id === 'clicancel') { S.cli = structuredClone(DEF.cli); save(); render(); return; }
   if (t.id === 'refreshcli') { refrescarClientes(true); return; }
@@ -793,6 +958,13 @@ async function refrescarMats(force) {
 }
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.selprod !== undefined) { elegirProducto(t.dataset.selprod, t.value); return; }
+  if (t.dataset.selpm) { // material elegido en la ficha de un producto
+    const d = get(t.dataset.selpm), m = matById(t.value);
+    d.mat = m ? m.id : ''; if (m) { d.material = matLabel(m); d.c = ''; }
+    save(); render(); return;
+  }
+  if (t.dataset.p && /^q\.partidas\.\d+\.nombre$/.test(t.dataset.p)) askProducto(t.dataset.p);
   if (t.dataset.sel) { // material elegido del inventario en una fila de filamento o de carpintería
     const path = t.dataset.sel, row = get(path), m = matById(t.value);
     row.mat = m ? m.id : '';
@@ -826,7 +998,7 @@ document.addEventListener('change', e => {
   }
 });
 document.addEventListener('input', e => {
-  if (!['qsearch', 'msearch', 'csearch'].includes(e.target.id)) return;
+  if (!['qsearch', 'msearch', 'csearch', 'psearch'].includes(e.target.id)) return;
   const v = e.target.value.toLowerCase().trim();
   document.querySelectorAll('tr[data-s]').forEach(tr => { tr.style.display = tr.dataset.s.includes(v) ? '' : 'none'; });
 });
@@ -1083,6 +1255,7 @@ function pdfInterno(x, fol, fecha) {
   pdfFin(p, sn.emp);
   download(p.blob(), `Desglose-interno-${fol}.pdf`);
 }
+document.getElementById('dlg').addEventListener('close', () => { modal = null; S.pd = { ...structuredClone(PROD0) }; save(); });
 document.getElementById('sync').addEventListener('click', () => { if (sync.st === 'error') boot(); });
 render();
 if (REMOTE) boot();

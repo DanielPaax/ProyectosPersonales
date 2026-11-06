@@ -11,6 +11,7 @@
  *                 Estado se puede cambiar a mano en el Sheet.
  *   Materiales    catálogo / inventario de materiales (se edita desde la calculadora o a mano en el Sheet).
  *   Clientes      catálogo de clientes (nombre, RFC, dirección, datos de cuenta).
+ *   Productos     catálogo de productos (material, peso y tiempo de impresión por pieza, precio).
  *   Config        tarifas compartidas y contador de folios.
  */
 
@@ -23,6 +24,10 @@ const CC_AREAS = ['Ambos', '3D', 'Carpintería'];
 const CC_HOJA_CLI = 'Clientes';
 const CC_CLI_ENC = ['Nombre', 'RFC', 'Dirección', 'Datos de cuenta', 'ID', 'Actualizado'];
 const CC_CCOL = { ID: 5 };
+const CC_HOJA_PROD = 'Productos';
+const CC_PROD_ENC = ['Producto', 'Material', 'Peso por pieza (g)', 'Horas de impresión', 'Minutos', 'Precio de venta', 'Notas',
+  'Costo por kg (si el material no está en inventario)', 'ID', 'ID material', 'Actualizado'];
+const CC_PCOL = { ID: 9, MAT: 10 };
 const CC_ENCABEZADO = ['Folio', 'Fecha', 'Actualizada', 'Cliente', 'Trabajo', 'Tipo', 'Piezas', 'Costo',
   'Total sin IVA', 'Utilidad', 'Margen', 'Estado', 'Creó', 'Modificó', 'ID', 'Rev', 'Datos (no editar)'];
 const CC_COL = { ESTADO: 12, ID: 15, REV: 16, JSON: 17 };
@@ -65,7 +70,7 @@ function abrirCalculadora() {
 }
 
 function prepararHojas() {
-  hojaCot_(); hojaCfg_(); hojaMat_(); hojaCli_();
+  hojaCot_(); hojaCfg_(); hojaMat_(); hojaCli_(); hojaProd_();
   SpreadsheetApp.getActive().toast('Hojas listas', 'Calculadora');
 }
 
@@ -76,7 +81,45 @@ function cc_cargar() {
   let cfg = null;
   try { cfg = kv.cfg ? JSON.parse(kv.cfg) : null; } catch (e) { cfg = null; }
   const quotes = leerCotizaciones_().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
-  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0, mats: leerMateriales_(), clientes: leerClientes_() };
+  return { user: usuario_(), cfg: cfg, quotes: quotes, folioN: Number(kv.folioN) || 0, mats: leerMateriales_(), clientes: leerClientes_(), productos: leerProductos_() };
+}
+
+/* ---------- catálogo de productos ---------- */
+
+function cc_productos() { return leerProductos_(); }
+
+function cc_guardarProducto(p) {
+  validarProd_(p);
+  return conBloqueo_(function () {
+    const sh = hojaProd_();
+    const id = p.id || Date.now() * 1000;
+    const fila = buscarFila_(sh, id, CC_PCOL.ID) || (sh.getLastRow() + 1);
+    escribirProd_(sh, fila, p, id);
+    return prodDeFila_(sh.getRange(fila, 1, 1, CC_PROD_ENC.length).getValues()[0]);
+  });
+}
+
+function cc_eliminarProducto(id) {
+  return conBloqueo_(function () {
+    const sh = hojaProd_(), fila = buscarFila_(sh, id, CC_PCOL.ID);
+    if (fila) sh.deleteRow(fila);
+    return true;
+  });
+}
+
+/** Alta masiva (productos que estaban solo en un navegador). Conserva sus ID. */
+function cc_importarProductos(lista) {
+  if (!Array.isArray(lista)) throw new Error('Datos no válidos');
+  lista.forEach(validarProd_);
+  return conBloqueo_(function () {
+    const sh = hojaProd_(), out = [];
+    lista.forEach(function (p, i) {
+      const fila = sh.getLastRow() + 1;
+      escribirProd_(sh, fila, p, p.id || Date.now() * 1000 + i);
+      out.push(prodDeFila_(sh.getRange(fila, 1, 1, CC_PROD_ENC.length).getValues()[0]));
+    });
+    return out;
+  });
 }
 
 /* ---------- catálogo de clientes ---------- */
@@ -261,6 +304,23 @@ function hojaMat_() {
   return sh;
 }
 
+function hojaProd_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(CC_HOJA_PROD);
+  if (sh) return sh;
+  sh = ss.insertSheet(CC_HOJA_PROD);
+  sh.getRange(1, 1, 1, CC_PROD_ENC.length).setValues([CC_PROD_ENC])
+    .setFontWeight('bold').setBackground('#316966').setFontColor('#ffffff');
+  sh.setFrozenRows(1);
+  sh.getRange('C:E').setNumberFormat('#,##0.##');
+  sh.getRange('F:F').setNumberFormat('#,##0.00');
+  sh.getRange('I:I').setNumberFormat('0');
+  sh.getRange('J:J').setNumberFormat('0');
+  sh.getRange('K:K').setNumberFormat('@');
+  sh.hideColumns(CC_PCOL.ID, 2);
+  return sh;
+}
+
 function hojaCli_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(CC_HOJA_CLI);
@@ -335,6 +395,49 @@ function escribirFila_(sh, fila, q) {
     q.folio, q.fecha, q.actualizada || '', q.cliente || '', q.nombre || '', q.tipo || '', n(q.qty), n(q.costo),
     n(q.total), n(q.utilidad), n(q.margen), q.estado || 'Borrador', q.creo || '', q.modifico || '', q.id, n(q.rev), txt
   ]]);
+}
+
+function leerProductos_() {
+  const sh = hojaProd_(), n = sh.getLastRow();
+  if (n < 2) return [];
+  let v = sh.getRange(2, 1, n - 1, CC_PROD_ENC.length).getValues();
+  const falta = function (r) { return String(r[0]).trim() && !r[CC_PCOL.ID - 1]; };
+  if (v.some(falta)) { // filas escritas a mano en el Sheet: les damos ID
+    conBloqueo_(function () {
+      const hoy = hoy_();
+      v = sh.getRange(2, 1, n - 1, CC_PROD_ENC.length).getValues();
+      v.forEach(function (r, i) {
+        if (!falta(r)) return;
+        sh.getRange(i + 2, CC_PCOL.ID).setValue(Date.now() * 1000 + i);
+        sh.getRange(i + 2, 11).setValue(hoy);
+      });
+    });
+    v = sh.getRange(2, 1, n - 1, CC_PROD_ENC.length).getValues();
+  }
+  return v.filter(function (r) { return String(r[0]).trim(); }).map(prodDeFila_);
+}
+
+function prodDeFila_(r) {
+  const num = function (x) { return x === '' || x == null ? '' : (isFinite(Number(x)) ? Number(x) : ''); };
+  return { id: r[CC_PCOL.ID - 1], nombre: String(r[0]).trim(), material: String(r[1] || '').trim(), peso: num(r[2]) || 0, h: num(r[3]) || 0,
+    m: num(r[4]) || 0, precio: num(r[5]), notas: String(r[6] || '').trim(), c: num(r[7]), mat: r[CC_PCOL.MAT - 1] || '',
+    actualizado: String(r[10] || '') };
+}
+
+function escribirProd_(sh, fila, p, id) {
+  const op = function (x) { return x === '' || x == null ? '' : Number(x); };
+  sh.getRange(fila, 1, 1, CC_PROD_ENC.length).setValues([[
+    String(p.nombre).trim(), String(p.material || '').trim(), Number(p.peso) || 0, Number(p.h) || 0, Number(p.m) || 0, op(p.precio),
+    String(p.notas || '').trim(), op(p.c), id, p.mat || '', hoy_()
+  ]]);
+}
+
+function validarProd_(p) {
+  if (!p || typeof p !== 'object') throw new Error('Producto no válido');
+  if (!String(p.nombre || '').trim() || String(p.nombre).length > 150) throw new Error('Escribe el nombre del producto.');
+  ['peso', 'h', 'm'].forEach(function (k) {
+    if (p[k] !== '' && p[k] != null && (!isFinite(Number(p[k])) || Number(p[k]) < 0)) throw new Error('El valor de «' + k + '» no es válido.');
+  });
 }
 
 function leerClientes_() {

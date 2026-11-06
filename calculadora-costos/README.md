@@ -48,6 +48,20 @@ A la derecha ves el total (con IVA), la lista de productos con su precio, el cos
 
 Al reabrir una cotización guardada, todo se recalcula con tus tarifas e inventario de ese momento; si el total cambió, se te avisa.
 
+## Catálogo de productos
+
+La pestaña **Productos** guarda lo que lleva **una pieza** de cada producto que haces: nombre, material (del inventario, o escrito a mano con su costo por kg), peso en gramos, tiempo de impresión (horas y minutos), precio de venta opcional y notas.
+
+En la **Cotización**, cada partida de impresión 3D tiene una lista **Producto del catálogo**:
+
+- Al elegir un producto se llenan solos el nombre, el material (con su costo del inventario), los gramos, el tiempo de impresión y el precio. Todo se puede seguir ajustando a mano.
+- Si cambias las **piezas**, el tiempo y los gramos se recalculan (lo de una pieza × piezas). Si ajustaste el tiempo o los gramos a mano, vuelve a cambiar las piezas o usa **Volver a cargar sus datos**.
+- Si escribes un nombre que **no está en el catálogo**, la calculadora te pregunta si quieres darlo de alta. También puedes elegir **➕ Producto nuevo** en la lista.
+- El alta se hace en una **ventana emergente**, ya con lo que llevabas capturado en la partida; al guardar, el producto queda en el catálogo y la partida se llena con él. Tu cotización no se pierde ni cambia.
+- Si escribes el nombre de un producto que ya existe, te ofrece usar sus datos.
+
+Con Google Sheets el catálogo vive en la hoja **Productos** (también puedes escribir filas directo ahí; si el material coincide con el nombre de uno del inventario, se enlaza solo). Borrar un producto del catálogo no cambia las cotizaciones ni las partidas ya capturadas.
+
 ## Catálogo de clientes
 
 La pestaña **Clientes** permite agregar, modificar y eliminar clientes (nombre, RFC, dirección y datos de cuenta). Con Google Sheets vive en la hoja **Clientes**, y también puedes escribir filas directo en el Sheet. Borrar un cliente del catálogo no cambia las cotizaciones ya guardadas.
@@ -65,13 +79,14 @@ La pestaña **Clientes** permite agregar, modificar y eliminar clientes (nombre,
 
 Quien no tenga acceso al Sheet no puede ver ni guardar nada: los costos y márgenes quedan protegidos por los permisos del Sheet.
 
-Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Código.gs`), corre **🧮 Calculadora → Preparar hojas** (crea las hojas `Materiales` y `Clientes` si faltan) y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
+Cuando cambies `index.html` o `Code.gs`, vuelve a pegarlos (`Calculadora` y `Código.gs`), corre **🧮 Calculadora → Preparar hojas** (crea las hojas `Materiales`, `Clientes` y `Productos` si faltan) y publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Versión nueva).
 
 ## Qué se guarda y dónde
 
 - **Hoja `Cotizaciones`**: una fila por cotización (folio, fecha, cliente, trabajo, costo, total, utilidad, margen, estado, quién la creó y modificó). Sirve para filtrar y hacer tablas dinámicas. La cotización completa vive en la columna oculta «Datos»: **no la edites ni borres columnas**. El **Estado** sí se puede cambiar a mano en el Sheet.
 - **Hoja `Materiales`**: el inventario (ver arriba).
 - **Hoja `Clientes`**: el catálogo de clientes.
+- **Hoja `Productos`**: el catálogo de productos.
 - **Hoja `Config`**: tarifas (mano de obra, kWh, margen, IVA, datos de la empresa…) y contador de folios. Todo el equipo usa las mismas tarifas.
 - **Folios**: los asigna el servidor (`COT-AAAAMMDD-001`…), así que no se repiten aunque dos personas guarden a la vez.
 - **Ediciones simultáneas**: si dos personas editan la misma cotización, la segunda que guarde recibe un aviso antes de pisar los cambios de la primera.
