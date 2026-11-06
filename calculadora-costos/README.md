@@ -50,11 +50,11 @@ Al reabrir una cotización guardada, todo se recalcula con tus tarifas e inventa
 
 ## Catálogo de productos
 
-La pestaña **Productos** guarda lo que lleva **una pieza** de cada producto que haces: nombre, material (del inventario, o escrito a mano con su costo por kg), peso en gramos, tiempo de impresión (horas y minutos), precio de venta opcional y notas.
+La pestaña **Productos** guarda lo que lleva **una pieza** de cada producto que haces: nombre, material (del inventario, o escrito a mano con su costo por kg), peso en gramos, tiempo de impresión (horas y minutos), **medidas en cm (largo, ancho y alto)**, precio de venta opcional y notas.
 
 En la **Cotización**, cada partida de impresión 3D tiene una lista **Producto del catálogo**:
 
-- Al elegir un producto se llenan solos el nombre, el material (con su costo del inventario), los gramos, el tiempo de impresión y el precio. Todo se puede seguir ajustando a mano.
+- Al elegir un producto se llenan solos el nombre, el material (con su costo del inventario), los gramos, el tiempo de impresión, las medidas y el precio. Las medidas aparecen en el desglose interno. Todo se puede seguir ajustando a mano.
 - Si cambias las **piezas**, el tiempo y los gramos se recalculan (lo de una pieza × piezas). Si ajustaste el tiempo o los gramos a mano, vuelve a cambiar las piezas o usa **Volver a cargar sus datos**.
 - Si escribes un nombre que **no está en el catálogo**, la calculadora te pregunta si quieres darlo de alta. También puedes elegir **➕ Producto nuevo** en la lista.
 - El alta se hace en una **ventana emergente**, ya con lo que llevabas capturado en la partida; al guardar, el producto queda en el catálogo y la partida se llena con él. Tu cotización no se pierde ni cambia.

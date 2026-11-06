@@ -26,7 +26,7 @@ const CC_CLI_ENC = ['Nombre', 'RFC', 'Dirección', 'Datos de cuenta', 'ID', 'Act
 const CC_CCOL = { ID: 5 };
 const CC_HOJA_PROD = 'Productos';
 const CC_PROD_ENC = ['Producto', 'Material', 'Peso por pieza (g)', 'Horas de impresión', 'Minutos', 'Precio de venta', 'Notas',
-  'Costo por kg (si el material no está en inventario)', 'ID', 'ID material', 'Actualizado'];
+  'Costo por kg (si el material no está en inventario)', 'ID', 'ID material', 'Actualizado', 'Largo (cm)', 'Ancho (cm)', 'Alto (cm)'];
 const CC_PCOL = { ID: 9, MAT: 10 };
 const CC_ENCABEZADO = ['Folio', 'Fecha', 'Actualizada', 'Cliente', 'Trabajo', 'Tipo', 'Piezas', 'Costo',
   'Total sin IVA', 'Utilidad', 'Margen', 'Estado', 'Creó', 'Modificó', 'ID', 'Rev', 'Datos (no editar)'];
@@ -307,7 +307,13 @@ function hojaMat_() {
 function hojaProd_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(CC_HOJA_PROD);
-  if (sh) return sh;
+  if (sh) { // hojas creadas antes de que existieran las medidas: se agregan al final sin mover nada
+    if (!sh.getRange(1, 12).getValue()) {
+      sh.getRange(1, 12, 1, 3).setValues([['Largo (cm)', 'Ancho (cm)', 'Alto (cm)']]).setFontWeight('bold').setBackground('#316966').setFontColor('#ffffff');
+      sh.getRange('L:N').setNumberFormat('#,##0.##');
+    }
+    return sh;
+  }
   sh = ss.insertSheet(CC_HOJA_PROD);
   sh.getRange(1, 1, 1, CC_PROD_ENC.length).setValues([CC_PROD_ENC])
     .setFontWeight('bold').setBackground('#316966').setFontColor('#ffffff');
@@ -317,6 +323,7 @@ function hojaProd_() {
   sh.getRange('I:I').setNumberFormat('0');
   sh.getRange('J:J').setNumberFormat('0');
   sh.getRange('K:K').setNumberFormat('@');
+  sh.getRange('L:N').setNumberFormat('#,##0.##');
   sh.hideColumns(CC_PCOL.ID, 2);
   return sh;
 }
@@ -421,21 +428,21 @@ function prodDeFila_(r) {
   const num = function (x) { return x === '' || x == null ? '' : (isFinite(Number(x)) ? Number(x) : ''); };
   return { id: r[CC_PCOL.ID - 1], nombre: String(r[0]).trim(), material: String(r[1] || '').trim(), peso: num(r[2]) || 0, h: num(r[3]) || 0,
     m: num(r[4]) || 0, precio: num(r[5]), notas: String(r[6] || '').trim(), c: num(r[7]), mat: r[CC_PCOL.MAT - 1] || '',
-    actualizado: String(r[10] || '') };
+    actualizado: String(r[10] || ''), largo: num(r[11]), ancho: num(r[12]), alto: num(r[13]) };
 }
 
 function escribirProd_(sh, fila, p, id) {
   const op = function (x) { return x === '' || x == null ? '' : Number(x); };
   sh.getRange(fila, 1, 1, CC_PROD_ENC.length).setValues([[
     String(p.nombre).trim(), String(p.material || '').trim(), Number(p.peso) || 0, Number(p.h) || 0, Number(p.m) || 0, op(p.precio),
-    String(p.notas || '').trim(), op(p.c), id, p.mat || '', hoy_()
+    String(p.notas || '').trim(), op(p.c), id, p.mat || '', hoy_(), op(p.largo), op(p.ancho), op(p.alto)
   ]]);
 }
 
 function validarProd_(p) {
   if (!p || typeof p !== 'object') throw new Error('Producto no válido');
   if (!String(p.nombre || '').trim() || String(p.nombre).length > 150) throw new Error('Escribe el nombre del producto.');
-  ['peso', 'h', 'm'].forEach(function (k) {
+  ['peso', 'h', 'm', 'largo', 'ancho', 'alto'].forEach(function (k) {
     if (p[k] !== '' && p[k] != null && (!isFinite(Number(p[k])) || Number(p[k]) < 0)) throw new Error('El valor de «' + k + '» no es válido.');
   });
 }

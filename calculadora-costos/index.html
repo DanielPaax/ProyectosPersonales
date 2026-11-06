@@ -96,9 +96,9 @@ function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
 // una partida = el trabajo y su material juntos (3D: tiempo + filamento; CP: horas + materiales)
 const nuevaPartida = tipo => tipo === 'CP'
   ? { id: uid(), tipo: 'CP', nombre: '', qty: 1, precio: '', h: 4, m: 0, mat: [{ mat: '', n: 'Triplay 18 mm', q: 1, u: 'hoja', c: 900 }] }
-  : { id: uid(), tipo: '3D', prod: '', nombre: '', qty: 1, precio: '', h: 2, m: 0, fil: [{ mat: '', n: 'PLA', g: 50, c: 350 }] };
+  : { id: uid(), tipo: '3D', prod: '', nombre: '', med: '', qty: 1, precio: '', h: 2, m: 0, fil: [{ mat: '', n: 'PLA', g: 50, c: 350 }] };
 
-const PROD0 = { id: null, nombre: '', mat: '', material: '', c: '', peso: '', h: '', m: '', precio: '', notas: '' };
+const PROD0 = { id: null, nombre: '', mat: '', material: '', c: '', peso: '', h: '', m: '', largo: '', ancho: '', alto: '', precio: '', notas: '' };
 const DEF = {
   cfg: {
     moneda: '$', labor: 80, emp: { nombre: 'TOGOMA-CO', tel: '', mail: '', web: '', vigencia: 15,
@@ -191,6 +191,12 @@ const editingQ = () => S.editing ? S.quotes.find(q => q.id === S.editing) : null
 const cliById = id => id ? S.clientes.find(c => String(c.id) === String(id)) : null;
 const prodById = id => id ? S.productos.find(p => String(p.id) === String(id)) : null;
 const r2 = v => Math.round(v * 100) / 100;
+// medidas del producto en cm: "10 × 5 × 3 cm" (vacío si no se capturó ninguna)
+const medidasTxt = x => {
+  const v = k => x[k] === '' || x[k] == null ? '—' : r2(parseFloat(x[k]) || 0);
+  return [x.largo, x.ancho, x.alto].every(k => k === '' || k == null) ? '' : `${v('largo')} × ${v('ancho')} × ${v('alto')} cm`;
+};
+const parseMed = t => { const n = String(t || '').match(/\d+(?:[.,]\d+)?/g) || []; return n.slice(0, 3).map(x => parseFloat(x.replace(',', '.'))); };
 /* ---------- Google Sheets (solo cuando corre dentro de Apps Script) ---------- */
 const REMOTE = !!(window.google && google.script && google.script.run);
 const srv = (fn, ...args) => new Promise((ok, bad) =>
@@ -307,6 +313,7 @@ function aplicarProducto(p, pr) {
   const m = prodMat(pr);
   p.qty = Math.max(1, num(p.qty)); p.prod = pr.id; p.nombre = pr.nombre;
   p.precio = pr.precio === '' || pr.precio == null ? '' : num(pr.precio);
+  p.med = medidasTxt(pr);
   p.fil = [{ mat: m ? m.id : '', n: m ? matLabel(m) : (pr.material || 'Filamento'), g: 0, c: m ? kgDe(m) : (pr.c === '' || pr.c == null ? 350 : num(pr.c)) }];
   escalarProducto(p, pr);
 }
@@ -331,7 +338,8 @@ function abrirModalProd(pid) {
   const p = S.q.partidas.find(x => String(x.id) === String(pid)); if (!p) return;
   const k = Math.max(1, num(p.qty)), f0 = (p.fil || [])[0] || {}, mins = (num(p.h) * 60 + num(p.m)) / k, h = Math.floor(mins / 60 + 1e-9);
   S.pd = { ...structuredClone(PROD0), nombre: p.nombre || '', mat: f0.mat || '', material: f0.mat ? '' : (f0.n || ''), c: f0.mat ? '' : (f0.c ?? ''),
-    peso: r2(num(f0.g) / k) || '', h: h || '', m: r2(mins - h * 60) || '', precio: p.precio ?? '' };
+    peso: r2(num(f0.g) / k) || '', h: h || '', m: r2(mins - h * 60) || '', precio: p.precio ?? '',
+    ...(([l, a, al]) => ({ largo: l ?? '', ancho: a ?? '', alto: al ?? '' }))(parseMed(p.med)) };
   modal = { pid: p.id }; save();
 }
 // pregunta si el nombre escrito no está en el catálogo (se muestra en el mismo lugar, sin redibujar)
@@ -350,6 +358,7 @@ async function guardarProd(d) {
   const m = matById(d.mat);
   const pr = { id: d.id || uid(), nombre: String(d.nombre || '').trim(), mat: m ? m.id : '', material: m ? matLabel(m) : String(d.material || '').trim(),
     c: m ? '' : (d.c === '' || d.c == null ? '' : num(d.c)), peso: num(d.peso), h: num(d.h), m: num(d.m),
+    largo: d.largo === '' || d.largo == null ? '' : num(d.largo), ancho: d.ancho === '' || d.ancho == null ? '' : num(d.ancho), alto: d.alto === '' || d.alto == null ? '' : num(d.alto),
     precio: d.precio === '' || d.precio == null ? '' : num(d.precio), notas: String(d.notas || '').trim() };
   if (!pr.nombre) { alert('Escribe el nombre del producto.'); return null; }
   if (!(pr.peso > 0)) { alert('Captura el peso por pieza en gramos.'); return null; }
@@ -418,7 +427,7 @@ function base3d(p) {
   const indirectos = horas * (num(k.horasMes) ? num(k.fijos) / num(k.horasMes) : 0);
   const fallos = (filBase + purga + energia + maquina) * num(k.fallos) / 100;
   return {
-    horas, info: [`Tiempo de impresión: ${num(p.h)} h ${num(p.m)} min`, `Filamento: ${gramos} g`],
+    horas, info: [`Tiempo de impresión: ${num(p.h)} h ${num(p.m)} min`, `Filamento: ${gramos} g`, ...(String(p.med || '').trim() ? [`Medidas: ${String(p.med).trim()}`] : [])],
     lines: [...filLines, [`Soportes y purga (${num(k.desperdicio)}%)`, purga, 'Filamento'], ['Electricidad', energia, 'Electricidad'],
       ['Desgaste de impresora', maquina, 'Desgaste de impresora'], ['Reserva por impresiones fallidas', fallos, 'Impresiones fallidas'],
       ['Gastos indirectos del taller', indirectos, 'Gastos indirectos']]
@@ -543,7 +552,7 @@ function prodBar(p) {
   const opts = '<option value="">— Producto manual —</option>' + S.productos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
     .map(x => `<option value="${x.id}"${String(x.id) === String(p.prod) ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('') + '<option value="__new__">➕ Producto nuevo (dar de alta)…</option>';
   const info = !p.prod ? '' : pr
-    ? `Datos tomados del producto «${esc(pr.nombre)}»: ${pr.peso} g y ${pr.h} h ${pr.m} min por pieza${pr.precio !== '' ? ` · precio ${money(num(pr.precio))}` : ''}. Al cambiar las piezas se recalculan el tiempo y los gramos. <button class="sm" data-reapply="${p.id}">Volver a cargar sus datos</button>`
+    ? `Datos tomados del producto «${esc(pr.nombre)}»: ${pr.peso} g y ${pr.h} h ${pr.m} min por pieza${medidasTxt(pr) ? ` · medidas ${medidasTxt(pr)}` : ''}${pr.precio !== '' ? ` · precio ${money(num(pr.precio))}` : ''}. Al cambiar las piezas se recalculan el tiempo y los gramos. <button class="sm" data-reapply="${p.id}">Volver a cargar sus datos</button>`
     : 'Este producto ya no está en el catálogo; los datos de la partida se conservan.';
   return `<div class="prodbar"><label>Producto del catálogo</label><select data-selprod="${p.id}">${opts}</select>${info ? `<p class="mut" style="margin:6px 0 0">${info}</p>` : ''}<div class="edit" id="ask-${p.id}" hidden></div></div>`;
 }
@@ -554,7 +563,7 @@ function cardPartida(p, i) {
     ${es3 ? prodBar(p) : ''}
     <p class="hint">${es3 ? 'Usa los datos de tu laminador (Cura, Bambu Studio, PrusaSlicer…) para toda la tirada.' : 'Horas de trabajo y de maquinaria de este producto.'}</p>
     <div class="grid">${field('Nombre del producto', P + '.nombre', { text: 1, ph: 'Ej. Soporte de pared' })}${field(es3 ? 'Piezas en la tirada' : 'Unidades iguales', P + '.qty')}
-      ${field(es3 ? 'Tiempo de impresión: horas' : 'Horas de trabajo', P + '.h')}${field('Minutos', P + '.m')}${field('Precio de venta por pieza (opcional)', P + '.precio', { ph: 'Vacío = sugerido' })}</div>
+      ${field(es3 ? 'Tiempo de impresión: horas' : 'Horas de trabajo', P + '.h')}${field('Minutos', P + '.m')}${field('Precio de venta por pieza (opcional)', P + '.precio', { ph: 'Vacío = sugerido' })}${es3 ? field('Medidas (cm)', P + '.med', { text: 1, ph: 'Largo × ancho × alto' }) : ''}</div>
     <h3>${es3 ? 'Filamento' : 'Materiales'}</h3>
     <p class="hint">${es3 ? 'Elige el material de tu inventario y captura los gramos de la tirada: el precio se toma solo. Varias filas si es multicolor.' : 'Elige el material de tu inventario y captura la cantidad en su unidad: el precio se toma solo. La merma se aplica automáticamente (Configuración).'}</p>
     ${rowsMat(es3 ? P + '.fil' : P + '.mat', es3 ? '3D' : 'Carpintería')}</div>`;
@@ -596,6 +605,7 @@ function camposProd(P) {
     <div><label>Material</label><select data-selpm="${P}">${matOptions('3D', d.mat)}</select></div>
     ${m ? '' : field('Material (nombre)', P + '.material', { text: 1, ph: 'Ej. PLA negro' }) + field('Costo por kg del material', P + '.c', { ph: 'Si no está en inventario' })}
     ${field('Peso por pieza (g)', P + '.peso')}${field('Tiempo de impresión por pieza: horas', P + '.h')}${field('Minutos', P + '.m')}
+    ${field('Largo (cm)', P + '.largo')}${field('Ancho (cm)', P + '.ancho')}${field('Alto (cm)', P + '.alto')}
     ${field('Precio de venta por pieza (opcional)', P + '.precio', { ph: 'Vacío = sugerido' })}${field('Notas / detalles', P + '.notas', { text: 1 })}</div>`;
 }
 function formProd() {
@@ -603,8 +613,8 @@ function formProd() {
   const lista = S.productos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const tabla = lista.length
     ? `<input id="psearch" type="search" placeholder="Buscar producto o material…" style="margin-bottom:10px">
-  <div style="overflow-x:auto"><table class="t"><tr><th class="l">Producto</th><th class="l">Material</th><th>Peso por pieza</th><th>Tiempo por pieza</th><th>Precio</th><th class="l">Notas</th><th class="l"></th></tr>
-  ${lista.map(x => `<tr data-s="${esc([x.nombre, x.material, x.notas].join(' ').toLowerCase())}"><td class="l">${esc(x.nombre)}</td><td class="l">${esc(x.material) || '—'}</td><td>${x.peso} g</td><td>${x.h} h ${x.m} min</td><td>${x.precio === '' ? '<span class="mut">sugerido</span>' : money(num(x.precio))}</td><td class="l">${esc(x.notas) || '—'}</td>
+  <div style="overflow-x:auto"><table class="t"><tr><th class="l">Producto</th><th class="l">Material</th><th>Peso por pieza</th><th>Tiempo por pieza</th><th>Medidas</th><th>Precio</th><th class="l">Notas</th><th class="l"></th></tr>
+  ${lista.map(x => `<tr data-s="${esc([x.nombre, x.material, x.notas].join(' ').toLowerCase())}"><td class="l">${esc(x.nombre)}</td><td class="l">${esc(x.material) || '—'}</td><td>${x.peso} g</td><td>${x.h} h ${x.m} min</td><td>${medidasTxt(x) || '—'}</td><td>${x.precio === '' ? '<span class="mut">sugerido</span>' : money(num(x.precio))}</td><td class="l">${esc(x.notas) || '—'}</td>
     <td class="l" style="white-space:nowrap"><button class="sm" data-pedit="${x.id}">Editar</button><button class="sm" data-pdel="${x.id}" title="Eliminar">✕</button></td></tr>`).join('')}
   </table></div>`
     : '<p class="hint">Todavía no hay productos. Agrega el primero arriba, o dalo de alta desde la cotización.</p>';
