@@ -42,7 +42,7 @@ const SCHEMA = {
   Config:        ['Clave', 'Valor', 'Descripcion'],
   Usuarios:      ['Email', 'Nombre', 'Rol', 'Activo', 'PrefijoCot', 'TipoComision'],
   Clientes:      ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'Comercial', 'DiasCredito', 'FechaAlta', 'Notas',
-                  'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona'],
+                  'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona', 'Origen'],
   Proveedores:   ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'DiasCredito', 'Notas'],
   Materiales:    ['Clave', 'Descripcion', 'Tipo', 'Unidad', 'StockMinimo', 'Activo', 'CostoReferencia', 'Presentacion'],
   Capas:         ['ID', 'Clave', 'Fecha', 'Origen', 'CantInicial', 'CantRestante', 'CostoUnit'],
@@ -59,7 +59,7 @@ const SCHEMA = {
                   'Facturado', 'CostoMaterial', 'CostoTinta', 'CostoMO', 'CostoMaquila', 'CostoOtros', 'CostoTotal', 'Utilidad', 'Margen',
                   'M2Usados', 'MermaM2', 'MermaPct', 'CostoMerma', 'Factura',
                   'Proyecto', 'HorarioEntrega', 'RecolectaCliente', 'DireccionEntrega', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado',
-                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas', 'CostoMatFijo', 'CostoMermaFijo'],
+                  'Telefono', 'Email', 'RecibeProduccion', 'TipoProyecto', 'AgenteVentas', 'CostoMatFijo', 'CostoMermaFijo', 'Origen', 'ODC', 'BaseIDs'],
   ODPDetalle:    ['ODP', 'Linea', 'Piezas', 'Ancho', 'Alto', 'M2', 'Material', 'Maquina', 'Archivo', 'Acabados'],
   ODPCostos:     ['ID', 'ODP', 'Fecha', 'Tipo', 'Concepto', 'Cantidad', 'CostoUnit', 'Importe', 'CompraID', 'Usuario'],
   Facturas:      ['ID', 'Fecha', 'FolioSAT', 'ClienteID', 'Cliente', 'Comercial', 'ODP', 'Subtotal', 'IVA', 'Total', 'Vencimiento', 'Cobrado', 'Saldo', 'Estatus', 'Notas'],
@@ -67,7 +67,7 @@ const SCHEMA = {
   Conteos:       ['ID', 'Fecha', 'Clave', 'Sistema', 'Fisico', 'Diferencia', 'CostoUnit', 'ImporteDif', 'Aplicado', 'Usuario'],
   Negociaciones: ['ID', 'Nombre', 'Monto', 'Fecha', 'Hora', 'ClienteID', 'Cliente', 'ContactoCargo', 'ContactoNombre', 'ContactoTelefono', 'ContactoCorreo', 'ContactoCumple',
                   'ResponsableEmail', 'ResponsableNombre', 'Etapa', 'Cotizacion', 'ODP', 'MotivoPerdido', 'MotivoDetalle', 'PerdidoEn', 'EtapaDesde', 'CreadoPor', 'ActualizadoEn', 'Historial',
-                  'FormaPago', 'EstatusPago', 'LiquidadoEn'],
+                  'FormaPago', 'EstatusPago', 'LiquidadoEn', 'Origen', 'OrigenRef'],
   NegComentarios: ['ID', 'Negociacion', 'Autor', 'AutorNombre', 'Fecha', 'Hora', 'Tipo', 'Texto', 'Menciones'],
   NegArchivos:   ['ID', 'Negociacion', 'ComentarioID', 'Tipo', 'Nombre', 'Mime', 'DriveID', 'Tamano', 'Usuario', 'UsuarioNombre', 'Fecha', 'Hora', 'Etapa'],
   Notificaciones: ['ID', 'Fecha', 'Hora', 'Email', 'Titulo', 'Texto', 'Negociacion', 'Leida', 'Ref'],
@@ -131,7 +131,7 @@ const CONFIG_DEFAULTS = [
   ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '9';
+const SCHEMA_VER = '10';
 
 
 
@@ -1061,6 +1061,7 @@ function crearODP_(d) {
 /** Recalcula costo, utilidad y merma de una ODP a partir de Kardex, ODPCostos y Facturas. */
 function recalcODP_(folio) {
   const o = find_('ODP', 'Folio', folio); if (!o) return;
+  if (esHistorica_(o)) return;   // carga historica: sus numeros vienen de VENTAS/BASE y NO se recalculan ni se reescriben
   const mats = {}; read_('Materiales').forEach(function (m) { mats[str_(m.Clave)] = m; });
   let cMat = 0, cTin = 0, cMO = 0, cMaq = 0, cOtr = 0, m2u = 0;
   read_('Kardex').forEach(function (k) {
@@ -1135,6 +1136,7 @@ function a_saveODP(u, p) {
     return { Folio: o.Folio };
   }
   const o = mustFind_('ODP', 'Folio', p.Folio, 'ODP'); ownOr_(u, o);
+  if (esHistorica_(o)) throw new Error('La ' + o.Folio + ' es histórica (cargada de VENTAS/BASE): solo consulta.');
   const ch = {};
   ODP_TXT.forEach(function (k) { if (p[k] !== undefined) ch[k] = str_(p[k]); });
   if (p.lineas !== undefined) {
@@ -1154,6 +1156,7 @@ function a_saveODP(u, p) {
 
 function odpActiva_(folio) {
   const o = mustFind_('ODP', 'Folio', req_(folio, 'ODP'), 'ODP');
+  if (esHistorica_(o)) throw new Error('La ' + o.Folio + ' es histórica (cargada de VENTAS/BASE): solo consulta. Su producción y venta ya están en el Dashboard.');
   if (o.Estatus === 'Cerrada' || o.Estatus === 'Cancelada') throw new Error('La ' + o.Folio + ' está ' + o.Estatus.toLowerCase() + '.');
   return o;
 }
@@ -1574,7 +1577,8 @@ function a_catalogosProd(u) {
 function a_produccionODP(u, p) {
   need_(u, 'odp_ver');
   const o = mustFind_('ODP', 'Folio', p.Folio, 'ODP'); ownOr_(u, o);
-  const rows = _leerBase_().filter(function (b) { return str_(b.orden) === str_(o.Folio); });
+  const ids = esHistorica_(o) ? str_(o.BaseIDs).split(',') : null;   // las historicas se ligan por ID de BASE
+  const rows = _leerBase_().filter(function (b) { return ids ? ids.indexOf(String(b.id)) >= 0 : str_(b.orden) === str_(o.Folio); });
   const t = { cant: 0, merma: 0, horas: 0 };
   rows.forEach(function (b) { t.cant += b.cant; t.merma += b.merma; t.horas += b.horas; });
   return { rows: rows.sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }), tot: { cant: r2_(t.cant), merma: r2_(t.merma), horas: r2_(t.horas) } };
@@ -1642,6 +1646,7 @@ function prodInfo_(o) {
 
 function ventaSyncCore_(folio) {
   const o = find_('ODP', 'Folio', folio); if (!o) return;
+  if (esHistorica_(o)) return;   // ya vive en VENTAS: escribirla de nuevo la duplicaria en el Dashboard
   const f = str_(o.Folio);
   _limpiaCacheVentas_();
   const h = _hoja_(CFG.HOJA_VENTAS);
@@ -1739,6 +1744,126 @@ function resincronizar() {
   let n = 0;
   read_('ODP').forEach(function (o) { recalcODP_(o.Folio); n++; });
   return n;
+}
+
+
+// ==================== CARGA HISTORICA: VENTAS -> Negociaciones y BASE -> ODP ====================
+/** Una negociacion u ODP cargada de VENTAS/BASE. Es solo consulta: el Dashboard ya cuenta esos datos y no se vuelven a escribir. */
+function esHistorica_(r) { return str_(r && r.Origen) === 'IMPORTADA'; }
+function impNorm_(t) { return str_(t).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
+function impFormaPago_(m) { const t = impNorm_(m); return /TRANSFER/.test(t) ? 'transferencia' : /TARJETA/.test(t) ? 'tarjeta' : /EFECTIVO/.test(t) ? 'efectivo' : ''; }
+/** Reserva `n` folios consecutivos de un contador con una sola escritura. */
+function impReserva_(key, prefix, pad, n) {
+  const ini = Math.max(1, Math.floor(num_(cfg_(key, '1'))));
+  setCfg_(key, ini + n);
+  const out = []; for (let i = 0; i < n; i++) out.push(prefix + String(ini + i).padStart(pad, '0'));
+  return out;
+}
+/**
+ * Carga el historial de VENTAS (negociaciones) y BASE (ordenes de produccion) al ERP SIN duplicar nada en el Dashboard:
+ *  - NO escribe en VENTAS ni en BASE (solo las lee).
+ *  - Cada ODP/negociacion queda marcada Origen = IMPORTADA: ventaSync_ y recalcODP_ las ignoran, no se mueven, no comisionan
+ *    y no entran al embudo del Dashboard.
+ *  - Se puede correr de nuevo: lo que ya se cargo se salta. ODP = numero de ODP de VENTAS (las que comparten numero y cliente son una sola).
+ * Un renglon de VENTAS y su renglon de BASE comparten ID: asi se liga cada produccion con su venta.
+ */
+function importarHistorico(opts) {
+  opts = opts || {};
+  asegura_(); resetCache_();
+  const lock = LockService.getScriptLock(); lock.waitLock(60000);
+  try {
+    resetCache_();
+    const hoy = hoy_(), ventas = _leerVentas_(), base = _leerBase_(), res = { odp: 0, neg: 0, cli: 0, det: 0, saltadas: 0, base: 0, sinVenta: 0 };
+    let yo = ''; try { yo = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { yo = ''; }
+    if (!yo) yo = comAdmins_()[0] || '';
+    const baseId = {}; base.forEach(function (b) { if (b.id) baseId[b.id] = b; });
+    // ---- grupos: una ODP por (numero de ODP, cliente)
+    const grupos = [], porClave = {}, usados = {}, folioDe = {};
+    function folioLibre_(f) { let k = f, i = 1; while (usados[k] || folioDe[k]) { i++; k = f + '-' + i; } return k; }
+    ventas.forEach(function (v) {
+      const num = str_(v.odp), cli = impNorm_(v.cliente);
+      const clave = num ? 'O|' + num + '|' + cli : 'V|' + v.id;
+      let g = porClave[clave];
+      if (!g) {
+        const f = folioLibre_(num || ('H' + String(v.id).padStart(4, '0')));
+        usados[f] = 1; g = { folio: f, ventas: [], base: [] }; porClave[clave] = g; grupos.push(g);
+      }
+      g.ventas.push(v);
+      if (v.id && baseId[v.id]) { g.base.push(baseId[v.id]); baseId[v.id].__uso = 1; }
+    });
+    // renglones de BASE sin venta con el mismo ID: se agrupan por su orden
+    base.forEach(function (b) {
+      if (b.__uso) return;
+      res.sinVenta++;
+      const clave = b.orden ? 'B|' + b.orden : 'BI|' + b.id;
+      let g = porClave[clave];
+      if (!g) { const f = folioLibre_(b.orden || ('HB' + String(b.id).padStart(4, '0'))); usados[f] = 1; g = { folio: f, ventas: [], base: [] }; porClave[clave] = g; grupos.push(g); }
+      g.base.push(b);
+    });
+    res.base = base.length;
+    // ---- lo que ya existe
+    const odpEx = {}; read_('ODP').forEach(function (o) { odpEx[str_(o.Folio)] = 1; });
+    const negEx = {}; read_('Negociaciones').forEach(function (n) { if (str_(n.OrigenRef)) negEx[str_(n.OrigenRef)] = 1; });
+    const nuevos = grupos.filter(function (g) { return !odpEx[g.folio] || !negEx['ODP:' + g.folio]; });
+    // ---- clientes
+    const cliEx = {}; read_('Clientes').forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; if (str_(c.RazonSocial)) cliEx[impNorm_(c.RazonSocial)] = c; });
+    const nombreCli = function (g) { const v = g.ventas[0], b = g.base[0]; return str_(v ? v.cliente : (b ? b.cliente : '')).trim(); };
+    const faltan = {}; nuevos.forEach(function (g) { const n = nombreCli(g); if (n && !cliEx[impNorm_(n)]) faltan[impNorm_(n)] = n; });
+    const claves = Object.keys(faltan);
+    if (claves.length) {
+      const ids = impReserva_('SEQ_CLIENTE', 'CL-', 4, claves.length), filas = claves.map(function (k, i) {
+        return { ID: ids[i], Nombre: faltan[k], DiasCredito: 0, FechaAlta: hoy, Notas: 'Alta automática por la carga histórica de VENTAS', Origen: 'IMPORTADO' }; });
+      insertMany_('Clientes', filas); filas.forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; }); res.cli = filas.length;
+    }
+    // ---- usuarios por nombre de vendedor
+    const us = read_('Usuarios');
+    const usuarioDe = function (nombre) {
+      const t = impNorm_(nombre); if (!t) return null;
+      return us.filter(function (x) { const n = impNorm_(x.Nombre); return n === t || n.indexOf(t + ' ') === 0; })[0] || null;
+    };
+    const odpRows = [], detRows = [], negRows = [];
+    const idsNeg = impReserva_('SEQ_NEG', 'NG-', 5, nuevos.filter(function (g) { return !negEx['ODP:' + g.folio]; }).length); let kn = 0;
+    nuevos.forEach(function (g) {
+      const V = g.ventas, B = g.base, c = cliEx[impNorm_(nombreCli(g))] || {};
+      const fechas = V.map(function (v) { return v.fecha; }).concat(B.map(function (b) { return b.fecha; })).filter(Boolean).sort();
+      const fecha = fechas[0] || hoy;
+      const fprod = V.map(function (v) { return v.fprod; }).concat(B.map(function (b) { return b.fecha; })).filter(Boolean).sort().pop() || fecha;
+      const S = function (k) { return r2_(V.reduce(function (t, v) { return t + num_(v[k]); }, 0)); };
+      const venta = S('venta'), cMat = S('cMat'), cMer = S('cMerma'), maq = S('maq'), mo = r2_(S('mo') + S('inst') + S('hext')), otros = S('otros');
+      const m2p = r2_(S('m2p')), m2u = r2_(S('m2r')), total = r2_(cMat + maq + mo + otros), util = r2_(venta - total), merma = m2u > 0 ? Math.max(0, r2_(m2u - m2p)) : 0;
+      const primero = function (k) { const x = V.filter(function (v) { return str_(v[k]); })[0]; return x ? str_(x[k]) : ''; };
+      const uniq = function (arr) { const o = []; arr.forEach(function (x) { x = str_(x); if (x && o.indexOf(x) < 0) o.push(x); }); return o; };
+      const vendedor = primero('vendedor'), uv = usuarioDe(vendedor), proyecto = primero('proyecto') || str_(B[0] && B[0].cliente) || nombreCli(g);
+      const bIds = B.map(function (b) { return b.id; }).filter(Boolean);
+      if (!odpEx[g.folio]) {
+        odpRows.push({ Folio: g.folio, Fecha: fecha, Cotizacion: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || nombreCli(g), Comercial: uv ? str_(uv.Email).toLowerCase() : '', Descripcion: proyecto,
+          M2Vendidos: m2p, PrecioVenta: venta, FechaEntrega: fprod, Estatus: 'Cerrada', Facturado: 0, CostoMaterial: cMat, CostoTinta: 0, CostoMO: mo, CostoMaquila: maq, CostoOtros: otros,
+          CostoTotal: total, Utilidad: util, Margen: venta ? r4_(util / venta) : 0, M2Usados: m2u, MermaM2: merma, MermaPct: m2u > 0 ? r4_(merma / m2u) : 0, CostoMerma: cMer,
+          Factura: uniq(V.map(function (v) { return v.factura; })).join(' / '), Proyecto: proyecto, TipoProyecto: primero('tipo'), AgenteVentas: vendedor,
+          Origen: 'IMPORTADA', ODC: uniq(V.map(function (v) { return v.odc; }).concat(B.map(function (b) { return b.orden; }))).join(' / '), BaseIDs: bIds.join(',') });
+        res.odp++;
+        const fuente = B.length ? B : V;
+        fuente.forEach(function (x, i) {
+          const esB = x.proceso !== undefined, un = esB ? str_(x.unidad).toUpperCase() : 'MT2', cant = esB ? num_(x.cant) : num_(x.m2p);
+          const m2 = /^M(T)?2$/.test(un) ? r4_(cant) : '', pz = /^(PZ|PIEZA|PIEZAS)$/.test(un) ? cant : '';
+          detRows.push({ ODP: g.folio, Linea: i + 1, Piezas: pz, Ancho: '', Alto: '', M2: m2, Material: str_(x.material), Maquina: str_(x.maquina), Archivo: '', Acabados: esB ? [x.ac1, x.ac2, x.ac3].filter(Boolean).join(', ') : '' });
+        });
+      }
+      if (!negEx['ODP:' + g.folio]) {
+        const email = uv ? str_(uv.Email).toLowerCase() : yo;
+        const cobrado = V.length > 0 && V.every(function (v) { return str_(v.cobro).toUpperCase() === 'COBRADO'; });
+        negRows.push({ ID: idsNeg[kn++], Nombre: proyecto, Monto: venta, Fecha: fecha, Hora: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || nombreCli(g), ResponsableEmail: email, ResponsableNombre: vendedor || (uv ? str_(uv.Nombre) : ''),
+          Etapa: 'TERMINADO', Cotizacion: '', ODP: g.folio, EtapaDesde: fecha, CreadoPor: email, ActualizadoEn: hoy,
+          Historial: JSON.stringify([{ f: hoy + ' ' + negHora_(), p: 'carga-historica', n: 'Carga histórica', t: 'Importada de VENTAS (renglones ' + V.map(function (v) { return v.id; }).join(', ') + '). Solo consulta.' }]),
+          FormaPago: impFormaPago_(primero('metodo')), EstatusPago: cobrado ? 'LIQUIDADO' : '', LiquidadoEn: '', Origen: 'IMPORTADA', OrigenRef: 'ODP:' + g.folio });
+        res.neg++;
+      }
+    });
+    if (opts.simular) return res;
+    insertMany_('ODP', odpRows); insertMany_('ODPDetalle', detRows); insertMany_('Negociaciones', negRows);
+    res.det = detRows.length; resetCache_();
+    return res;
+  } finally { lock.releaseLock(); }
 }
 
 // ==================== EJECUCION ====================
@@ -1907,6 +2032,7 @@ function a_saveNeg(u, p) {
 function a_moveNeg(u, p) {
   need_(u, 'neg');
   const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  if (esHistorica_(n)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
   const etapa = str_(p.Etapa), desde = n.Etapa, a = negIdx_(etapa), de = negIdx_(desde);
   if (a < 0) throw new Error(etapa === NEG_PERDIDO ? 'Para marcarla como perdida usa el botón PERDIDO (pide el motivo).' : 'Etapa inválida.');
   if (etapa === desde) return negOut_(n);
@@ -1939,6 +2065,7 @@ function a_moveNeg(u, p) {
 function a_perdidoNeg(u, p) {
   need_(u, 'neg');
   const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  if (esHistorica_(n)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
   if (n.Etapa === NEG_PERDIDO) throw new Error('La negociación ya está marcada como PERDIDA.');
   if (str_(n.ODP)) throw new Error('La negociación ya tiene la ' + n.ODP + ' (aprobada): para cancelarla usa la ODP.');
   const motivo = inList_(str_(p.Motivo).toUpperCase(), NEG_MOTIVOS, 'Motivo');
@@ -2205,7 +2332,7 @@ function comItem_(n, cx) {
 function a_comisiones(u, p) {
   needAny_(u, ['com_ver', 'neg_ver', 'neg']);
   const admin = esAdminCom_(u.email), filtro = admin ? str_(p.usuario).toLowerCase() : u.email, cx = comContexto_();
-  let items = read_('Negociaciones').filter(function (n) { return n.Etapa !== NEG_PERDIDO && negIdx_(n.Etapa) >= NEG_IDX_APROBADO; }).map(function (n) { return comItem_(n, cx); });
+  let items = read_('Negociaciones').filter(function (n) { return n.Etapa !== NEG_PERDIDO && negIdx_(n.Etapa) >= NEG_IDX_APROBADO && !esHistorica_(n); }).map(function (n) { return comItem_(n, cx); });   // las historicas no comisionan
   if (filtro) items = items.filter(function (i) { return i.Creador === filtro; });
   items.sort(function (a, b) { return (b.Fecha + b.ID) < (a.Fecha + a.ID) ? -1 : 1; });
   const sig = comSiguientePago_(), mesPago = sig.slice(0, 7), r = { venta: 0, proxima: 0, aPago: 0, enEspera: 0, porComisionar: 0, pagada: 0, pagadaN: 0 };
@@ -2221,7 +2348,8 @@ function a_comisiones(u, p) {
   const us = cx.usr[u.email]; out.miTipo = us ? str_(us.TipoComision).toUpperCase() : '';
   if (admin) {
     out.usuarios = negUsuarios_().map(function (x) { const f = cx.usr[x.Email]; return { Email: x.Email, Nombre: x.Nombre, tipo: f ? str_(f.TipoComision).toUpperCase() : '' }; });
-    out.sinDefinir = read_('Clientes').filter(function (c) { return !str_(c.Comisiona); }).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: str_(c.Comercial) }; });
+    const usados = {}; read_('Negociaciones').forEach(function (n) { if (!esHistorica_(n) && n.ClienteID) usados[n.ClienteID] = 1; });
+    out.sinDefinir = read_('Clientes').filter(function (c) { return !str_(c.Comisiona) && (str_(c.Origen) !== 'IMPORTADO' || usados[c.ID]); }).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: str_(c.Comercial) }; });
   }
   return out;
 }
@@ -2476,6 +2604,7 @@ function resumenNegociaciones(q) {
   resetCache_();
   const rows = read_('Negociaciones').filter(function (n) {
     const f = str_(n.Fecha);
+    if (esHistorica_(n)) return false;   // la venta historica ya la cuenta el Dashboard: no se mezcla con el embudo
     return _enRango_(q, f) && _en_(q.mes || [], f.slice(0, 7)) && _en_(q.anio || [], f.slice(0, 4));
   });
   const porEt = {}, porMot = {}, porResp = {};
@@ -2540,7 +2669,7 @@ function clienteDeProspecto(ses, p) {
   return { ID: c.ID, Nombre: c.Nombre, nuevo: true };
 }
 
-return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, importarHistorico: importarHistorico, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================
@@ -2580,6 +2709,15 @@ function erpImportarDatos() {
   var msg = ERP.importar();
   try { SpreadsheetApp.getUi().alert('Importación del ERP\n\n' + msg); } catch (e) { /* sin interfaz */ }
   return msg;
+}
+function erpImportarHistorico() {
+  var ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+  var sim = ERP.importarHistorico({ simular: true });
+  var msg = 'Se cargarán al ERP:\n• ' + sim.neg + ' negociaciones (de VENTAS, etapa TERMINADO)\n• ' + sim.odp + ' órdenes de producción (de BASE, ' + sim.base + ' renglones)\n• ' + sim.cli + ' clientes nuevos\n\nNo se escribe nada en VENTAS ni en BASE: el Dashboard no cambia. Lo que ya estaba cargado se salta.';
+  if (ui) { if (ui.alert('Cargar historial al ERP', msg + '\n\n¿Continuar?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return sim; }
+  var r = ERP.importarHistorico();
+  if (ui) { ui.alert('Listo', 'Negociaciones: ' + r.neg + '\nODP: ' + r.odp + ' (' + r.det + ' partidas)\nClientes nuevos: ' + r.cli, ui.ButtonSet.OK); }
+  return r;
 }
 function erpResincronizar() {
   var n = ERP.resincronizar();

@@ -626,7 +626,7 @@ function ngFiltradas(){
 }
 function ngBusca(id){ return NG.d.rows.filter(function(n){ return n.ID === id; })[0]; }
 function ngTarjeta(n, i){
-  var puede = P('neg');
+  var hist = n.Origen === 'IMPORTADA', puede = P('neg') && !hist;
   var perd = n.Etapa === NG.d.perdido;
   var fl = '';
   if (puede && !perd) {
@@ -636,6 +636,7 @@ function ngTarjeta(n, i){
   return '<div class="ng-card" style="--c:' + (perd ? '#C9402F' : NG_COL[i]) + '" draggable="' + (puede ? 'true' : 'false') + '" onclick="ngAbre(\'' + n.ID + '\')" ondragstart="ngArrastra(event,\'' + n.ID + '\')" ondragend="this.classList.remove(\'arr\')">' +
     '<div class="tt">' + esc(n.Nombre) + '</div><div class="cl">' + esc(n.Cliente) + '</div><div class="mn">' + ngMonto(n.Monto) + '</div>' +
     '<div style="margin-top:5px">' + (n.Cotizacion ? '<span class="ng-chip">' + esc(n.Cotizacion) + '</span>' : '') + (n.ODP ? '<span class="ng-chip ok">' + esc(n.ODP) + '</span>' : '') +
+    (hist ? '<span class="ng-chip" title="Cargada de la hoja VENTAS: solo consulta">Histórica</span>' : '') +
     (perd ? '<span class="ng-chip mal">' + esc(n.MotivoPerdido) + '</span>' : '') + '</div>' +
     '<div class="pie"><span title="' + esc(ngNombre(n.ResponsableEmail)) + '"><span class="ng-av">' + esc(ngIni(n.ResponsableEmail)) + '</span> ' + fFecha(n.Fecha) + '</span>' +
     '<span>' + (n.comentarios ? '💬 ' + n.comentarios + ' ' : '') + (n.archivos ? '📎 ' + n.archivos : '') + fl + '</span></div></div>';

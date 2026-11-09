@@ -2849,6 +2849,7 @@ function onOpen() {
       .addSubMenu(SpreadsheetApp.getUi().createMenu('ERP')
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
+        .addItem('Cargar historial (VENTAS y BASE) al ERP', 'erpImportarHistorico')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar')
         .addItem('Autorizar archivos grandes (Negociaciones, 100 MB)', 'erpAutorizarArchivos'))
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Migración de propietario')
