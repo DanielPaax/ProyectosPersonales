@@ -175,7 +175,7 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
-var ERPUI_BUILD = 'v2026-11-05.4 · armados';
+var ERPUI_BUILD = 'v2026-11-09.1 · comisiones y actividades';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
 function erp(accion, payload, intento){
@@ -266,13 +266,16 @@ function pdfBtn(accion, folio, btn){
 /* ===================== ERP: entrada y navegacion ===================== */
 var NAV = [
   { id: 'inicio', t: 'Inicio', ver: function(){ return true; } },
+  { sec: 'Actividades', items: [
+    { id: 'actividades', t: 'Tablero de actividades', ver: function(){ return PA(['act', 'act_ver']); } } ] },
   { sec: 'Negociaciones', items: [
     { id: 'negociaciones', t: 'Tablero de negociaciones', ver: function(){ return PA(['neg', 'neg_ver']); } } ] },
   { sec: 'Comercial', items: [
     { id: 'clientes', t: 'Clientes', ver: function(){ return PA(['crm', 'crm_ver', 'facturas', 'cxc']); } },
     { id: 'cotizaciones', t: 'Cotizaciones', ver: function(){ return PA(['crm', 'crm_ver']); } },
     { id: 'seguimiento', t: 'Seguimiento', ver: function(){ return PA(['crm', 'crm_ver']); } },
-    { id: 'armados', t: 'Cálculo de armados', ver: function(){ return PA(['crm', 'crm_ver', 'neg', 'neg_ver']); } } ] },
+    { id: 'armados', t: 'Cálculo de armados', ver: function(){ return PA(['crm', 'crm_ver', 'neg', 'neg_ver']); } },
+    { id: 'comisiones', t: 'Pago de comisiones', ver: function(){ return PA(['com_ver', 'neg', 'neg_ver']); } } ] },
   { sec: 'Operaciones', items: [
     { id: 'odp', t: 'Órdenes de producción', ver: function(){ return P('odp_ver'); } },
     { id: 'inventario', t: 'Inventario', sub: true, ver: function(){ return PA(['inv', 'inv_ver', 'conteo', 'odp_ver']); } } ] },
@@ -292,7 +295,7 @@ function abrirErp(){
   document.getElementById('appPortal').className = 'oculto';
   eq('appErp').className = '';
   window.scrollTo(0, 0);
-  if (E.init) { notifIniciar(); if (E.pendiente) { NAVEST.abiertas['Negociaciones'] = true; erpNav(); return erpVista('negociaciones'); } return erpVista(E.vista || 'inicio'); }
+  if (E.init) { notifIniciar(); if (E.pendiente) { return erpIrPendiente(); } return erpVista(E.vista || 'inicio'); }
   eq('erpMain').innerHTML = '<div class="erp-vacio">Cargando el ERP…</div>';
   Promise.all([erp('init'), erp('lookups'), erp('catalogosProd').catch(function(){ return {}; })]).then(function(r){
     E.init = r[0]; E.lk = r[1]; E.cat = r[2] || {};
@@ -300,8 +303,12 @@ function abrirErp(){
     eq('erpBuild').textContent = ERPUI_BUILD;
     var l = eq('erpLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
     erpNav(); notifIniciar();
-    if (E.pendiente) { NAVEST.abiertas['Negociaciones'] = true; erpNav(); erpVista('negociaciones'); } else { erpVista('inicio'); }
+    if (E.pendiente) { erpIrPendiente(); } else { erpVista('inicio'); }
   }, function(e){ erpError(eq('erpMain'), e); });
+}
+function erpIrPendiente(){
+  var esAct = /^AC-/.test(E.pendiente || ''), sec = esAct ? 'Actividades' : 'Negociaciones';
+  NAVEST.abiertas[sec] = true; erpNav(); return erpVista(esAct ? 'actividades' : 'negociaciones');
 }
 function erpSalir(){
   eq('erpNavAbre').classList.remove('on');
@@ -333,7 +340,7 @@ function erpVista(v, arg){
   var m = eq('erpMain');
   m.innerHTML = '<div class="erp-vacio">Cargando…</div>';
   window.scrollTo(0, 0);
-  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, armados: vArmados, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
+  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, actividades: vActividades, comisiones: vComisiones, armados: vArmados, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
   if (f) { f(m, arg); }
 }
 function vDesarrollo(m){
@@ -407,10 +414,12 @@ function clienteForm(id, pre, cb){
     (P('*') || !E.init.user.rol.match(/COMERCIAL/) ? selCampo('Comercial', 'Comercial asignado', coms, c.Comercial, 'Yo') : '') +
     campo('DiasCredito', 'Días de crédito', c.DiasCredito || 0, 'number') + campo('Domicilio', 'Domicilio', c.Domicilio, 'text', { c2: 1 }) +
     campo('Colonia', 'Colonia', c.Colonia) + campo('Ciudad', 'Ciudad', c.Ciudad) + campo('CP', 'C.P.', c.CP) + campo('Estado', 'Estado', c.Estado) +
+    '<div><label>¿Comisiona?' + (E.init.user.adminCom ? '' : ' (lo define la administración)') + '</label><select data-k="Comisiona" id="cliComisiona"' + (E.init.user.adminCom ? '' : ' disabled') + '>' + eOpts(['SI', 'NO'], c.Comisiona || '', 'Sin definir') + '</select></div>' +
     '<div class="c2"><label>Notas</label><textarea data-k="Notas">' + esc(c.Notas || '') + '</textarea></div></div>',
     puede ? '<button class="erp-btn" id="cliGuardar">Guardar</button>' : '', true);
   if (!puede) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ i.disabled = true; }); }
   var b = w.el.querySelector('#cliGuardar');
+  if (!E.init.user.adminCom) { var cc = w.el.querySelector('#cliComisiona'); if (cc) { cc.removeAttribute('data-k'); } }
   if (b) { b.onclick = function(){ var d = leer(w.el); if (id) { d.ID = id; } eGuardar(b, function(){ return erp('saveCliente', d); }).then(function(c2){ w.cerrar(); ptToast('Cliente guardado.'); recargaLookups().then(function(){ if (cb) { cb(c2); } else { vClientes(eq('erpMain')); } }); }, function(){}); }; }
 }
 
@@ -683,7 +692,7 @@ function ngAbre(id, etapa){
     return erp('negociaciones').then(function(d){ NG.d = d; if (ngBusca(id)) { ngAbre(id); } else { ptToast('No encontré la negociación ' + id + '.'); } });
   }
   if (!n && !P('neg')) { return; }
-  NG.cur = n; NG.det = null; NG.tab = 'c'; NG.arch = null;
+  NG.cur = n; NG.det = null; NG.tab = 'c'; NG.arch = null; NG.pagoTmp = null;
   var puede = P('neg'), perd = n && n.Etapa === NG.d.perdido;
   var yo = E.init.user.email, resp = n ? n.ResponsableEmail : yo;
   var dueno = !n || String(n.CreadoPor || '').toLowerCase() === yo;   /* los campos principales solo los modifica quien creó la negociación */
@@ -702,7 +711,7 @@ function ngAbre(id, etapa){
     campo('ContactoCargo', 'Cargo', n ? n.ContactoCargo : '') + campo('ContactoNombre', 'Nombre', n ? n.ContactoNombre : '') +
     campo('ContactoTelefono', 'Teléfono', n ? n.ContactoTelefono : '') + campo('ContactoCorreo', 'Correo', n ? n.ContactoCorreo : '', 'email') +
     campo('ContactoCumple', 'Cumpleaños', n ? n.ContactoCumple : '', 'date') + '</div></div>' +
-    '<div><div class="ng-tabs"><button type="button" id="ngTC" class="on" onclick="ngTab(\'c\')">Comentarios <span id="ngNC"></span></button><button type="button" id="ngTA" onclick="ngTab(\'a\')">Archivos diseño <span id="ngNA"></span></button><button type="button" id="ngTH" onclick="ngTab(\'h\')">Historial</button></div>' +
+    '<div><div class="ng-tabs"><button type="button" id="ngTC" class="on" onclick="ngTab(\'c\')">Comentarios <span id="ngNC"></span></button><button type="button" id="ngTA" onclick="ngTab(\'a\')">Archivos diseño <span id="ngNA"></span></button><button type="button" id="ngTH" onclick="ngTab(\'h\')">Historial</button><button type="button" id="ngTP" onclick="ngTab(\'p\')">Pago</button></div>' +
     '<div id="ngPC"><div class="ng-lista" id="ngLC"></div><div class="ng-red"><div class="ng-sug" id="ngSug" style="display:none"></div>' +
     '<textarea id="ngTxt" maxlength="3000" placeholder="Escribe un comentario. Usa @ para mencionar a alguien: le llega un correo y una notificación."></textarea>' +
     '<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="erp-btn" id="ngEnvia" onclick="ngComenta()">Comentar</button>' +
@@ -710,14 +719,14 @@ function ngAbre(id, etapa){
     '<input type="file" id="ngCFile" style="display:none" onchange="ngCEleg(this)"></div></div></div>' +
     '<div id="ngPA" style="display:none"><div class="ng-drop" id="ngDrop" onclick="eq(\'ngDFile\').click()">Arrastra aquí los archivos de diseño o haz clic para elegirlos<br><small>Cualquier archivo, hasta 100 MB. Al subirlo se avisa por correo a diseño.</small></div>' +
     '<input type="file" id="ngDFile" multiple style="display:none" onchange="ngSube(this.files);this.value=\'\'"><div class="ng-lista" id="ngLA"></div></div>' +
-    '<div id="ngPH" style="display:none"><div class="ng-lista" id="ngLH"></div></div><p class="erp-vacio" id="ngNota" style="display:none">Guarda la negociación para habilitar comentarios y archivos.</p></div></div>',
+    '<div id="ngPH" style="display:none"><div class="ng-lista" id="ngLH"></div></div><div id="ngPP" style="display:none"></div><p class="erp-vacio" id="ngNota" style="display:none">Guarda la negociación para habilitar comentarios y archivos.</p></div></div>',
     (!perd && puede ? '<button type="button" class="erp-btn" id="ngPerd" style="background:var(--rojo);color:#fff;margin-right:auto"' + (n ? '' : ' disabled title="Guarda primero la negociación"') + '>PERDIDO</button>' : '') +
     (perd && puede ? '<button type="button" class="erp-btn sec" id="ngReab" style="margin-right:auto">Reabrir</button>' : '') +
     '<button type="button" class="erp-btn ver" id="ngCot" style="display:none"></button>' +
     (puede && dueno ? '<button type="button" class="erp-btn" id="ngGuardar">Guardar</button>' : ''), true);
   NG.w = w;
   var ed = puede && dueno;
-  if (!ed) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ if (!/^ng(Txt|CFile|DFile)$/.test(i.id)) { i.disabled = true; } }); }
+  if (!ed) { w.el.querySelectorAll('input,select,textarea').forEach(function(i){ if (!/^ng(Txt|CFile|DFile|Pg\w*)$/.test(i.id)) { i.disabled = true; } }); }
   ngCliEstado();
   var ci = eq('ngCli');
   ci.addEventListener('input', function(){ ngCliEstado(); ngCliSugerir(); });
@@ -755,8 +764,8 @@ function ngCerrar(){ if (NG.w) { NG.w.cerrar(); NG.w = null; } NG.cur = null; }
 function ngPanel(){
   var hay = !!NG.cur, n = NG.cur;
   eq('ngNota').style.display = hay ? 'none' : '';
-  ['ngPC', 'ngPA', 'ngPH'].forEach(function(k){ eq(k).style.display = 'none'; });
-  if (hay) { eq({ c: 'ngPC', a: 'ngPA', h: 'ngPH' }[NG.tab]).style.display = ''; }
+  ['ngPC', 'ngPA', 'ngPH', 'ngPP'].forEach(function(k){ eq(k).style.display = 'none'; });
+  if (hay) { eq({ c: 'ngPC', a: 'ngPA', h: 'ngPH', p: 'ngPP' }[NG.tab]).style.display = ''; if (NG.tab === 'p') { ngPagoPinta(); } }
   eq('ngNC').textContent = hay && n.comentarios ? '(' + n.comentarios + ')' : ''; eq('ngNA').textContent = hay && n.archivos ? '(' + n.archivos + ')' : '';
   var bc = eq('ngCot');
   if (!hay && P('neg')) { bc.style.display = ''; bc.className = 'erp-btn ver'; bc.textContent = 'Crear cotización'; bc.onclick = ngCotizar; }
@@ -766,7 +775,7 @@ function ngPanel(){
   } else if (hay && n.Cotizacion) { bc.style.display = ''; bc.className = 'erp-btn ver'; bc.textContent = 'Ver cotización ' + n.Cotizacion; bc.onclick = ngCotizar; }
   else { bc.style.display = 'none'; }
 }
-function ngTab(t){ NG.tab = t; ['C', 'A', 'H'].forEach(function(k){ eq('ngT' + k).className = k.toLowerCase() === t ? 'on' : ''; }); ngPanel(); }
+function ngTab(t){ NG.tab = t; ['C', 'A', 'H', 'P'].forEach(function(k){ eq('ngT' + k).className = k.toLowerCase() === t ? 'on' : ''; }); ngPanel(); }
 function ngCargaDetalle(){
   var id = NG.cur.ID;
   eq('ngLC').innerHTML = '<div class="erp-vacio">Cargando…</div>';
@@ -792,7 +801,7 @@ function ngDetPinta(){
   lc.scrollTop = lc.scrollHeight;
   eq('ngLA').innerHTML = d.archivos.length ? d.archivos.map(function(a){
     return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + ' · ' +
-      (a.Tipo === 'diseno' ? 'diseño' : 'comentario') + ' · subido en ' + esc(a.Etapa) + '</small></div><button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button></div>';
+      (a.Tipo === 'diseno' ? 'diseño' : a.Tipo === 'complemento' ? 'complemento de pago' : a.Tipo === 'comprobante' ? 'comprobante de pago' : 'comentario') + ' · subido en ' + esc(a.Etapa) + '</small></div><button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button></div>';
   }).join('') : '<div class="erp-vacio">Sin archivos. Se quedan con la negociación en todas las etapas.</div>';
   eq('ngLH').innerHTML = d.historial.slice().reverse().map(function(x){ return '<div class="ng-com sis">' + esc(x.t) + '<br><small>' + esc(x.n || x.p) + ' · ' + esc(x.f) + '</small></div>'; }).join('') || '<div class="erp-vacio">Sin movimientos.</div>';
   ngPanel();
@@ -998,6 +1007,402 @@ function ngSube(files){
   })();
 }
 
+
+/* ---------- pago de la negociacion (forma, estatus, complemento y comprobante) ---------- */
+function ngPuedePago(){ var n = NG.cur; return !!n && (String(n.CreadoPor || '').toLowerCase() === E.init.user.email || E.init.user.adminCom || E.init.user.rol === 'FINANZAS'); }
+function ngPagoPinta(){
+  var n = NG.cur, box = eq('ngPP'); if (!n || !box) { return; }
+  var ed = ngPuedePago(), arch = (NG.det && NG.det.archivos) || [], fin = NG.pagoTmp || { f: n.FormaPago || '', e: n.EstatusPago || 'PENDIENTE' };
+  NG.pagoTmp = fin;
+  function lista(tipo){ var l = arch.filter(function(a){ return a.Tipo === tipo; }); return l.length ? l.map(function(a){ return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + '</small></div><button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button></div>'; }).join('') : '<div class="erp-vacio" style="padding:6px 0">Sin archivos.</div>'; }
+  function subir(tipo, et, ayuda){ return '<h4 style="margin:12px 0 4px;font-size:12.5px;color:var(--azul)">' + et + '</h4>' + (ed ? '<div class="ng-drop" id="ngPg' + tipo + 'D" onclick="eq(\'ngPg' + tipo + 'F\').click()">' + ayuda + '<br><small>JPG, PNG o PDF · máx. 6 MB</small></div><input type="file" id="ngPg' + tipo + 'F" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="ngPagoSube(\'' + tipo + '\',this.files);this.value=\'\'">' : '') + lista(tipo); }
+  box.innerHTML = '<div class="erp-form"><div><label>Forma de pago</label><select id="ngPgForma"' + (ed ? '' : ' disabled') + ' onchange="NG.pagoTmp.f=this.value">' + eOpts([{ v: 'efectivo', t: 'Efectivo' }, { v: 'tarjeta', t: 'Tarjeta' }, { v: 'transferencia', t: 'Transferencia' }], fin.f, 'Sin definir') + '</select></div>' +
+    '<div><label>Estatus de pago</label><select id="ngPgEst"' + (ed ? '' : ' disabled') + ' onchange="NG.pagoTmp.e=this.value;ngPagoPinta()">' + eOpts(['PENDIENTE', 'ADELANTO', 'LIQUIDADO'], fin.e, false) + '</select></div></div>' +
+    (!ed ? '<div class="ng-solo">Solo quien creó la negociación, Finanzas o la administración de comisiones modifican el pago.</div>' : '') +
+    (fin.e === 'LIQUIDADO' ? '<div class="ng-cli ok">LIQUIDADO = el cliente pagó el 100%. La negociación pasa a «A PAGO» en Pago de comisiones' + (n.LiquidadoEn ? ' (liquidada el ' + fFecha(n.LiquidadoEn) + ')' : '') + '.</div>' : fin.e === 'ADELANTO' ? '<div class="ng-cli mal">ADELANTO: sube el complemento de pago. Las comisiones solo se generan cuando el cliente liquida el 100%.</div>' : '') +
+    (ed ? '<div style="margin-top:8px"><button type="button" class="erp-btn" id="ngPgG" onclick="ngPagoGuarda()">Guardar pago</button></div>' : '') +
+    (fin.e === 'ADELANTO' || arch.some(function(a){ return a.Tipo === 'complemento'; }) ? subir('complemento', 'Complemento de pago (adelanto)', 'Haz clic o arrastra el complemento de pago') : '') +
+    subir('comprobante', 'Comprobante de pago', 'Haz clic o arrastra el comprobante de pago');
+}
+function ngPagoGuarda(){
+  var b = eq('ngPgG'), d = { ID: NG.cur.ID, FormaPago: eq('ngPgForma').value, EstatusPago: eq('ngPgEst').value };
+  eGuardar(b, function(){ return erp('savePagoNeg', d); }).then(function(r){
+    Object.assign(NG.cur, r); var n = ngBusca(r.ID); if (n && n !== NG.cur) { Object.assign(n, r); }
+    NG.pagoTmp = null; ngPagoPinta();
+    ptToast(r.EstatusPago === 'LIQUIDADO' ? 'Pago guardado. La negociación pasó a «A PAGO» en Pago de comisiones.' + (r.sinComprobante ? ' Falta cargar el comprobante de pago.' : '') : 'Pago guardado.');
+    if (eq('ngTab')) { ngPinta(); }
+  }, function(){});
+}
+function ngPagoSube(tipo, files){
+  var f = files && files[0]; if (!f || !NG.cur) { return; }
+  var id = NG.cur.ID, d = eq('ngPg' + tipo + 'D'), orig = d ? d.innerHTML : '';
+  if (d) { d.textContent = 'Subiendo ' + f.name + '…'; }
+  ngLee(f).then(function(a){ return erp('negSubirPago', { ID: id, tipo: tipo, archivo: a }); }).then(function(r){
+    if (NG.det && NG.cur && NG.cur.ID === id) { NG.det.archivos.push(r.archivo); NG.cur.archivos = (NG.cur.archivos || 0) + 1; ngDetPinta(); }
+    ptToast((tipo === 'complemento' ? 'Complemento' : 'Comprobante') + ' de pago cargado.');
+    if (NG.tab === 'p') { ngPagoPinta(); }
+  }, function(e){ ptToast(e.message); if (d) { d.innerHTML = orig; } });
+}
+
+/* ===================== ACTIVIDADES (administrador de tareas) ===================== */
+var ACT = { d: null, quien: '', prio: '', q: '', vencidas: false, viejas: false, vista: 'tablero', cur: null, det: null, tab: 'c', arch: null, w: null, sel: [], refs: {}, ck: [] };
+var ACT_COL = { 'PENDIENTE': '#8A5CF6', 'EN PROCESO': '#FF6A13', 'TERMINADAS': '#1E8E5A' };
+var ACT_PR = { Baja: 'ok', Media: '', Alta: 'am', Urgente: 'mal' };
+function acNombre(email){ return ngNombre(email); }
+function acBusca(id){ return ACT.d ? ACT.d.rows.filter(function(a){ return a.ID === id; })[0] : null; }
+function acPuedeEditar(a){ return !a || a.CreadoPor === E.init.user.email || E.init.user.rol === 'ADMIN' || E.init.user.adminCom; }
+function vActividades(m){
+  var pre = E.lk && E.lk.usuarios ? Promise.resolve() : recargaLookups();
+  pre.then(function(){ return erp('actividades'); }).then(function(d){
+    ACT.d = d;
+    m.innerHTML = '<h2>Actividades</h2><p class="erp-sub">Tus tareas y las que asignas a otras personas, relacionadas o no con negociaciones, cotizaciones, ODP y clientes. Cada quien ve las actividades donde es creador, responsable o participante.</p>' +
+      '<div class="ng-barra"><select id="acQuien" onchange="ACT.quien=this.value;acPinta()"><option value="">Todas las mías y compartidas</option><option value="mias">Asignadas a mí</option><option value="creadas">Creadas por mí</option>' +
+      (d.admin ? ngUsuarios().map(function(u){ return '<option value="u:' + esc(u.Email) + '">De ' + esc(u.Nombre) + '</option>'; }).join('') : '') + '</select>' +
+      '<select id="acPrio" onchange="ACT.prio=this.value;acPinta()">' + eOpts(d.prioridades, ACT.prio, 'Toda prioridad') + '</select>' +
+      '<input id="acQ" placeholder="Buscar título, etiqueta o relación" oninput="ACT.q=this.value;acPinta()" style="min-width:220px">' +
+      '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="acVenc" onchange="ACT.vencidas=this.checked;acPinta()"> Solo vencidas</label>' +
+      '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="acVie" onchange="ACT.viejas=this.checked;acPinta()"> Terminadas de hace +30 días</label>' +
+      '<span class="sp"></span><div class="mk-seg" style="display:inline-flex"><button type="button" class="erp-btn sec chico" id="acVT" onclick="ACT.vista=\'tablero\';acPinta()">Tablero</button><button type="button" class="erp-btn sec chico" id="acVL" onclick="ACT.vista=\'lista\';acPinta()">Lista</button></div>' +
+      (P('act') ? '<button type="button" class="erp-btn nar" onclick="acAbre(null)">+ Nueva actividad</button>' : '') + '</div><div id="acTab"></div>';
+    eq('acQuien').value = ACT.quien; eq('acQ').value = ACT.q; eq('acVenc').checked = ACT.vencidas; eq('acVie').checked = ACT.viejas;
+    acPinta();
+    if (/^AC-/.test(E.pendiente || '')) { var id = E.pendiente; E.pendiente = ''; acAbre(id); }
+  }, function(e){ erpError(m, e); });
+}
+function acFiltradas(){
+  var q = ACT.q.trim().toLowerCase(), yo = E.init.user.email, lim = new Date(); lim.setDate(lim.getDate() - 30);
+  var l = lim.getFullYear() + '-' + ('0' + (lim.getMonth() + 1)).slice(-2) + '-' + ('0' + lim.getDate()).slice(-2);
+  return ACT.d.rows.filter(function(a){
+    if (ACT.quien === 'mias' && a.ResponsableEmail !== yo) { return false; }
+    if (ACT.quien === 'creadas' && a.CreadoPor !== yo) { return false; }
+    if (/^u:/.test(ACT.quien) && a.ResponsableEmail !== ACT.quien.slice(2) && a.CreadoPor !== ACT.quien.slice(2)) { return false; }
+    if (ACT.prio && a.Prioridad !== ACT.prio) { return false; }
+    if (ACT.vencidas && !a.vencida) { return false; }
+    if (a.Estado === 'TERMINADAS' && !ACT.viejas && a.TerminadaEn && String(a.TerminadaEn) < l) { return false; }
+    return !q || [a.ID, a.Titulo, a.Etiquetas, a.RefTexto, a.Descripcion].join(' ').toLowerCase().indexOf(q) >= 0;
+  });
+}
+function acTarjeta(a, i){
+  var puede = P('act'), ck = a.checklist, hechos = ck.filter(function(x){ return x.h; }).length;
+  var fl = puede ? '<span class="ng-fl">' + (i > 0 ? '<button type="button" title="Anterior" onclick="event.stopPropagation();acMueveFlecha(\'' + a.ID + '\',-1)">‹</button>' : '') + (i < 2 ? '<button type="button" title="Siguiente" onclick="event.stopPropagation();acMueveFlecha(\'' + a.ID + '\',1)">›</button>' : '') + '</span>' : '';
+  return '<div class="ng-card" style="--c:' + ACT_COL[a.Estado] + '" draggable="' + (puede ? 'true' : 'false') + '" onclick="acAbre(\'' + a.ID + '\')" ondragstart="acArrastra(event,\'' + a.ID + '\')" ondragend="this.classList.remove(\'arr\')">' +
+    '<div class="tt">' + esc(a.Titulo) + '</div>' +
+    '<div style="margin-top:5px"><span class="ng-chip ' + ACT_PR[a.Prioridad] + '">' + esc(a.Prioridad) + '</span>' + (a.Fin ? '<span class="ng-chip ' + (a.vencida ? 'mal' : '') + '">' + (a.vencida ? '⚠ ' : '⏱ ') + fFecha(a.Fin) + '</span>' : '') +
+    (a.Etiquetas ? '<span class="ng-chip">#' + esc(a.Etiquetas) + '</span>' : '') + '</div>' +
+    (a.RefTexto ? '<div class="cl" style="margin-top:4px">🔗 ' + esc(a.RefTexto) + '</div>' : '') +
+    (ck.length ? '<div style="margin-top:6px"><div style="height:6px;background:#E5E9EC;border-radius:4px;overflow:hidden"><div style="height:100%;width:' + Math.round(hechos / ck.length * 100) + '%;background:var(--verde)"></div></div><small style="color:var(--tinta-2)">' + hechos + '/' + ck.length + ' pasos</small></div>' : '') +
+    '<div class="pie"><span title="' + esc(acNombre(a.ResponsableEmail)) + '"><span class="ng-av">' + esc(ngIni(a.ResponsableEmail)) + '</span>' + (a.partic.length ? ' +' + a.partic.length : '') + '</span><span>' + (a.comentarios ? '💬 ' + a.comentarios + ' ' : '') + (a.archivos ? '📎 ' + a.archivos : '') + fl + '</span></div></div>';
+}
+function acPinta(){
+  var fil = acFiltradas(), h = '';
+  eq('acVT').style.background = ACT.vista === 'tablero' ? 'var(--azul)' : ''; eq('acVT').style.color = ACT.vista === 'tablero' ? '#fff' : '';
+  eq('acVL').style.background = ACT.vista === 'lista' ? 'var(--azul)' : ''; eq('acVL').style.color = ACT.vista === 'lista' ? '#fff' : '';
+  if (ACT.vista === 'lista') {
+    fil.sort(function(a, b){ return (a.Fin || '9999') < (b.Fin || '9999') ? -1 : 1; });
+    eq('acTab').className = '';
+    eq('acTab').innerHTML = fil.length ? '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Actividad</th><th>Estado</th><th>Prioridad</th><th>Responsable</th><th>Creada por</th><th>Vence</th><th>Relación</th><th>Pasos</th></tr></thead><tbody>' +
+      fil.map(function(a){ var ck = a.checklist; return '<tr class="clic" onclick="acAbre(\'' + a.ID + '\')"><td><b>' + esc(a.Titulo) + '</b><br><small>' + esc(a.ID) + '</small></td><td>' + esc(a.Estado) + '</td><td><span class="ng-chip ' + ACT_PR[a.Prioridad] + '">' + esc(a.Prioridad) + '</span></td><td>' + esc(acNombre(a.ResponsableEmail)) + '</td><td>' + esc(a.CreadoNombre) + '</td><td>' + (a.Fin ? '<span class="' + (a.vencida ? 'ng-chip mal' : '') + '">' + fFecha(a.Fin) + '</span>' : '') + '</td><td>' + esc(a.RefTexto) + '</td><td>' + (ck.length ? ck.filter(function(x){ return x.h; }).length + '/' + ck.length : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="erp-vacio">Sin actividades con estos filtros.</div>';
+    return;
+  }
+  eq('acTab').className = 'ng-tablero';
+  ACT.d.estados.forEach(function(et, i){
+    var ts = fil.filter(function(a){ return a.Estado === et; });
+    ts.sort(function(a, b){ return (a.Fin || '9999') < (b.Fin || '9999') ? -1 : (a.Fin || '9999') > (b.Fin || '9999') ? 1 : (a.Fecha + a.ID < b.Fecha + b.ID ? 1 : -1); });
+    h += '<div class="ng-col" style="flex:1 1 300px" data-et="' + esc(et) + '" ondragover="ngSobre(event,this)" ondragleave="this.classList.remove(\'sobre\')" ondrop="acSuelta(event,this)">' +
+      '<div class="ch" style="--c:' + ACT_COL[et] + '"><h3><span>' + esc(et) + '</span>' + (P('act') && et !== 'TERMINADAS' ? '<button type="button" title="Nueva actividad aquí" onclick="acAbre(null,\'' + esc(et) + '\')">+</button>' : '') + '</h3>' +
+      '<div class="tot">' + ts.length + '</div><div class="cnt">' + (ts.length === 1 ? 'actividad' : 'actividades') + (ts.filter(function(a){ return a.vencida; }).length ? ' · ' + ts.filter(function(a){ return a.vencida; }).length + ' vencida(s)' : '') + '</div></div>' +
+      (ts.length ? ts.map(function(a){ return acTarjeta(a, i); }).join('') : '<div class="erp-vacio" style="padding:12px 4px">Sin actividades</div>') + '</div>';
+  });
+  eq('acTab').innerHTML = h;
+}
+function acArrastra(ev, id){ ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; ev.currentTarget.classList.add('arr'); }
+function acSuelta(ev, el){ ev.preventDefault(); el.classList.remove('sobre'); var id = ev.dataTransfer.getData('text/plain'); if (id) { acMover(id, el.getAttribute('data-et')); } }
+function acMueveFlecha(id, d){ var a = acBusca(id), i = ACT.d.estados.indexOf(a.Estado) + d; if (i >= 0 && i < 3) { acMover(id, ACT.d.estados[i]); } }
+function acMover(id, est, despues){
+  var a = acBusca(id); if (!a || a.Estado === est) { return; }
+  var antes = a.Estado; a.Estado = est; if (eq('acTab')) { acPinta(); }
+  erp('moveAct', { ID: id, Estado: est }).then(function(r){ Object.assign(a, r); if (eq('acTab')) { acPinta(); } ptToast('Actividad movida a ' + est + '.'); if (despues) { despues(r); } }, function(e){ a.Estado = antes; if (eq('acTab')) { acPinta(); } ptToast(e.message); });
+}
+
+/* ---------- ficha de la actividad ---------- */
+function acRefOpts(tipo){
+  if (!tipo) { return Promise.resolve([]); }
+  if (ACT.refs[tipo]) { return Promise.resolve(ACT.refs[tipo]); }
+  var p;
+  if (tipo === 'negociacion') { p = erp('negociaciones').then(function(d){ return d.rows.map(function(n){ return { v: n.ID, t: n.Nombre + ' · ' + n.Cliente }; }); }); }
+  else if (tipo === 'cotizacion') { p = erp('cotizaciones').then(function(r){ return r.map(function(c){ return { v: c.Folio, t: (c.Proyecto || c.Descripcion || '') + ' · ' + c.Cliente }; }); }); }
+  else if (tipo === 'odp') { p = erp('odps').then(function(r){ return r.map(function(o){ return { v: o.Folio, t: (o.Proyecto || o.Descripcion || '') + ' · ' + o.Cliente }; }); }); }
+  else { p = Promise.resolve((E.lk.clientes || []).map(function(c){ return { v: c.ID, t: c.Nombre }; })); }
+  return p.then(function(l){ ACT.refs[tipo] = l; return l; });
+}
+function acRefLista(){
+  var tipo = eq('acRefT').value;
+  eq('acRefI').style.display = tipo ? '' : 'none'; eq('acRefAbre').style.display = tipo ? '' : 'none';
+  acRefOpts(tipo).then(function(l){ eq('acRefL').innerHTML = l.map(function(x){ return '<option value="' + esc(x.v) + '" label="' + esc(x.t) + '">'; }).join(''); }, function(e){ ptToast(e.message); });
+}
+function acRefAbre(){
+  var tipo = eq('acRefT').value, id = (eq('acRefI').value || '').trim().split(' ')[0];
+  if (!id) { return; }
+  if (tipo === 'negociacion') { ngAbre(id); } else if (tipo === 'cotizacion') { cotForm(id); } else if (tipo === 'odp') { acCierra(); erpVista('odpdet', id); } else { clienteForm(id); }
+}
+function acCkPinta(){
+  var ed = ACT.dueno, ck = ACT.ck;
+  eq('acCk').innerHTML = ck.map(function(x, i){
+    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px"><input type="checkbox" ' + (x.h ? 'checked ' : '') + 'onchange="acCkTog(' + i + ',this.checked)" ' + (ACT.cur ? '' : 'disabled ') + '><input type="text" value="' + esc(x.t) + '" ' + (ed ? '' : 'disabled ') + 'oninput="ACT.ck[' + i + '].t=this.value" style="flex:1;' + (x.h ? 'text-decoration:line-through;color:var(--tinta-3)' : '') + '">' +
+      (ed ? '<button type="button" class="erp-btn chico rojo" onclick="acCkQuita(' + i + ')">×</button>' : '') + '</div>';
+  }).join('') || '<small style="color:var(--tinta-3)">Sin pasos todavía.</small>';
+  var h = ck.filter(function(x){ return x.h; }).length;
+  eq('acCkP').textContent = ck.length ? h + '/' + ck.length + ' pasos' : '';
+  eq('acCkMas').style.display = ed ? '' : 'none';
+}
+function acCkMas(){ ACT.ck.push({ t: '', h: false }); acCkPinta(); var i = eq('acCk').querySelectorAll('input[type=text]'); if (i.length) { i[i.length - 1].focus(); } }
+function acCkQuita(i){ ACT.ck.splice(i, 1); acCkPinta(); }
+function acCkTog(i, v){
+  ACT.ck[i].h = v; acCkPinta();
+  if (ACT.cur) { erp('actChecklist', { ID: ACT.cur.ID, Checklist: ACT.ck }).then(function(r){ Object.assign(ACT.cur, r); var a = acBusca(r.ID); if (a) { Object.assign(a, r); } if (eq('acTab')) { acPinta(); } }, function(e){ ptToast(e.message); }); }
+}
+function acAbre(id, estado){
+  var a = id ? acBusca(id) : null;
+  if (id && !a) { return erp('actividades').then(function(d){ ACT.d = d; if (acBusca(id)) { acAbre(id); } else { ptToast('No tienes acceso a la actividad ' + id + ' o ya no existe.'); } }); }
+  if (!a && !P('act')) { return; }
+  ACT.cur = a; ACT.det = null; ACT.tab = 'c'; ACT.arch = null; ACT.dueno = acPuedeEditar(a); ACT.ck = a ? a.checklist.map(function(x){ return { t: x.t, h: x.h }; }) : [];
+  ACT.sel = a ? a.partic.slice() : [];
+  var yo = E.init.user.email, usr = ngUsuarios(), ed = ACT.dueno;
+  var w = ventana(a ? 'Actividad ' + esc(a.ID) + ' · ' + esc(a.Estado) : 'Nueva actividad',
+    '<div class="ng-mb"><div>' + (a && !ed ? '<div class="ng-solo">Solo quien creó la actividad (<b>' + esc(a.CreadoNombre) + '</b>) puede modificar estos datos. Tú puedes mover la actividad, marcar los pasos, comentar y subir archivos.</div>' : '') +
+    '<div class="erp-form">' + campo('Titulo', 'Título', a ? a.Titulo : '', 'text', { c2: 1, ph: 'Qué hay que hacer' }) +
+    '<div class="c2"><label>Descripción</label><textarea data-k="Descripcion" style="min-height:80px">' + esc(a ? a.Descripcion : '') + '</textarea></div>' +
+    selCampo('Prioridad', 'Prioridad', ACT.d.prioridades, a ? a.Prioridad : 'Media', false) + (a ? '<div><label>Estado</label><input type="text" value="' + esc(a.Estado) + '" disabled></div>' : selCampo('Estado', 'Estado', ACT.d.estados, estado || ACT.d.estados[0], false)) +
+    campo('Inicio', 'Fecha inicial', a ? a.Inicio : '', 'date') + campo('Fin', 'Fecha límite', a ? a.Fin : '', 'date') +
+    selCampo('ResponsableEmail', 'Responsable', usr.map(function(u){ return { v: u.Email, t: u.Nombre }; }), a ? a.ResponsableEmail : yo, false) + campo('Etiquetas', 'Etiqueta', a ? a.Etiquetas : '', 'text', { ph: 'Ej. Compras' }) + '</div>' +
+    '<label style="display:block;font:700 11px Montserrat,sans-serif;color:var(--tinta-2);text-transform:uppercase;margin:10px 0 4px">Participantes (la ven y colaboran)</label><div class="mk-resp" id="acPart"></div>' +
+    '<label style="display:block;font:700 11px Montserrat,sans-serif;color:var(--tinta-2);text-transform:uppercase;margin:10px 0 4px">Relacionada con (opcional)</label>' +
+    '<div style="display:flex;gap:6px"><select id="acRefT" data-k="RefTipo" onchange="acRefLista()" style="max-width:150px">' + eOpts([{ v: 'negociacion', t: 'Negociación' }, { v: 'cotizacion', t: 'Cotización' }, { v: 'odp', t: 'ODP' }, { v: 'cliente', t: 'Cliente' }], a ? a.RefTipo : '', 'Sin relación') + '</select>' +
+    '<input id="acRefI" data-k="RefID" list="acRefL" value="' + esc(a ? a.RefID : '') + '" placeholder="Escribe el folio o el nombre" style="flex:1;display:none"><datalist id="acRefL"></datalist><button type="button" class="erp-btn sec chico" id="acRefAbre" onclick="acRefAbre()" style="display:none">Abrir</button></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px"><label style="font:700 11px Montserrat,sans-serif;color:var(--tinta-2);text-transform:uppercase">Lista de pasos</label><small id="acCkP" style="color:var(--tinta-2)"></small></div>' +
+    '<div id="acCk"></div><button type="button" class="erp-btn sec chico" id="acCkMas" onclick="acCkMas()">+ Agregar paso</button></div>' +
+    '<div><div class="ng-tabs"><button type="button" id="acTC" class="on" onclick="acPestana(\'c\')">Comentarios <span id="acNC"></span></button><button type="button" id="acTA" onclick="acPestana(\'a\')">Archivos <span id="acNA"></span></button><button type="button" id="acTH" onclick="acPestana(\'h\')">Historial</button></div>' +
+    '<div id="acPC"><div class="ng-lista" id="acLC"></div><div class="ng-red"><div class="ng-sug" id="acSug" style="display:none"></div><textarea id="acTxt" maxlength="3000" placeholder="Escribe un comentario. Usa @ para mencionar: le llega correo y notificación."></textarea>' +
+    '<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="erp-btn" id="acEnvia" onclick="acComenta()">Comentar</button><button type="button" class="erp-btn sec" onclick="eq(\'acCFile\').click()">📎 Adjuntar</button><span id="acCNom" style="font-size:12px;color:var(--tinta-2)"></span><input type="file" id="acCFile" style="display:none" onchange="acCEleg(this)"></div></div></div>' +
+    '<div id="acPA" style="display:none"><div class="ng-drop" id="acDrop" onclick="eq(\'acDFile\').click()">Arrastra archivos o haz clic para elegirlos<br><small>Máx. 6 MB por archivo</small></div><input type="file" id="acDFile" multiple style="display:none" onchange="acSube(this.files);this.value=\'\'"><div class="ng-lista" id="acLA"></div></div>' +
+    '<div id="acPH" style="display:none"><div class="ng-lista" id="acLH"></div></div><p class="erp-vacio" id="acNota" style="display:none">Guarda la actividad para habilitar comentarios y archivos.</p></div></div>',
+    (a && ed ? '<button type="button" class="erp-btn" id="acElim" style="background:var(--rojo);color:#fff;margin-right:auto">Eliminar</button>' : '') +
+    (a && P('act') && a.Estado === 'PENDIENTE' ? '<button type="button" class="erp-btn sec" id="acB1">Iniciar (EN PROCESO)</button>' : '') +
+    (a && P('act') && a.Estado === 'EN PROCESO' ? '<button type="button" class="erp-btn sec" id="acB3">Regresar a PENDIENTE</button>' : '') +
+    (a && P('act') && a.Estado !== 'TERMINADAS' ? '<button type="button" class="erp-btn ver" id="acB2">Terminar</button>' : '') + (a && P('act') && a.Estado === 'TERMINADAS' ? '<button type="button" class="erp-btn sec" id="acB4">Reabrir</button>' : '') +
+    (P('act') && ed ? '<button type="button" class="erp-btn" id="acGuardar">Guardar</button>' : ''), true);
+  ACT.w = w;
+  if (!ed) { w.el.querySelectorAll('[data-k]').forEach(function(i){ i.disabled = true; }); }
+  acPartPinta(); acCkPinta(); acRefLista();
+  var tx = eq('acTxt');
+  tx.addEventListener('input', acSugBusca); tx.addEventListener('click', acSugBusca); tx.addEventListener('blur', function(){ setTimeout(acSugOculta, 150); });
+  tx.addEventListener('keydown', function(ev){
+    if (AC_S.lista.length) {
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); AC_S.i = (AC_S.i + 1) % AC_S.lista.length; acSugPinta(); return; }
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); AC_S.i = (AC_S.i - 1 + AC_S.lista.length) % AC_S.lista.length; acSugPinta(); return; }
+      if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); acSugElige(AC_S.i); return; }
+      if (ev.key === 'Escape') { acSugOculta(); return; }
+    }
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); acComenta(); }
+  });
+  var dr = eq('acDrop');
+  dr.addEventListener('dragover', function(ev){ ev.preventDefault(); dr.classList.add('sobre'); }); dr.addEventListener('dragleave', function(){ dr.classList.remove('sobre'); });
+  dr.addEventListener('drop', function(ev){ ev.preventDefault(); dr.classList.remove('sobre'); acSube(ev.dataTransfer.files); });
+  var bg = eq('acGuardar'); if (bg) { bg.onclick = function(){ acGuarda(); }; }
+  var be = eq('acElim'); if (be) { be.onclick = acElimina; }
+  [['acB1', 'EN PROCESO'], ['acB2', 'TERMINADAS'], ['acB3', 'PENDIENTE'], ['acB4', 'PENDIENTE']].forEach(function(p){ var b = eq(p[0]); if (b) { b.onclick = function(){ acMover(a.ID, p[1], function(){ acCierra(); acAbre(a.ID); }); }; } });
+  acPestana('c'); acPanel();
+  if (a) { acCargaDetalle(); }
+}
+function acCierra(){ if (ACT.w) { ACT.w.cerrar(); ACT.w = null; } ACT.cur = null; }
+function acPartPinta(){
+  var ed = ACT.dueno;
+  eq('acPart').innerHTML = ngUsuarios().map(function(u){
+    var on = ACT.sel.indexOf(u.Email) >= 0;
+    return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" ' + (on ? 'checked ' : '') + (ed ? '' : 'disabled ') + 'onchange="acTogPart(\'' + u.Email + '\',this.checked)">' + esc(u.Nombre) + '</label>';
+  }).join('');
+}
+function acTogPart(c, on){ var i = ACT.sel.indexOf(c); if (on && i < 0) { ACT.sel.push(c); } if (!on && i >= 0) { ACT.sel.splice(i, 1); } acPartPinta(); }
+function acPanel(){
+  var hay = !!ACT.cur, a = ACT.cur;
+  eq('acNota').style.display = hay ? 'none' : '';
+  ['acPC', 'acPA', 'acPH'].forEach(function(k){ eq(k).style.display = 'none'; });
+  if (hay) { eq({ c: 'acPC', a: 'acPA', h: 'acPH' }[ACT.tab]).style.display = ''; }
+  eq('acNC').textContent = hay && a.comentarios ? '(' + a.comentarios + ')' : ''; eq('acNA').textContent = hay && a.archivos ? '(' + a.archivos + ')' : '';
+  eq('acCkMas').style.display = ACT.dueno ? '' : 'none';
+}
+function acPestana(t){ ACT.tab = t; ['C', 'A', 'H'].forEach(function(k){ eq('acT' + k).className = k.toLowerCase() === t ? 'on' : ''; }); acPanel(); }
+function acCargaDetalle(){
+  var id = ACT.cur.ID;
+  erp('actDetalle', { ID: id }).then(function(d){ if (!ACT.cur || ACT.cur.ID !== id) { return; } ACT.det = d; Object.assign(ACT.cur, d.act); acDetPinta(); }, function(e){ ptToast(e.message); });
+}
+function acTexto(t){
+  var toks = ngUsuarios().map(ngTok);
+  return esc(t).replace(/(^|[\s(\[¡¿])@([\w.\-+]+@[\w.\-]+|[\w.\-+]+)/g, function(m, pre, tok){ var l = tok.replace(/[.\-]+$/, ''); return toks.some(function(x){ return x.toLowerCase() === l.toLowerCase(); }) ? pre + '<span class="ng-men">@' + l + '</span>' + tok.slice(l.length) : m; });
+}
+function acDetPinta(){
+  var d = ACT.det; if (!d) { return; }
+  var lc = eq('acLC');
+  lc.innerHTML = d.comentarios.length ? d.comentarios.map(function(c){ return '<div class="ng-com' + (c.Tipo === 'sistema' ? ' sis' : '') + '"><div class="q"><b>' + esc(c.AutorNombre || acNombre(c.Autor)) + '</b> · ' + ngFH(c.Fecha, c.Hora) + '</div><div class="x">' + acTexto(c.Texto) + '</div></div>'; }).join('') : '<div class="erp-vacio">Aún no hay comentarios.</div>';
+  lc.scrollTop = lc.scrollHeight;
+  eq('acLA').innerHTML = d.archivos.length ? d.archivos.map(function(a){ return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + '</small></div><button type="button" class="erp-btn sec chico" onclick="acBaja(\'' + a.ID + '\')">Descargar</button></div>'; }).join('') : '<div class="erp-vacio">Sin archivos.</div>';
+  eq('acLH').innerHTML = d.historial.slice().reverse().map(function(x){ return '<div class="ng-com sis">' + esc(x.t) + '<br><small>' + esc(x.n || x.p) + ' · ' + esc(x.f) + '</small></div>'; }).join('') || '<div class="erp-vacio">Sin movimientos.</div>';
+  acPanel();
+}
+function acBaja(id){
+  ptToast('Preparando archivo…');
+  erp('actArchivo', { ID: id }).then(function(r){
+    var bin = atob(r.b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+    var url = URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/octet-stream' })), a = document.createElement('a'); a.href = url; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }, function(e){ ptToast(e.message); });
+}
+function acGuarda(){
+  var b = eq('acGuardar'), d = leer(ACT.w.el); d.Participantes = ACT.sel; d.Checklist = ACT.ck.filter(function(x){ return x.t.trim(); });
+  if (ACT.cur) { d.ID = ACT.cur.ID; }
+  if (d.RefTipo) { d.RefID = String(d.RefID || '').trim().split(' ')[0]; }
+  eGuardar(b, function(){ return erp('saveAct', d); }).then(function(r){
+    var nuevo = !ACT.cur;
+    if (nuevo) { ACT.d.rows.push(r); } else { Object.assign(acBusca(r.ID), r); }
+    ptToast(nuevo ? 'Actividad creada.' : 'Cambios guardados.');
+    if (eq('acTab')) { acPinta(); }
+    if (nuevo) { var w = ACT.w; ACT.w = null; w.cerrar(); acAbre(r.ID); } else { ACT.cur = acBusca(r.ID); }
+  }, function(){});
+}
+function acElimina(){
+  if (!ACT.cur || !confirm('¿Eliminar la actividad «' + ACT.cur.Titulo + '» con sus comentarios y archivos? No se puede deshacer.')) { return; }
+  var id = ACT.cur.ID;
+  erp('delAct', { ID: id }).then(function(){ ACT.d.rows = ACT.d.rows.filter(function(a){ return a.ID !== id; }); acCierra(); if (eq('acTab')) { acPinta(); } ptToast('Actividad eliminada.'); }, function(e){ ptToast(e.message); });
+}
+var AC_S = { lista: [], i: 0, ini: -1 };
+function acSugOculta(){ var e = eq('acSug'); if (e) { e.style.display = 'none'; } AC_S.lista = []; }
+function acSugBusca(){
+  var tx = eq('acTxt'), pos = tx.selectionStart, m = /(^|[\s(\[¡¿])@([\w.\-+]*)$/.exec(tx.value.slice(0, pos));
+  if (!m) { return acSugOculta(); }
+  var q = m[2].toLowerCase(); AC_S.ini = pos - q.length - 1;
+  AC_S.lista = ngUsuarios().filter(function(u){ return ngTok(u).toLowerCase().indexOf(q) === 0 || u.Nombre.toLowerCase().indexOf(q) >= 0; }).slice(0, 8); AC_S.i = 0; acSugPinta();
+}
+function acSugPinta(){
+  var el = eq('acSug'); if (!AC_S.lista.length) { el.style.display = 'none'; return; }
+  el.innerHTML = AC_S.lista.map(function(u, i){ return '<div class="' + (i === AC_S.i ? 'on' : '') + '" onmousedown="event.preventDefault();acSugElige(' + i + ')">' + esc(u.Nombre) + '<small>@' + esc(ngTok(u)) + '</small></div>'; }).join(''); el.style.display = '';
+}
+function acSugElige(i){
+  var u = AC_S.lista[i]; if (!u) { return; }
+  var tx = eq('acTxt'), pos = tx.selectionStart; tx.value = tx.value.slice(0, AC_S.ini) + '@' + ngTok(u) + ' ' + tx.value.slice(pos);
+  var np = AC_S.ini + ngTok(u).length + 2; tx.focus(); tx.setSelectionRange(np, np); acSugOculta();
+}
+function acLee(f){
+  return new Promise(function(res, rej){
+    if (f.size > 6 * 1048576) { return rej(new Error(f.name + ': pesa más de 6 MB.')); }
+    var rd = new FileReader(); rd.onerror = function(){ rej(new Error('No se pudo leer ' + f.name)); };
+    rd.onload = function(){ res({ nombre: f.name, mime: f.type, b64: String(rd.result).split(',')[1] || '' }); }; rd.readAsDataURL(f);
+  });
+}
+function acCEleg(inp){ ACT.arch = inp.files[0] || null; eq('acCNom').textContent = ACT.arch ? ACT.arch.name : ''; }
+function acComenta(){
+  if (!ACT.cur) { return; }
+  var tx = eq('acTxt'), t = tx.value.trim(); if (!t && !ACT.arch) { return; }
+  var b = eq('acEnvia'); b.disabled = true;
+  (ACT.arch ? acLee(ACT.arch) : Promise.resolve(null)).then(function(a){ return erp('actComentar', { ID: ACT.cur.ID, Texto: t, archivo: a }); }).then(function(r){
+    b.disabled = false; tx.value = ''; ACT.arch = null; eq('acCNom').textContent = ''; eq('acCFile').value = ''; acSugOculta();
+    if (ACT.det) { ACT.det.comentarios.push(r.comentario); if (r.archivo) { ACT.det.archivos.push(r.archivo); } }
+    ACT.cur.comentarios = (ACT.cur.comentarios || 0) + 1; if (r.archivo) { ACT.cur.archivos = (ACT.cur.archivos || 0) + 1; }
+    acDetPinta(); if (eq('acTab')) { acPinta(); } if (r.mencionados) { ptToast('Comentario enviado. Se avisó a ' + r.mencionados + ' persona(s).'); }
+  }).catch(function(e){ b.disabled = false; ptToast(e.message); });
+}
+function acSube(files){
+  if (!ACT.cur || !files || !files.length) { return; }
+  var lista = [].slice.call(files), id = ACT.cur.ID, dr = eq('acDrop'), orig = dr.innerHTML;
+  (function sig(){
+    var f = lista.shift(); if (!f) { dr.innerHTML = orig; return; }
+    dr.textContent = 'Subiendo ' + f.name + '…';
+    acLee(f).then(function(a){ return erp('actSubir', { ID: id, archivo: a }); }).then(function(r){
+      if (ACT.cur && ACT.cur.ID === id) { if (ACT.det) { ACT.det.archivos.push(r.archivo); } ACT.cur.archivos = (ACT.cur.archivos || 0) + 1; acDetPinta(); }
+      if (eq('acTab')) { acPinta(); } sig();
+    }).catch(function(e){ ptToast(e.message); sig(); });
+  })();
+}
+
+/* ===================== PAGO DE COMISIONES ===================== */
+var CM = { d: null, usuario: '', q: '' };
+var CM_COL = { 'POR COMISIONAR': '#8A5CF6', 'A PAGO': '#FF6A13', 'PAGADA': '#1E8E5A', 'NO APLICA': '#8892A0' };
+var CM_TIPO = { VENDEDOR: 'Vendedor', ADMINISTRATIVO: 'Administrativo', GERENCIA: 'Gerencia general', NINGUNA: 'No comisiona' };
+function cmPct(n){ return n === null || n === undefined || n === '' ? '—' : (Math.round(Number(n) * 100) / 100) + '%'; }
+function vComisiones(m){
+  var pre = E.lk && E.lk.usuarios ? Promise.resolve() : recargaLookups();
+  pre.then(function(){ return erp('comisiones', { usuario: CM.usuario }); }).then(function(d){
+    CM.d = d;
+    var r = d.resumen, sinTipo = !d.admin && !d.miTipo;
+    m.innerHTML = '<h2>Pago de comisiones</h2><p class="erp-sub">Se pagan el día <b>' + d.diaPago + '</b> de cada mes: la comisión acumulada del mes anterior de las negociaciones que el cliente liquidó al 100% (sin pagos parciales ni adelantos). Próximo pago: <b>' + fFecha(d.siguientePago) + '</b>. Tasas: vendedores ' + cmPct(d.tasas.VENDEDOR) + ', administrativos ' + cmPct(d.tasas.ADMINISTRATIVO) + ', gerencia general ' + cmPct(d.tasas.GERENCIA) + ', sobre el monto antes de impuestos.</p>' +
+      (sinTipo ? '<div class="ng-solo">Todavía no tienes un tipo de comisión asignado: tus negociaciones no calculan comisión hasta que la administración lo defina en Usuarios del ERP.</div>' : '') +
+      (!d.admin && d.miTipo === 'NINGUNA' ? '<div class="ng-solo">Tu usuario está omitido del pago de comisiones.</div>' : '') +
+      '<div class="erp-kpis">' + kpi(d.admin && !CM.usuario ? 'Venta total (todos)' : 'Mi venta total', $m(r.venta)) + kpi('Comisión del próximo pago (' + fFecha(d.siguientePago) + ')', $m(r.proxima)) +
+      kpi('A pago en espera del mes siguiente', $m(r.enEspera)) + kpi('Por comisionar', $m(r.porComisionar)) + kpi('Pagada', $m(r.pagada)) + '</div>' +
+      '<div class="ng-barra">' + (d.admin ? '<select id="cmUsr" onchange="CM.usuario=this.value;vComisiones(eq(\'erpMain\'))"><option value="">Todos los usuarios</option>' + d.usuarios.map(function(u){ return '<option value="' + esc(u.Email) + '">' + esc(u.Nombre) + (u.tipo ? ' · ' + esc(CM_TIPO[u.tipo] || u.tipo) : ' · sin tipo') + '</option>'; }).join('') + '</select>' : '') +
+      '<input id="cmQ" placeholder="Buscar negociación o cliente" oninput="CM.q=this.value;cmPinta()" style="min-width:230px"><span class="sp"></span>' +
+      (d.admin && d.sinDefinir.length ? '<button type="button" class="erp-btn nar" onclick="cmSinDefinir()">Clientes por definir (' + d.sinDefinir.length + ')</button>' : '') + '</div>' +
+      '<div id="cmTab" class="ng-tablero"></div>';
+    if (d.admin) { eq('cmUsr').value = CM.usuario; }
+    eq('cmQ').value = CM.q; cmPinta();
+  }, function(e){ erpError(m, e); });
+}
+function cmTarjeta(i){
+  var adm = CM.d.admin, col = i.col, avisos = '';
+  if (i.faltaCliente) { avisos += '<span class="ng-chip mal" title="La administración aún no define si el cliente comisiona">Cliente sin definir</span>'; }
+  if (i.faltaTipo) { avisos += '<span class="ng-chip mal" title="El usuario no tiene tipo de comisión">Usuario sin tipo</span>'; }
+  if (i.sinComprobante) { avisos += '<span class="ng-chip" title="No hay comprobante de pago cargado">Sin comprobante</span>'; }
+  return '<div class="ng-card" style="--c:' + CM_COL[col] + '" draggable="' + (adm ? 'true' : 'false') + '" onclick="cmAbre(\'' + i.ID + '\')" ondragstart="cmArrastra(event,\'' + i.ID + '\')" ondragend="this.classList.remove(\'arr\')">' +
+    '<div class="tt">' + esc(i.Nombre) + '</div><div class="cl">' + esc(i.Cliente) + '</div><div class="mn">' + $m(i.Monto) + '</div>' +
+    (i.MesTxt ? '<div class="cl" style="margin:2px 0 0">Comisión de <b>' + esc(i.MesTxt) + '</b></div>' : '<div class="cl" style="margin:2px 0 0">Aún sin mes de comisión</div>') +
+    (i.Comision !== null && i.Comision !== undefined ? '<div class="cl" style="margin:2px 0 0">' + cmPct(i.Pct) + ' → <b>' + $m(i.Comision) + '</b>' + (i.FechaPago ? ' · pago ' + fFecha(i.FechaPago) : '') + '</div>' : '') +
+    (i.Nota ? '<div class="cl" style="margin:2px 0 0">' + esc(i.Nota) + '</div>' : '') +
+    (avisos ? '<div style="margin-top:5px">' + avisos + '</div>' : '') +
+    '<div class="pie"><span><span class="ng-av" title="' + esc(i.CreadorNombre) + '">' + esc(ngIni(i.Creador)) + '</span> ' + esc(i.EstatusPago) + (i.FormaPago ? ' · ' + esc(i.FormaPago) : '') + '</span><span>' + esc(i.ID) + '</span></div></div>';
+}
+function cmFiltradas(){
+  var q = CM.q.trim().toLowerCase();
+  return CM.d.items.filter(function(i){ return !q || [i.ID, i.Nombre, i.Cliente].join(' ').toLowerCase().indexOf(q) >= 0; });
+}
+function cmPinta(){
+  var fil = cmFiltradas(), h = '';
+  CM.d.cols.forEach(function(c){
+    var ts = fil.filter(function(i){ return i.col === c; });
+    var sumaV = ts.reduce(function(a, i){ return a + (Number(i.Monto) || 0); }, 0);
+    var sumaC = ts.reduce(function(a, i){ return a + (Number(i.Comision) || 0); }, 0);
+    h += '<div class="ng-col" style="flex:1 1 260px" data-et="' + esc(c) + '" ondragover="ngSobre(event,this)" ondragleave="this.classList.remove(\'sobre\')" ondrop="cmSuelta(event,this)">' +
+      '<div class="ch" style="--c:' + CM_COL[c] + '"><h3><span>' + esc(c) + '</span></h3><div class="tot">' + $m(sumaV) + '</div><div class="cnt">' + ts.length + (ts.length === 1 ? ' negociación' : ' negociaciones') + (c !== 'NO APLICA' ? ' · comisión ' + $m(sumaC) : '') + '</div></div>' +
+      (ts.length ? ts.map(cmTarjeta).join('') : '<div class="erp-vacio" style="padding:12px 4px">Sin negociaciones</div>') + '</div>';
+  });
+  eq('cmTab').innerHTML = h;
+}
+function cmBusca(id){ return CM.d.items.filter(function(i){ return i.ID === id; })[0]; }
+function cmArrastra(ev, id){ ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; ev.currentTarget.classList.add('arr'); }
+function cmSuelta(ev, el){
+  ev.preventDefault(); el.classList.remove('sobre');
+  var id = ev.dataTransfer.getData('text/plain'), c = el.getAttribute('data-et'), i = id ? cmBusca(id) : null;
+  if (!i || !CM.d.admin || i.col === c) { return; }
+  var dest = { 'PAGADA': 'PAGADA', 'NO APLICA': 'NO_APLICA', 'A PAGO': 'AUTO', 'POR COMISIONAR': 'AUTO' }[c];
+  if (c === 'A PAGO' && i.col !== 'PAGADA' && i.col !== 'NO APLICA') { return ptToast('A PAGO es automático: se llena cuando el estatus de pago de la negociación es LIQUIDADO.'); }
+  if (c === 'POR COMISIONAR' && i.col === 'A PAGO') { return ptToast('A PAGO regresa a POR COMISIONAR solo si quitas el LIQUIDADO en la negociación.'); }
+  if (dest === 'PAGADA' && !confirm('¿Marcar como PAGADA la comisión de «' + i.Nombre + '» por ' + $m(i.Comision) + '? Se avisará a ' + i.CreadorNombre + '.')) { return; }
+  if (dest === 'AUTO' && i.col === 'PAGADA' && !confirm('La comisión ya estaba PAGADA. ¿Devolverla a automático?')) { return; }
+  erp('comMover', { ID: id, Destino: dest }).then(function(){ vComisiones(eq('erpMain')); ptToast('Comisión actualizada.'); }, function(e){ ptToast(e.message); });
+}
+function cmAbre(id){
+  if (NG.d && ngBusca(id)) { return ngAbre(id); }
+  erp('negociaciones').then(function(d){ NG.d = d; ngAbre(id); }, function(e){ ptToast(e.message); });
+}
+function cmSinDefinir(){
+  var l = CM.d.sinDefinir;
+  var w = ventana('Clientes por definir',
+    '<p class="erp-sub">Solo la administración de comisiones define si un cliente comisiona. Mientras esté sin definir, sus negociaciones se quedan en POR COMISIONAR.</p>' +
+    '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Cliente</th><th>Comercial</th><th>¿Comisiona?</th></tr></thead><tbody>' +
+    l.map(function(c){ return '<tr id="cmF' + c.ID + '"><td>' + esc(c.Nombre) + '<br><small>' + esc(c.ID) + '</small></td><td>' + esc(ngNombre(c.Comercial)) + '</td><td><button type="button" class="erp-btn ver chico" onclick="cmDefine(\'' + c.ID + '\',\'SI\')">SÍ</button> <button type="button" class="erp-btn sec chico" onclick="cmDefine(\'' + c.ID + '\',\'NO\')">NO</button></td></tr>'; }).join('') + '</tbody></table></div>', '<button type="button" class="erp-btn" id="cmCierra">Listo</button>', true);
+  w.el.querySelector('#cmCierra').onclick = function(){ w.cerrar(); vComisiones(eq('erpMain')); };
+}
+function cmDefine(id, v){
+  erp('comCliente', { ID: id, Comisiona: v }).then(function(){ var tr = eq('cmF' + id); if (tr) { tr.parentNode.removeChild(tr); } CM.d.sinDefinir = CM.d.sinDefinir.filter(function(c){ return c.ID !== id; }); ptToast('Cliente definido: ' + (v === 'SI' ? 'comisiona' : 'no comisiona') + '.'); }, function(e){ ptToast(e.message); });
+}
+
 /* ---------- notificaciones (campanita) ---------- */
 function notifIniciar(){
   clearInterval(NT.h); notifCarga();
@@ -1008,7 +1413,7 @@ function notifCarga(){
 }
 function notifPinta(){
   eq('erpNotif').innerHTML = '<h4>Notificaciones</h4>' + (NT.lista.length ? NT.lista.map(function(n){
-    return '<div class="it' + (n.Leida ? '' : ' nl') + '" onclick="notifIr(\'' + n.ID + '\',\'' + esc(n.Negociacion) + '\')"><b>' + esc(n.Titulo) + '</b>' + esc(n.Texto).slice(0, 140) + '<br><small>' + ngFH(n.Fecha, n.Hora) + '</small></div>';
+    return '<div class="it' + (n.Leida ? '' : ' nl') + '" onclick="notifIr(\'' + n.ID + '\',\'' + esc(n.Ref || n.Negociacion) + '\')"><b>' + esc(n.Titulo) + '</b>' + esc(n.Texto).slice(0, 140) + '<br><small>' + ngFH(n.Fecha, n.Hora) + '</small></div>';
   }).join('') : '<div class="erp-vacio">Sin notificaciones.</div>');
 }
 function notifAbre(){
@@ -1016,11 +1421,18 @@ function notifAbre(){
   notifPinta(); p.classList.add('on');
   erp('notifLeer', {}).then(function(d){ var b = eq('erpBellN'); b.style.display = d.sinLeer ? '' : 'none'; b.textContent = d.sinLeer; });
 }
-function notifIr(id, neg){
+function notifIr(id, ref){
   eq('erpNotif').classList.remove('on');
-  if (!neg) { return; }
-  NAVEST.abiertas['Negociaciones'] = true; E.pendiente = neg;
-  if (E.vista === 'negociaciones') { E.pendiente = ''; ngAbre(neg); } else { erpNav(); erpVista('negociaciones'); }
+  if (!ref) { return; }
+  var m = /^(neg|act|cli):(.+)$/.exec(ref), tipo = m ? m[1] : (/^AC-/.test(ref) ? 'act' : 'neg'), rid = m ? m[2] : ref;
+  if (tipo === 'cli') { return clienteForm(rid); }
+  if (tipo === 'act') {
+    NAVEST.abiertas['Actividades'] = true;
+    if (E.vista === 'actividades') { return acAbre(rid); }
+    E.pendiente = rid; erpNav(); return erpVista('actividades');
+  }
+  NAVEST.abiertas['Negociaciones'] = true;
+  if (E.vista === 'negociaciones') { E.pendiente = ''; ngAbre(rid); } else { E.pendiente = rid; erpNav(); erpVista('negociaciones'); }
 }
 
 /* ===================== CALCULO DE ARMADOS: acomodo de piezas en laminas (MaxRects) ===================== */
@@ -1557,15 +1969,16 @@ function vUsuarios(m){
     E.cache.users = rows;
     m.innerHTML = '<h2>Usuarios del ERP</h2><p class="erp-sub">Quién entra al ERP y con qué rol. El rol decide qué módulos ve y qué puede hacer; los socios entran como Dirección (solo lectura).</p>' +
       '<div class="erp-bar"><span class="sp"></span><button class="erp-btn nar" type="button" onclick="usrForm()">+ Agregar usuario</button></div>' +
-      '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Prefijo cot.</th></tr></thead><tbody>' +
-      rows.map(function(u){ return '<tr class="clic" onclick="usrForm(\'' + esc(u.Email) + '\')"><td>' + esc(u.Email) + '</td><td>' + esc(u.Nombre) + '</td><td>' + esc(u.Rol) + '</td><td>' + esc(u.Activo) + '</td><td>' + esc(u.PrefijoCot) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Prefijo cot.</th><th>Comisión</th></tr></thead><tbody>' +
+      rows.map(function(u){ return '<tr class="clic" onclick="usrForm(\'' + esc(u.Email) + '\')"><td>' + esc(u.Email) + '</td><td>' + esc(u.Nombre) + '</td><td>' + esc(u.Rol) + '</td><td>' + esc(u.Activo) + '</td><td>' + esc(u.PrefijoCot) + '</td><td>' + esc(CM_TIPO[u.TipoComision] || (u.TipoComision || 'Sin definir')) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
       '<div class="erp-card" style="margin-top:16px"><h3>Roles</h3><p class="erp-sub" style="margin:0">ADMIN: todo · COMERCIAL: sus clientes, cotizaciones y ODP · PRODUCCION: ODP, producción y consumo · ALMACEN: inventario y compras · FINANZAS: facturas, cobros, compras y costos · DIRECCION: consulta total · CONSULTA: consulta sin costos.</p></div>';
   }, function(e){ erpError(m, e); });
 }
 function usrForm(email){
   var u = email ? E.cache.users.filter(function(x){ return x.Email === email; })[0] : {};
   var w = ventana(email ? 'Usuario' : 'Agregar usuario', '<div class="erp-form">' + campo('Email', 'Correo', u.Email, 'email', { c2: 1 }) + campo('Nombre', 'Nombre', u.Nombre) + selCampo('Rol', 'Rol', E.init.cat.ROLES, u.Rol || 'COMERCIAL', false) +
-    selCampo('Activo', 'Activo', ['SI', 'NO'], u.Activo || 'SI', false) + campo('PrefijoCot', 'Prefijo de cotización (ej. CP)', u.PrefijoCot) + '</div>', '<button class="erp-btn" id="usG">Guardar</button>');
+    selCampo('Activo', 'Activo', ['SI', 'NO'], u.Activo || 'SI', false) + campo('PrefijoCot', 'Prefijo de cotización (ej. CP)', u.PrefijoCot) +
+    selCampo('TipoComision', 'Tipo de comisión', [{ v: 'VENDEDOR', t: 'Vendedor (5%)' }, { v: 'ADMINISTRATIVO', t: 'Administrativo (3.3%)' }, { v: 'GERENCIA', t: 'Gerencia general (4%)' }, { v: 'NINGUNA', t: 'No comisiona (omitir)' }], u.TipoComision || '', 'Sin definir') + '</div>', '<button class="erp-btn" id="usG">Guardar</button>');
   if (email) { w.el.querySelector('[data-k=Email]').disabled = true; }
   var b = w.el.querySelector('#usG');
   b.onclick = function(){ var p = leer(w.el); if (email) { p.Email = email; } eGuardar(b, function(){ return erp('saveUsuario', p); }).then(function(){ w.cerrar(); ptToast('Usuario guardado.'); vUsuarios(eq('erpMain')); }, function(){}); };

@@ -40,9 +40,9 @@ var ERP = (function () {
 // ==================== ESQUEMA ====================
 const SCHEMA = {
   Config:        ['Clave', 'Valor', 'Descripcion'],
-  Usuarios:      ['Email', 'Nombre', 'Rol', 'Activo', 'PrefijoCot'],
+  Usuarios:      ['Email', 'Nombre', 'Rol', 'Activo', 'PrefijoCot', 'TipoComision'],
   Clientes:      ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'Comercial', 'DiasCredito', 'FechaAlta', 'Notas',
-                  'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado'],
+                  'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona'],
   Proveedores:   ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'DiasCredito', 'Notas'],
   Materiales:    ['Clave', 'Descripcion', 'Tipo', 'Unidad', 'StockMinimo', 'Activo', 'CostoReferencia', 'Presentacion'],
   Capas:         ['ID', 'Clave', 'Fecha', 'Origen', 'CantInicial', 'CantRestante', 'CostoUnit'],
@@ -66,21 +66,27 @@ const SCHEMA = {
   Cobros:        ['ID', 'Fecha', 'FacturaID', 'Monto', 'Referencia', 'Usuario'],
   Conteos:       ['ID', 'Fecha', 'Clave', 'Sistema', 'Fisico', 'Diferencia', 'CostoUnit', 'ImporteDif', 'Aplicado', 'Usuario'],
   Negociaciones: ['ID', 'Nombre', 'Monto', 'Fecha', 'Hora', 'ClienteID', 'Cliente', 'ContactoCargo', 'ContactoNombre', 'ContactoTelefono', 'ContactoCorreo', 'ContactoCumple',
-                  'ResponsableEmail', 'ResponsableNombre', 'Etapa', 'Cotizacion', 'ODP', 'MotivoPerdido', 'MotivoDetalle', 'PerdidoEn', 'EtapaDesde', 'CreadoPor', 'ActualizadoEn', 'Historial'],
+                  'ResponsableEmail', 'ResponsableNombre', 'Etapa', 'Cotizacion', 'ODP', 'MotivoPerdido', 'MotivoDetalle', 'PerdidoEn', 'EtapaDesde', 'CreadoPor', 'ActualizadoEn', 'Historial',
+                  'FormaPago', 'EstatusPago', 'LiquidadoEn'],
   NegComentarios: ['ID', 'Negociacion', 'Autor', 'AutorNombre', 'Fecha', 'Hora', 'Tipo', 'Texto', 'Menciones'],
   NegArchivos:   ['ID', 'Negociacion', 'ComentarioID', 'Tipo', 'Nombre', 'Mime', 'DriveID', 'Tamano', 'Usuario', 'UsuarioNombre', 'Fecha', 'Hora', 'Etapa'],
-  Notificaciones: ['ID', 'Fecha', 'Hora', 'Email', 'Titulo', 'Texto', 'Negociacion', 'Leida'],
+  Notificaciones: ['ID', 'Fecha', 'Hora', 'Email', 'Titulo', 'Texto', 'Negociacion', 'Leida', 'Ref'],
+  Comisiones:    ['Negociacion', 'Estado', 'Usuario', 'Pct', 'Base', 'Monto', 'Mes', 'PagadaEn', 'PagadaPor', 'Nota', 'ActualizadoEn'],
+  Actividades:   ['ID', 'Titulo', 'Descripcion', 'Estado', 'Prioridad', 'ResponsableEmail', 'ResponsableNombre', 'Participantes', 'CreadoPor', 'CreadoNombre', 'Fecha', 'Hora', 'Inicio', 'Fin',
+                  'Etiquetas', 'Checklist', 'RefTipo', 'RefID', 'RefTexto', 'TerminadaEn', 'ActualizadoEn', 'Historial'],
+  ActComentarios: ['ID', 'Actividad', 'Autor', 'AutorNombre', 'Fecha', 'Hora', 'Tipo', 'Texto', 'Menciones'],
+  ActArchivos:   ['ID', 'Actividad', 'ComentarioID', 'Nombre', 'Mime', 'DriveID', 'Tamano', 'Usuario', 'UsuarioNombre', 'Fecha', 'Hora'],
 };
 
 // Permisos por rol
 const ROLES_ERP = {
   ADMIN:      ['*'],
-  DIRECCION:  ['dash', 'fin', 'reportes', 'crm_ver', 'odp_ver', 'inv_ver', 'cxc_ver', 'cxp_ver', 'neg_ver'],
-  COMERCIAL:  ['dash', 'crm', 'odp_ver', 'cxc_ver', 'neg', 'neg_ver'],
-  PRODUCCION: ['dash', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod', 'neg', 'neg_ver'],
-  CONSULTA:   ['dash', 'crm_ver', 'odp_ver', 'neg_ver'],
-  ALMACEN:    ['dash', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo', 'neg_ver'],
-  FINANZAS:   ['dash', 'fin', 'reportes', 'compras', 'cxp', 'cxp_ver', 'cxc', 'cxc_ver', 'facturas', 'odp_ver', 'inv_ver', 'crm_ver', 'neg_ver'],
+  DIRECCION:  ['dash', 'fin', 'reportes', 'crm_ver', 'odp_ver', 'inv_ver', 'cxc_ver', 'cxp_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  COMERCIAL:  ['dash', 'crm', 'odp_ver', 'cxc_ver', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  PRODUCCION: ['dash', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  CONSULTA:   ['dash', 'crm_ver', 'odp_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  ALMACEN:    ['dash', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  FINANZAS:   ['dash', 'fin', 'reportes', 'compras', 'cxp', 'cxp_ver', 'cxc', 'cxc_ver', 'facturas', 'odp_ver', 'inv_ver', 'crm_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
 };
 
 const TIPOS_MATERIAL = ['Sustrato', 'Tinta', 'Consumible'];
@@ -118,9 +124,14 @@ const CONFIG_DEFAULTS = [
   ['COT_CUENTA', '0110213225', 'Número de cuenta (PDF de cotización)'],
   ['DIAS_CREDITO_PROV', '30', 'Días de crédito para proveedores nuevos que se dan de alta desde un XML'],
   ['RECIBE_PRODUCCION', 'ERNESTO RUIZ / CÉSAR MÁRQUEZ', 'Quién recibe en producción (sale en la ODP)'],
+  ['COM_ADMIN', 'daniel.torres@bfprint.com.mx', 'Correo(s) de la administración de comisiones: definen si un cliente comisiona, marcan comisiones como PAGADAS y reciben el aviso de clientes nuevos'],
+  ['COM_VENDEDOR', '5', 'Comisión de vendedores (% sobre el monto antes de impuestos)'],
+  ['COM_ADMINISTRATIVO', '3.3', 'Comisión de administrativos (% sobre el monto antes de impuestos)'],
+  ['COM_GERENCIA', '4', 'Comisión de la gerencia general (% sobre el monto antes de impuestos)'],
+  ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '8';
+const SCHEMA_VER = '9';
 
 
 
@@ -168,7 +179,10 @@ const ACTIONS = {
   reporteVentas: a_reporteVentas, catalogosProd: a_catalogosProd, produccionODP: a_produccionODP, registrarProduccion: a_registrarProduccion,
   negociaciones: a_negociaciones, negDetalle: a_negDetalle, saveNeg: a_saveNeg, moveNeg: a_moveNeg, perdidoNeg: a_perdidoNeg, negLigarCot: a_negLigarCot,
   negComentar: a_negComentar, negSubir: a_negSubir, negSubirInicio: a_negSubirInicio, negSubirParte: a_negSubirParte, negArchivo: a_negArchivo,
-  armadoMateriales: a_armadoMateriales, armadoCosto: a_armadoCosto, notifs: a_notifs, notifLeer: a_notifLeer,
+  armadoMateriales: a_armadoMateriales, armadoCosto: a_armadoCosto,
+  savePagoNeg: a_savePagoNeg, negSubirPago: a_negSubirPago, comisiones: a_comisiones, comMover: a_comMover, comCliente: a_comCliente,
+  actividades: a_actividades, actDetalle: a_actDetalle, saveAct: a_saveAct, moveAct: a_moveAct, actChecklist: a_actChecklist, delAct: a_delAct,
+  actComentar: a_actComentar, actSubir: a_actSubir, actArchivo: a_actArchivo, notifs: a_notifs, notifLeer: a_notifLeer,
   usuarios: a_usuarios, saveUsuario: a_saveUsuario, config: a_config, saveConfig: a_saveConfig,
 };
 
@@ -397,11 +411,15 @@ function a_saveCliente(u, p) {
   if (str_(p.ID)) {
     const c = mustFind_('Clientes', 'ID', p.ID, 'Cliente'); ownOr_(u, c);
     if (esComercial_(u)) data.Comercial = c.Comercial;
+    if (esAdminCom_(u.email) && ['SI', 'NO', ''].indexOf(str_(p.Comisiona).toUpperCase()) >= 0 && p.Comisiona !== undefined) data.Comisiona = str_(p.Comisiona).toUpperCase();   // solo la administración lo cambia
     return clean_(update_('Clientes', c, data));
   }
   if (find_('Clientes', 'Nombre', nombre)) throw new Error('Ya existe un cliente con ese nombre.');
   data.ID = seq_('SEQ_CLIENTE', 'CL-', 4); data.FechaAlta = hoy_();
-  return clean_(insert_('Clientes', data));
+  data.Comisiona = esAdminCom_(u.email) && ['SI', 'NO'].indexOf(str_(p.Comisiona).toUpperCase()) >= 0 ? str_(p.Comisiona).toUpperCase() : '';
+  const nuevo = insert_('Clientes', data);
+  if (!esAdminCom_(u.email)) comNuevoCliente_(u, nuevo);   // avisa a la administración y le crea la tarea «Definir cliente comisión»
+  return clean_(nuevo);
 }
 
 function a_proveedores(u) { needAny_(u, ['compras', 'cxp', 'cxp_ver']); return read_('Proveedores').map(clean_); }
@@ -1284,7 +1302,8 @@ function a_saveUsuario(u, p) {
   need_(u, '*');
   const email = req_(p.Email, 'Correo').toLowerCase();
   const data = { Nombre: req_(p.Nombre, 'Nombre'), Rol: inList_(str_(p.Rol).toUpperCase(), Object.keys(ROLES_ERP), 'Rol'), Activo: str_(p.Activo).toUpperCase() === 'NO' ? 'NO' : 'SI',
-                 PrefijoCot: str_(p.PrefijoCot).toUpperCase().replace(/[^A-Z0-9-]/g, '') };
+                 PrefijoCot: str_(p.PrefijoCot).toUpperCase().replace(/[^A-Z0-9-]/g, ''),
+                 TipoComision: COM_TIPOS.indexOf(str_(p.TipoComision).toUpperCase()) >= 0 ? str_(p.TipoComision).toUpperCase() : '' };
   const ex = find_('Usuarios', 'Email', email);
   if (ex) {
     const quedaAdmin = read_('Usuarios').some(function (x) { return x !== ex && str_(x.Rol).toUpperCase() === 'ADMIN' && str_(x.Activo).toUpperCase() !== 'NO'; });
@@ -1525,6 +1544,7 @@ function claseAccion(accion, p) {
     case 'conteo': case 'registrarProduccion': return 2;
     case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': case 'negSubirInicio': case 'negSubirParte': return 2;
     case 'notifLeer': return 1;
+    case 'savePagoNeg': case 'negSubirPago': case 'comMover': case 'comCliente': case 'saveAct': case 'moveAct': case 'actChecklist': case 'delAct': case 'actComentar': case 'actSubir': return 2;
     default: return 3;   // aprobarCot, devolver, anular*, cancelar*, deleteTarifa, saveUsuario, saveConfig...
   }
 }
@@ -1537,7 +1557,8 @@ function usuarioDe_(ses) {
     const x = read_('Usuarios').find(function (r) { return str_(r.Email).toLowerCase() === String(ses.correo).toLowerCase(); });
     if (x && str_(x.Nombre)) nombre = str_(x.Nombre);
   }
-  return { email: String(ses.correo).toLowerCase(), nombre: nombre, rol: rol, nivel: nivel(ses) };
+  const em = String(ses.correo).toLowerCase();
+  return { email: em, nombre: nombre, rol: rol, nivel: nivel(ses), adminCom: ss_().getSheetByName(PREF + 'Config') ? esAdminCom_(em) : false };
 }
 
 // ==================== PRODUCCION (BASE) Y VENTAS (dashboard) ====================
@@ -1723,7 +1744,7 @@ function resincronizar() {
 // ==================== EJECUCION ====================
 const LECTURAS = { usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
-  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1 };
+  pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1, comisiones: 1, actividades: 1, actDetalle: 1, actArchivo: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
 
 function run(action, p, ses) {
@@ -1765,6 +1786,7 @@ function negHist_(n, txt, u) {
   n.Historial = JSON.stringify(h);
 }
 function negIdx_(etapa) { return NEG_ETAPAS.indexOf(str_(etapa)); }
+function negRef_(id) { id = str_(id); return /^AC-/.test(id) ? 'act:' + id : /^NG-/.test(id) ? 'neg:' + id : /^CL-/.test(id) ? 'cli:' + id : id ? 'neg:' + id : ''; }
 function negLink_(id) { const url = _urlPublica_(); return url + (url.indexOf('?') < 0 ? '?' : '&') + 'neg=' + encodeURIComponent(id); }
 
 function negCorreo_(para, asunto, titulo, cuerpo, negId) {
@@ -1775,10 +1797,10 @@ function negCorreo_(para, asunto, titulo, cuerpo, negId) {
     if (cuota - enviados < 1) return;
     try {
       MailApp.sendEmail({ to: to, subject: asunto, name: 'BIG FOOT print · ERP',
-        body: titulo + '\n' + String(cuerpo).replace(/<[^>]+>/g, '') + '\nAbrir la negociación: ' + link,
+        body: titulo + '\n' + String(cuerpo).replace(/<[^>]+>/g, '') + '\nAbrir: ' + link,
         htmlBody: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#1c2540"><h2 style="margin:0 0 8px;color:#16327a">' + esc_(titulo) + '</h2>' + cuerpo +
-          '<p style="margin:16px 0"><a href="' + esc_(link) + '" style="background:#ff6a13;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold">Abrir la negociación</a></p>' +
-          '<p style="color:#7b869f;font-size:12px">También la encuentras en la intranet: ERP → Negociaciones.</p></div>' });
+          '<p style="margin:16px 0"><a href="' + esc_(link) + '" style="background:#ff6a13;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold">' + (/^AC-/.test(negId) ? 'Abrir la actividad' : 'Abrir la negociación') + '</a></p>' +
+          '<p style="color:#7b869f;font-size:12px">También la encuentras en la intranet: ERP → ' + (/^AC-/.test(negId) ? 'Actividades' : 'Negociaciones') + '.</p></div>' });
       enviados++;
     } catch (e) { /* un correo fallido no tumba la operacion */ }
   });
@@ -1793,7 +1815,7 @@ function negNotifica_(emails, actor, titulo, texto, negId, soloApp) {
   emails.forEach(function (e) { e = str_(e).toLowerCase(); if (e && e !== a && !vistos[e]) { vistos[e] = 1; para.push(e); } });
   if (!para.length) return 0;
   const f = hoy_(), h = negHora_();
-  insertMany_('Notificaciones', para.map(function (e) { return { ID: seq_('SEQ_NOT', 'NT-', 6), Fecha: f, Hora: h, Email: e, Titulo: titulo, Texto: str_(texto).slice(0, 500), Negociacion: negId, Leida: '' }; }));
+  insertMany_('Notificaciones', para.map(function (e) { return { ID: seq_('SEQ_NOT', 'NT-', 6), Fecha: f, Hora: h, Email: e, Titulo: titulo, Texto: str_(texto).slice(0, 500), Negociacion: /^NG-/.test(negId) ? negId : '', Leida: '', Ref: negRef_(negId) }; }));
   return soloApp ? 0 : negCorreo_(para, titulo, titulo, '<p style="white-space:pre-wrap">' + esc_(texto) + '</p>', negId);
 }
 
@@ -1873,7 +1895,8 @@ function a_saveNeg(u, p) {
     const etapa = str_(p.Etapa) || NEG_ETAPAS[0];
     if (NEG_ETAPAS.indexOf(etapa) < 0) throw new Error('Etapa inválida.');
     n = Object.assign({ ID: seq_('SEQ_NEG', 'NG-', 5), Fecha: hoy_(), Hora: negHora_(), ResponsableEmail: u.email, ResponsableNombre: u.nombre, Etapa: etapa, Cotizacion: '', ODP: '',
-                        MotivoPerdido: '', MotivoDetalle: '', PerdidoEn: '', EtapaDesde: hoy_(), CreadoPor: u.email, ActualizadoEn: hoy_(), Historial: '[]' }, d);
+                        MotivoPerdido: '', MotivoDetalle: '', PerdidoEn: '', EtapaDesde: hoy_(), CreadoPor: u.email, ActualizadoEn: hoy_(), Historial: '[]',
+                        FormaPago: '', EstatusPago: 'PENDIENTE', LiquidadoEn: '' }, d);
     negHist_(n, 'Creó la negociación en ' + etapa, u);
     insert_('Negociaciones', n);
   }
@@ -2087,6 +2110,319 @@ function a_negArchivo(u, p) {
   if (num_(a.Tamano) > 8 * 1048576) return { nombre: a.Nombre, enlace: DriveApp.getFileById(a.DriveID).getUrl() };   // grande: se abre en Drive
   const blob = DriveApp.getFileById(a.DriveID).getBlob();
   return { nombre: a.Nombre, mime: str_(a.Mime) || blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+// ==================== PAGO DE LA NEGOCIACION (alimenta el pago de comisiones) ====================
+const PAGO_FORMAS = ['efectivo', 'tarjeta', 'transferencia'];
+const PAGO_ESTATUS = ['PENDIENTE', 'ADELANTO', 'LIQUIDADO'];
+const PAGO_EXT = ['jpg', 'jpeg', 'png', 'pdf'];
+const PAGO_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', pdf: 'application/pdf' };
+function puedePago_(u, n) { return str_(n.CreadoPor).toLowerCase() === u.email || esAdminCom_(u.email) || u.rol === 'FINANZAS'; }
+function negMsgSistema_(u, n, texto) {
+  insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema', Texto: texto, Menciones: '' });
+}
+/** Forma y estatus de pago. LIQUIDADO (pago al 100%) manda la negociacion a «A PAGO» en Pago de comisiones. */
+function a_savePagoNeg(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  if (!puedePago_(u, n)) throw new Error('Solo quien creó la negociación, Finanzas o la administración de comisiones pueden cambiar los datos de pago.');
+  const forma = str_(p.FormaPago).toLowerCase();
+  if (forma && PAGO_FORMAS.indexOf(forma) < 0) throw new Error('Forma de pago inválida.');
+  const est = inList_(str_(p.EstatusPago).toUpperCase() || 'PENDIENTE', PAGO_ESTATUS, 'Estatus de pago');
+  const antes = str_(n.EstatusPago).toUpperCase() || 'PENDIENTE';
+  const man = find_('Comisiones', 'Negociacion', n.ID);
+  if (man && man.Estado === 'PAGADA' && est !== 'LIQUIDADO') throw new Error('La comisión de esta negociación ya fue pagada: no se puede quitar el estatus LIQUIDADO.');
+  const ch = { FormaPago: forma, EstatusPago: est, ActualizadoEn: hoy_() };
+  if (est === 'LIQUIDADO' && antes !== 'LIQUIDADO') ch.LiquidadoEn = hoy_();
+  if (est !== 'LIQUIDADO') ch.LiquidadoEn = '';
+  negHist_(n, 'Pago: ' + (forma ? forma : 'sin forma de pago') + ' · ' + est, u);
+  update_('Negociaciones', n, ch);
+  if (est !== antes) {
+    negMsgSistema_(u, n, 'Estatus de pago: ' + antes + ' → ' + est + (forma ? ' (' + forma + ')' : '') + '.');
+    if (est === 'LIQUIDADO') negNotifica_(comAdmins_(), u, 'Negociación liquidada', u.nombre + ' marcó como LIQUIDADO el pago de «' + n.Nombre + '» (' + n.Cliente + '). Pasa a A PAGO en Pago de comisiones.', n.ID, true);
+  }
+  const o = negOut_(n);
+  o.sinComprobante = est === 'LIQUIDADO' && !read_('NegArchivos').some(function (a) { return a.Negociacion === n.ID && a.Tipo === 'comprobante'; });
+  return o;
+}
+/** Complemento de pago (adelanto) o comprobante de pago: JPG, PNG o PDF. */
+function a_negSubirPago(u, p) {
+  needAny_(u, ['neg', 'neg_ver']);
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
+  if (!puedePago_(u, n)) throw new Error('Solo quien creó la negociación, Finanzas o la administración de comisiones pueden subir comprobantes de pago.');
+  const tipo = inList_(str_(p.tipo), ['complemento', 'comprobante'], 'Tipo de archivo');
+  const arch = p.archivo || {}, ext = ((str_(arch.nombre).match(/\.([A-Za-z0-9]+)$/) || [])[1] || '').toLowerCase();
+  if (PAGO_EXT.indexOf(ext) < 0) throw new Error('El ' + (tipo === 'complemento' ? 'complemento' : 'comprobante') + ' de pago debe ser JPG, PNG o PDF.');
+  arch.mime = PAGO_MIME[ext];
+  const a = negGuardaArchivo_(u, n, '', tipo, arch);
+  negHist_(n, 'Subió el ' + (tipo === 'complemento' ? 'complemento' : 'comprobante') + ' de pago ' + a.Nombre, u); update_('Negociaciones', n);
+  negMsgSistema_(u, n, 'Subió el ' + (tipo === 'complemento' ? 'complemento de pago (adelanto)' : 'comprobante de pago') + ' «' + a.Nombre + '».');
+  const ao = clean_(a); delete ao.DriveID;
+  return { archivo: ao };
+}
+
+// ==================== PAGO DE COMISIONES ====================
+const COM_TIPOS = ['VENDEDOR', 'ADMINISTRATIVO', 'GERENCIA', 'NINGUNA'];
+const COM_COLS = ['POR COMISIONAR', 'A PAGO', 'PAGADA', 'NO APLICA'];
+const MESES_ES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+function comAdmins_() { return cfg_('COM_ADMIN', 'daniel.torres@bfprint.com.mx').split(/[,;\s]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return x.indexOf('@') > 0; }); }
+function esAdminCom_(email) { return comAdmins_().indexOf(String(email || '').toLowerCase()) >= 0; }
+function comPct_(tipo) {
+  const v = { VENDEDOR: cfg_('COM_VENDEDOR', '5'), ADMINISTRATIVO: cfg_('COM_ADMINISTRATIVO', '3.3'), GERENCIA: cfg_('COM_GERENCIA', '4') }[tipo];
+  return v === undefined ? null : num_(v);
+}
+function comDiaPago_() { return Math.min(28, Math.max(1, Math.floor(num_(cfg_('COM_DIA_PAGO', '15'))) || 15)); }
+function comMesTxt_(ym) { const m = String(ym || '').match(/^(\d{4})-(\d{2})/); return m ? MESES_ES[+m[2] - 1] + ' ' + m[1] : ''; }
+/** Fecha de pago de una comision liquidada en `liq`: el dia de pago del mes siguiente. */
+function comPagoDe_(liq) { const d = toDate_(str_(liq).slice(0, 10)); return d ? fmtDate_(new Date(d.getFullYear(), d.getMonth() + 1, comDiaPago_())) : ''; }
+/** Proximo dia de pago a partir de hoy. */
+function comSiguientePago_() { const h = toDate_(hoy_()), dia = comDiaPago_(); return fmtDate_(h.getDate() <= dia ? new Date(h.getFullYear(), h.getMonth(), dia) : new Date(h.getFullYear(), h.getMonth() + 1, dia)); }
+
+function comContexto_() {
+  const cx = { cli: {}, usr: {}, man: {}, comp: {} };
+  read_('Clientes').forEach(function (c) { cx.cli[c.ID] = c; });
+  read_('Usuarios').forEach(function (x) { cx.usr[str_(x.Email).toLowerCase()] = x; });
+  read_('Comisiones').forEach(function (m) { cx.man[m.Negociacion] = m; });
+  read_('NegArchivos').forEach(function (a) { if (a.Tipo === 'comprobante') cx.comp[a.Negociacion] = (cx.comp[a.Negociacion] || 0) + 1; });
+  return cx;
+}
+/** Una negociacion (de APROBADO en adelante) vista como tarjeta de comisiones. */
+function comItem_(n, cx) {
+  const base = num_(n.Monto), creador = str_(n.CreadoPor).toLowerCase(), us = cx.usr[creador];
+  const tipo = us ? str_(us.TipoComision).toUpperCase() : '', pct = (tipo && tipo !== 'NINGUNA') ? comPct_(tipo) : null;
+  const cli = n.ClienteID ? cx.cli[n.ClienteID] : null, comis = cli ? str_(cli.Comisiona).toUpperCase() : '';
+  const est = str_(n.EstatusPago).toUpperCase() || 'PENDIENTE', liq = str_(n.LiquidadoEn).slice(0, 10), man = cx.man[n.ID];
+  let col = 'POR COMISIONAR', nota = '', pctU = pct, monto = pct !== null ? r2_(base * pct / 100) : null, mes = liq ? liq.slice(0, 7) : '', fechaPago = liq ? comPagoDe_(liq) : '';
+  if (man && man.Estado === 'PAGADA') { col = 'PAGADA'; pctU = num_(man.Pct); monto = num_(man.Monto); mes = str_(man.Mes) || mes; fechaPago = str_(man.PagadaEn).slice(0, 10); }
+  else if (man && man.Estado === 'NO_APLICA') { col = 'NO APLICA'; nota = 'Marcada por la administración'; }
+  else if (tipo === 'NINGUNA') { col = 'NO APLICA'; nota = 'El usuario está omitido de comisiones'; }
+  else if (comis === 'NO') { col = 'NO APLICA'; nota = 'Cliente que no comisiona'; }
+  else if (est === 'LIQUIDADO' && comis === 'SI' && pct !== null) { col = 'A PAGO'; }
+  return { ID: n.ID, Nombre: n.Nombre, Cliente: n.Cliente, ClienteID: n.ClienteID, Etapa: n.Etapa, Fecha: str_(n.Fecha).slice(0, 10), Creador: creador, CreadorNombre: us && str_(us.Nombre) ? str_(us.Nombre) : creador,
+           Monto: base, Pct: pctU, Comision: monto, col: col, EstatusPago: est, FormaPago: str_(n.FormaPago), LiquidadoEn: liq, Mes: mes, MesTxt: comMesTxt_(mes), FechaPago: fechaPago, Nota: nota,
+           faltaCliente: comis === '' && col === 'POR COMISIONAR', faltaTipo: tipo === '' && col === 'POR COMISIONAR', sinComprobante: est === 'LIQUIDADO' && !cx.comp[n.ID], tipo: tipo };
+}
+function a_comisiones(u, p) {
+  needAny_(u, ['com_ver', 'neg_ver', 'neg']);
+  const admin = esAdminCom_(u.email), filtro = admin ? str_(p.usuario).toLowerCase() : u.email, cx = comContexto_();
+  let items = read_('Negociaciones').filter(function (n) { return n.Etapa !== NEG_PERDIDO && negIdx_(n.Etapa) >= NEG_IDX_APROBADO; }).map(function (n) { return comItem_(n, cx); });
+  if (filtro) items = items.filter(function (i) { return i.Creador === filtro; });
+  items.sort(function (a, b) { return (b.Fecha + b.ID) < (a.Fecha + a.ID) ? -1 : 1; });
+  const sig = comSiguientePago_(), mesPago = sig.slice(0, 7), r = { venta: 0, proxima: 0, aPago: 0, enEspera: 0, porComisionar: 0, pagada: 0, pagadaN: 0 };
+  items.forEach(function (i) {
+    if (i.col !== 'NO APLICA') r.venta += i.Monto;
+    if (i.col === 'POR COMISIONAR' && i.Comision !== null) r.porComisionar += i.Comision;
+    if (i.col === 'A PAGO') { r.aPago += i.Comision; if (i.LiquidadoEn.slice(0, 7) < mesPago) r.proxima += i.Comision; else r.enEspera += i.Comision; }
+    if (i.col === 'PAGADA') { r.pagada += i.Comision; r.pagadaN++; }
+  });
+  Object.keys(r).forEach(function (k) { r[k] = k === 'pagadaN' ? r[k] : r2_(r[k]); });
+  const out = { admin: admin, yo: u.email, cols: COM_COLS, items: items, resumen: r, siguientePago: sig, diaPago: comDiaPago_(),
+                tasas: { VENDEDOR: comPct_('VENDEDOR'), ADMINISTRATIVO: comPct_('ADMINISTRATIVO'), GERENCIA: comPct_('GERENCIA') }, usuarios: [], sinDefinir: [] };
+  const us = cx.usr[u.email]; out.miTipo = us ? str_(us.TipoComision).toUpperCase() : '';
+  if (admin) {
+    out.usuarios = negUsuarios_().map(function (x) { const f = cx.usr[x.Email]; return { Email: x.Email, Nombre: x.Nombre, tipo: f ? str_(f.TipoComision).toUpperCase() : '' }; });
+    out.sinDefinir = read_('Clientes').filter(function (c) { return !str_(c.Comisiona); }).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: str_(c.Comercial) }; });
+  }
+  return out;
+}
+/** Solo la administracion: pasa una comision a PAGADA (solo si esta A PAGO), a NO APLICA, o la devuelve a lo automatico. */
+function a_comMover(u, p) {
+  if (!esAdminCom_(u.email)) throw new Error('Solo la administración de comisiones puede mover comisiones.');
+  const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación'), cx = comContexto_(), it = comItem_(n, cx), dest = inList_(str_(p.Destino).toUpperCase(), ['PAGADA', 'NO_APLICA', 'AUTO'], 'Destino');
+  const man = cx.man[n.ID];
+  if (dest === 'AUTO') { if (man) deleteWhere_('Comisiones', function (m) { return m.Negociacion === n.ID; }); return { ok: true }; }
+  if (dest === 'PAGADA') {
+    if (it.col === 'PAGADA') return { ok: true };
+    if (it.col !== 'A PAGO') throw new Error('Solo se puede pagar lo que está en A PAGO (cliente liquidado al 100%, cliente que comisiona y usuario con tipo de comisión).');
+    const fila = { Negociacion: n.ID, Estado: 'PAGADA', Usuario: it.Creador, Pct: it.Pct, Base: it.Monto, Monto: it.Comision, Mes: it.Mes, PagadaEn: hoy_(), PagadaPor: u.email, Nota: str_(p.Nota), ActualizadoEn: hoy_() };
+    if (man) update_('Comisiones', man, fila); else insert_('Comisiones', fila);
+    negHist_(n, 'Comisión de ' + it.CreadorNombre + ' marcada como PAGADA (' + $mx_(it.Comision) + ')', u); update_('Negociaciones', n);
+    negNotifica_([it.Creador], u, 'Tu comisión fue pagada', 'Se pagó tu comisión de «' + n.Nombre + '»: ' + $mx_(it.Comision) + ' (' + it.Pct + '% de ' + $mx_(it.Monto) + ').', n.ID);
+    return { ok: true };
+  }
+  if (it.col === 'PAGADA') throw new Error('La comisión ya está PAGADA. Para corregirla, primero devuélvela a automático.');
+  const fila2 = { Negociacion: n.ID, Estado: 'NO_APLICA', Usuario: it.Creador, Pct: '', Base: it.Monto, Monto: '', Mes: '', PagadaEn: '', PagadaPor: u.email, Nota: str_(p.Nota), ActualizadoEn: hoy_() };
+  if (man) update_('Comisiones', man, fila2); else insert_('Comisiones', fila2);
+  return { ok: true };
+}
+function $mx_(n) { return '$' + r2_(num_(n)).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+/** Solo la administracion define si un cliente comisiona. */
+function a_comCliente(u, p) {
+  if (!esAdminCom_(u.email)) throw new Error('Solo la administración de comisiones puede definir si un cliente comisiona.');
+  const c = mustFind_('Clientes', 'ID', p.ID, 'Cliente'), v = str_(p.Comisiona).toUpperCase();
+  if (['SI', 'NO'].indexOf(v) < 0) throw new Error('Elige SI o NO.');
+  update_('Clientes', c, { Comisiona: v });
+  read_('Actividades').forEach(function (a) { if (a.RefTipo === 'cliente' && a.RefID === c.ID && a.Estado !== 'TERMINADAS' && /^Definir cliente comisión/.test(a.Titulo)) {   // la tarea de definir se cierra sola
+    actHist_(a, 'Cerrada automáticamente: la administración definió Comisiona = ' + v, u); update_('Actividades', a, { Estado: 'TERMINADAS', TerminadaEn: hoy_(), ActualizadoEn: hoy_() }); } });
+  return clean_(c);
+}
+/** Cliente nuevo dado de alta por alguien que no es la administracion: aviso en la intranet + correo + tarea «Definir cliente comisión». */
+function comNuevoCliente_(u, cli) {
+  const adm = comAdmins_(); if (!adm.length) return;
+  const act = actCrearInterna_(u, { Titulo: 'Definir cliente comisión: ' + cli.Nombre, Descripcion: u.nombre + ' dio de alta al cliente «' + cli.Nombre + '» (' + cli.ID + '). Define si comisiona o no en Comercial → Pago de comisiones → «Clientes por definir» (o en el registro del cliente, campo Comisiona).',
+    Prioridad: 'Alta', ResponsableEmail: adm[0], Participantes: adm.slice(1), RefTipo: 'cliente', RefID: cli.ID, RefTexto: cli.ID + ' · ' + cli.Nombre, Fin: addDays_(hoy_(), 3) }, true);
+  negNotifica_(adm, u, 'Cliente nuevo: define si comisiona', u.nombre + ' dio de alta al cliente «' + cli.Nombre + '» (' + cli.ID + '). Define si comisiona o no. Se creó la tarea «Definir cliente comisión» en Actividades.', act.ID);
+}
+
+// ==================== ACTIVIDADES (administrador de tareas) ====================
+const ACT_ESTADOS = ['PENDIENTE', 'EN PROCESO', 'TERMINADAS'];
+const ACT_PRIO = ['Baja', 'Media', 'Alta', 'Urgente'];
+const ACT_REF = ['negociacion', 'cotizacion', 'odp', 'cliente'];
+function actEmails_(v) { return (Array.isArray(v) ? v : str_(v).split(/[,;\s]+/)).map(function (x) { return str_(x).toLowerCase(); }).filter(function (x) { return x.indexOf('@') > 0; }); }
+function actVisible_(u, a) {
+  if (can_(u, '*') || esAdminCom_(u.email)) return true;
+  return str_(a.CreadoPor).toLowerCase() === u.email || str_(a.ResponsableEmail).toLowerCase() === u.email || actEmails_(a.Participantes).indexOf(u.email) >= 0;
+}
+function actDe_(u, id) {
+  const a = mustFind_('Actividades', 'ID', id, 'Actividad');
+  if (!actVisible_(u, a)) throw new Error('No tienes acceso a esta actividad.');
+  return a;
+}
+function actEsDueno_(u, a) { return str_(a.CreadoPor).toLowerCase() === u.email || can_(u, '*') || esAdminCom_(u.email); }
+function actHist_(a, txt, u) {
+  let h = []; try { h = JSON.parse(str_(a.Historial) || '[]'); } catch (e) { h = []; }
+  h.push({ f: hoy_() + ' ' + negHora_(), p: u.email, n: u.nombre, t: txt });
+  if (h.length > 80) h = h.slice(h.length - 80);
+  a.Historial = JSON.stringify(h);
+}
+function actChecklist_(v) {
+  let arr = v; if (!Array.isArray(arr)) { try { arr = JSON.parse(str_(v) || '[]'); } catch (e) { arr = []; } }
+  return arr.slice(0, 40).map(function (x) { return { t: str_(x && x.t).slice(0, 120), h: !!(x && x.h) }; }).filter(function (x) { return x.t; });
+}
+function actOut_(a, nc, na) {
+  const o = clean_(a); delete o.Historial;
+  const ck = actChecklist_(a.Checklist);
+  o.checklist = ck; o.partic = actEmails_(a.Participantes); o.comentarios = nc || 0; o.archivos = na || 0;
+  o.vencida = !!(str_(a.Fin) && str_(a.Fin).slice(0, 10) < hoy_() && a.Estado !== 'TERMINADAS');
+  delete o.Checklist; delete o.Participantes;
+  return o;
+}
+function actRefTexto_(tipo, id) {
+  if (!tipo) return '';
+  if (ACT_REF.indexOf(tipo) < 0) throw new Error('Tipo de relación inválido.');
+  if (!str_(id)) throw new Error('Elige el elemento relacionado.');
+  if (tipo === 'negociacion') { const n = mustFind_('Negociaciones', 'ID', id, 'Negociación'); return n.ID + ' · ' + n.Nombre; }
+  if (tipo === 'cotizacion') { const c = mustFind_('Cotizaciones', 'Folio', id, 'Cotización'); return c.Folio + ' · ' + c.Cliente; }
+  if (tipo === 'odp') { const o = mustFind_('ODP', 'Folio', id, 'ODP'); return o.Folio + ' · ' + o.Cliente; }
+  const c2 = mustFind_('Clientes', 'ID', id, 'Cliente'); return c2.ID + ' · ' + c2.Nombre;
+}
+/** Crea una actividad (uso interno y desde a_saveAct). `silencioso`: no manda el aviso de asignacion (quien llama avisa). */
+function actCrearInterna_(u, d, silencioso) {
+  const resp = str_(d.ResponsableEmail).toLowerCase() || u.email;
+  const a = { ID: seq_('SEQ_ACT', 'AC-', 5), Titulo: str_(d.Titulo).slice(0, 150), Descripcion: str_(d.Descripcion).slice(0, 3000), Estado: ACT_ESTADOS.indexOf(d.Estado) >= 0 ? d.Estado : ACT_ESTADOS[0],
+              Prioridad: ACT_PRIO.indexOf(d.Prioridad) >= 0 ? d.Prioridad : 'Media', ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), Participantes: actEmails_(d.Participantes).join(','),
+              CreadoPor: u.email, CreadoNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Inicio: str_(d.Inicio), Fin: str_(d.Fin), Etiquetas: str_(d.Etiquetas).slice(0, 120),
+              Checklist: JSON.stringify(actChecklist_(d.Checklist)), RefTipo: str_(d.RefTipo), RefID: str_(d.RefID), RefTexto: str_(d.RefTexto), TerminadaEn: '', ActualizadoEn: hoy_(), Historial: '[]' };
+  actHist_(a, 'Creó la actividad', u);
+  insert_('Actividades', a);
+  if (!silencioso && resp !== u.email) negNotifica_([resp], u, 'Te asignaron una actividad', u.nombre + ' te asignó «' + a.Titulo + '»' + (a.Fin ? ' (vence ' + a.Fin + ')' : '') + '.', a.ID);
+  return a;
+}
+function a_actividades(u) {
+  needAny_(u, ['act', 'act_ver']);
+  const cc = {}, ca = {};
+  read_('ActComentarios').forEach(function (c) { if (c.Tipo !== 'sistema') cc[c.Actividad] = (cc[c.Actividad] || 0) + 1; });
+  read_('ActArchivos').forEach(function (x) { ca[x.Actividad] = (ca[x.Actividad] || 0) + 1; });
+  return { estados: ACT_ESTADOS, prioridades: ACT_PRIO, yo: u.email, admin: can_(u, '*') || esAdminCom_(u.email),
+           rows: read_('Actividades').filter(function (a) { return actVisible_(u, a); }).map(function (a) { return actOut_(a, cc[a.ID], ca[a.ID]); }) };
+}
+function a_actDetalle(u, p) {
+  needAny_(u, ['act', 'act_ver']);
+  const a = actDe_(u, p.ID);
+  const com = read_('ActComentarios').filter(function (c) { return c.Actividad === a.ID; }).map(clean_);
+  const arch = read_('ActArchivos').filter(function (x) { return x.Actividad === a.ID; }).map(function (x) { const o = clean_(x); delete o.DriveID; return o; });
+  let hist = []; try { hist = JSON.parse(str_(a.Historial) || '[]'); } catch (e) { hist = []; }
+  return { act: actOut_(a, com.filter(function (c) { return c.Tipo !== 'sistema'; }).length, arch.length), comentarios: com, archivos: arch, historial: hist };
+}
+function a_saveAct(u, p) {
+  need_(u, 'act');
+  const titulo = req_(p.Titulo, 'Título de la actividad').slice(0, 150);
+  const us = negUsuarios_().map(function (x) { return x.Email; });
+  const resp = str_(p.ResponsableEmail).toLowerCase() || u.email;
+  if (us.indexOf(resp) < 0) throw new Error('El responsable no es un usuario activo del ERP.');
+  const part = actEmails_(p.Participantes).filter(function (e) { return us.indexOf(e) >= 0 && e !== resp; });
+  const ini = fechaOpc_(p.Inicio, 'Fecha inicial'), fin = fechaOpc_(p.Fin, 'Fecha límite');
+  if (ini && fin && fin < ini) throw new Error('La fecha límite no puede ser anterior a la inicial.');
+  const prio = ACT_PRIO.indexOf(p.Prioridad) >= 0 ? p.Prioridad : 'Media';
+  const tipo = str_(p.RefTipo), refId = tipo ? str_(p.RefID) : '', refTxt = tipo ? actRefTexto_(tipo, refId) : '';
+  let a;
+  if (str_(p.ID)) {
+    a = actDe_(u, p.ID);
+    if (!actEsDueno_(u, a)) throw new Error('Solo quien creó la actividad (' + str_(a.CreadoNombre) + ') puede modificar estos datos. Tú puedes mover la actividad, marcar la lista, comentar y subir archivos.');
+    const antes = str_(a.ResponsableEmail).toLowerCase();
+    Object.assign(a, { Titulo: titulo, Descripcion: str_(p.Descripcion).slice(0, 3000), Prioridad: prio, ResponsableEmail: resp, ResponsableNombre: negNombreDe_(resp), Participantes: part.join(','), Inicio: ini, Fin: fin,
+                       Etiquetas: str_(p.Etiquetas).slice(0, 120), Checklist: JSON.stringify(actChecklist_(p.Checklist)), RefTipo: tipo, RefID: refId, RefTexto: refTxt, ActualizadoEn: hoy_() });
+    actHist_(a, 'Modificó la actividad', u); update_('Actividades', a);
+    if (resp !== antes) negNotifica_([resp], u, 'Te asignaron una actividad', u.nombre + ' te asignó «' + a.Titulo + '»' + (a.Fin ? ' (vence ' + a.Fin + ')' : '') + '.', a.ID);
+  } else {
+    a = actCrearInterna_(u, { Titulo: titulo, Descripcion: p.Descripcion, Estado: p.Estado, Prioridad: prio, ResponsableEmail: resp, Participantes: part, Inicio: ini, Fin: fin, Etiquetas: p.Etiquetas, Checklist: p.Checklist, RefTipo: tipo, RefID: refId, RefTexto: refTxt });
+    if (part.length) negNotifica_(part, u, 'Te agregaron a una actividad', u.nombre + ' te agregó como participante de «' + a.Titulo + '».', a.ID);
+  }
+  return actOut_(a);
+}
+function a_moveAct(u, p) {
+  need_(u, 'act');
+  const a = actDe_(u, p.ID), est = inList_(str_(p.Estado), ACT_ESTADOS, 'Estado');
+  if (a.Estado === est) return actOut_(a);
+  const de = a.Estado;
+  actHist_(a, 'Movió de ' + de + ' a ' + est, u);
+  update_('Actividades', a, { Estado: est, TerminadaEn: est === 'TERMINADAS' ? hoy_() : '', ActualizadoEn: hoy_() });
+  insert_('ActComentarios', { ID: seq_('SEQ_ACOM', 'AM-', 6), Actividad: a.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema', Texto: 'Movió la actividad de ' + de + ' a ' + est + '.', Menciones: '' });
+  const quienes = [a.CreadoPor, a.ResponsableEmail];
+  negNotifica_(quienes, u, est === 'TERMINADAS' ? 'Actividad terminada' : 'Cambió el estado de una actividad', u.nombre + ' movió «' + a.Titulo + '» de ' + de + ' a ' + est + '.', a.ID);
+  return actOut_(a);
+}
+function a_actChecklist(u, p) {
+  need_(u, 'act');
+  const a = actDe_(u, p.ID), ck = actChecklist_(p.Checklist);
+  actHist_(a, 'Actualizó la lista de pasos (' + ck.filter(function (x) { return x.h; }).length + '/' + ck.length + ')', u);
+  update_('Actividades', a, { Checklist: JSON.stringify(ck), ActualizadoEn: hoy_() });
+  return actOut_(a);
+}
+function a_delAct(u, p) {
+  need_(u, 'act');
+  const a = actDe_(u, p.ID);
+  if (!actEsDueno_(u, a)) throw new Error('Solo quien creó la actividad o la administración puede eliminarla.');
+  read_('ActArchivos').filter(function (x) { return x.Actividad === a.ID; }).forEach(function (x) { try { DriveApp.getFileById(x.DriveID).setTrashed(true); } catch (e) { /* ya no estaba */ } });
+  deleteWhere_('ActArchivos', function (x) { return x.Actividad === a.ID; });
+  deleteWhere_('ActComentarios', function (c) { return c.Actividad === a.ID; });
+  deleteWhere_('Actividades', function (x) { return x.ID === a.ID; });
+  return { ok: true };
+}
+function actGuardaArchivo_(u, a, comId, arch) {
+  const nombre = negNombreSeguro_(arch && arch.nombre), b64 = str_(arch && arch.b64);
+  if (!b64) throw new Error('El archivo llegó vacío.');
+  if (b64.length > NEG_MAX_B64) throw new Error('El archivo pesa más de 8 MB: ' + nombre);
+  const bytes = Utilities.base64Decode(b64);
+  const f = negCarpeta_().createFile(Utilities.newBlob(bytes, str_(arch.mime) || 'application/octet-stream', nombre));
+  f.setDescription('Actividad ' + a.ID + ' · ' + a.Titulo + ' · ' + u.email);
+  return insert_('ActArchivos', { ID: seq_('SEQ_AARC', 'AA-', 6), Actividad: a.ID, ComentarioID: comId || '', Nombre: nombre, Mime: str_(arch.mime), DriveID: f.getId(), Tamano: bytes.length, Usuario: u.email, UsuarioNombre: u.nombre, Fecha: hoy_(), Hora: negHora_() });
+}
+function a_actComentar(u, p) {
+  need_(u, 'act');
+  const a = actDe_(u, p.ID), texto = str_(p.Texto);
+  if (!texto && !(p.archivo && p.archivo.b64)) throw new Error('Escribe un comentario o adjunta un archivo.');
+  if (texto.length > 3000) throw new Error('El comentario es demasiado largo (máx. 3000).');
+  const ment = negMenciones_(texto);
+  const c = insert_('ActComentarios', { ID: seq_('SEQ_ACOM', 'AM-', 6), Actividad: a.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'comentario', Texto: texto, Menciones: ment.join(',') });
+  let arch = null;
+  if (p.archivo && p.archivo.b64) { arch = actGuardaArchivo_(u, a, c.ID, p.archivo); actHist_(a, 'Adjuntó el archivo ' + arch.Nombre + ' en un comentario', u); update_('Actividades', a); }
+  if (ment.length) negNotifica_(ment, u, 'Te mencionaron en una actividad', u.nombre + ' te mencionó en «' + a.Titulo + '»:\n' + texto, a.ID);
+  const ao = arch ? (function () { const o = clean_(arch); delete o.DriveID; return o; })() : null;
+  return { comentario: clean_(c), archivo: ao, mencionados: ment.length };
+}
+function a_actSubir(u, p) {
+  need_(u, 'act');
+  const a = actDe_(u, p.ID), arch = actGuardaArchivo_(u, a, '', p.archivo || {});
+  actHist_(a, 'Subió el archivo ' + arch.Nombre, u); update_('Actividades', a);
+  const ao = clean_(arch); delete ao.DriveID;
+  return { archivo: ao };
+}
+function a_actArchivo(u, p) {
+  needAny_(u, ['act', 'act_ver']);
+  const x = mustFind_('ActArchivos', 'ID', p.ID, 'Archivo'); actDe_(u, x.Actividad);
+  const blob = DriveApp.getFileById(x.DriveID).getBlob();
+  return { nombre: x.Nombre, mime: str_(x.Mime) || blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) };
 }
 
 // ----- Calculo de armados (laminas rigidas) -----

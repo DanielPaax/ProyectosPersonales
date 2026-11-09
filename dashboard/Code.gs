@@ -246,7 +246,7 @@ function doGet(e) {
   /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
   t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
   t.vista = JSON.stringify(_areaPorId_(a) ? a : '');
-  t.neg = JSON.stringify(/^NG-\d{3,8}$/.test((e && e.parameter && e.parameter.neg) || '') ? String(e.parameter.neg) : '');
+  t.neg = JSON.stringify(/^(NG|AC)-\d{3,8}$/.test((e && e.parameter && e.parameter.neg) || '') ? String(e.parameter.neg) : '');
   t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
   t.logoBlanco = JSON.stringify(typeof LOGO_BLANCO_DATA_URI === 'string' ? LOGO_BLANCO_DATA_URI : '');
   return t.evaluate()
