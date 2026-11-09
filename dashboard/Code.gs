@@ -55,7 +55,7 @@ var ROLES = {
   OPERACIONES: [],
   /* ADMIN: el modulo de Administracion (invitar personas y darles permisos por area). Solo estos correos, y solo en codigo:
      ni la hoja ACCESOS ni nadie desde la intranet puede agregar a otro administrador. */
-  ADMIN:       ['danielpaax@gmail.com']
+  ADMIN:       ['daniel.torres@bfprint.com.mx', 'danielpaax@gmail.com']
 };
 
 /* ===================== AREAS DE LA INTRANET ===================== */
