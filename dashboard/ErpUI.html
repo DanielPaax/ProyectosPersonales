@@ -1978,7 +1978,7 @@ function vUsuarios(m){
 }
 function usrForm(email){
   var u = email ? E.cache.users.filter(function(x){ return x.Email === email; })[0] : {};
-  var w = ventana(email ? 'Usuario' : 'Agregar usuario', '<div class="erp-form">' + campo('Email', 'Correo', u.Email, 'email', { c2: 1 }) + campo('Nombre', 'Nombre', u.Nombre) + selCampo('Rol', 'Rol', E.init.cat.ROLES, u.Rol || 'COMERCIAL', false) +
+  var w = ventana(email ? 'Usuario' : 'Agregar usuario', '<div class="erp-form">' + campo('Email', 'Correo', u.Email, 'email', { c2: 1 }) + campo('Nombre', 'Nombre', u.Nombre) + selCampo('Rol', 'Rol', E.init.cat.ROLES_ERP, u.Rol || 'COMERCIAL', false) +
     selCampo('Activo', 'Activo', ['SI', 'NO'], u.Activo || 'SI', false) + campo('PrefijoCot', 'Prefijo de cotización (ej. CP)', u.PrefijoCot) +
     selCampo('TipoComision', 'Tipo de comisión', [{ v: 'VENDEDOR', t: 'Vendedor (5%)' }, { v: 'ADMINISTRATIVO', t: 'Administrativo (3.3%)' }, { v: 'GERENCIA', t: 'Gerencia general (4%)' }, { v: 'NINGUNA', t: 'No comisiona (omitir)' }], u.TipoComision || '', 'Sin definir') + '</div>', '<button class="erp-btn" id="usG">Guardar</button>');
   if (email) { w.el.querySelector('[data-k=Email]').disabled = true; }
