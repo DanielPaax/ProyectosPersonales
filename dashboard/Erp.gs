@@ -2394,7 +2394,7 @@ function comSiguientePago_() { const h = toDate_(hoy_()), dia = comDiaPago_(); r
 function comContexto_() {
   const cx = { cli: {}, usr: {}, man: {}, comp: {} };
   read_('Clientes').forEach(function (c) { cx.cli[c.ID] = c; });
-  read_('Usuarios').forEach(function (x) { cx.usr[str_(x.Email).toLowerCase()] = x; });
+  read_('Usuarios').forEach(function (x) { const k = str_(x.Email).toLowerCase(); if (!cx.usr[k]) cx.usr[k] = x; });   // si el correo está repetido, manda el primer renglón (el mismo que edita la pantalla de usuarios)
   read_('Comisiones').forEach(function (m) { cx.man[m.Negociacion] = m; });
   read_('NegArchivos').forEach(function (a) { if (a.Tipo === 'comprobante') cx.comp[a.Negociacion] = (cx.comp[a.Negociacion] || 0) + 1; });
   return cx;
