@@ -131,7 +131,7 @@ const CONFIG_DEFAULTS = [
   ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '10';
+const SCHEMA_VER = '11';
 
 
 
@@ -1488,8 +1488,29 @@ function instalar() {
       insert_('Usuarios', { Email: String(e).toLowerCase(), Nombre: String(e).split('@')[0], Rol: 'ADMIN', Activo: 'SI', PrefijoCot: '' });
     });
   }
+  unirUsuarios_();
   PropertiesService.getScriptProperties().setProperty('ERP_SCHEMA_VER', SCHEMA_VER);
   return 'ERP listo: hojas ' + Object.keys(SCHEMA).length + ', consecutivo ODP desde ' + cfg_('CONSEC_ODP', '?') + '.';
+}
+/** Un correo = un usuario. Si esta repetido se queda el renglon con nombre propio (no el derivado del correo, como «danielpaax»),
+ *  se le completan los datos vacios con los del repetido (p. ej. el tipo de comision) y se borran los demas. */
+function unirUsuarios_() {
+  resetCache_();
+  const grupos = {};
+  read_('Usuarios').forEach(function (u) { const k = str_(u.Email).toLowerCase(); if (k) (grupos[k] = grupos[k] || []).push(u); });
+  let n = 0;
+  Object.keys(grupos).forEach(function (k) {
+    const g = grupos[k]; if (g.length < 2) return;
+    const local = k.split('@')[0].toLowerCase();
+    const puntos = function (u) { return (str_(u.Nombre).toLowerCase() !== local ? 4 : 0) + (str_(u.PrefijoCot) ? 2 : 0) + (str_(u.Activo).toUpperCase() !== 'NO' ? 1 : 0); };
+    g.sort(function (a, b) { return puntos(b) - puntos(a) || a._row - b._row; });
+    const keep = g[0], ch = {};
+    ['Rol', 'PrefijoCot', 'TipoComision'].forEach(function (c) { if (!str_(keep[c])) { const o = g.slice(1).filter(function (x) { return str_(x[c]); })[0]; if (o) ch[c] = o[c]; } });
+    if (Object.keys(ch).length) update_('Usuarios', keep, ch);
+    g.slice(1).map(function (x) { return x._row; }).sort(function (a, b) { return b - a; }).forEach(function (r) { sh_('Usuarios').deleteRow(r); n++; });
+    resetCache_();
+  });
+  return n;
 }
 function schemaAlDia_() { return PropertiesService.getScriptProperties().getProperty('ERP_SCHEMA_VER') === SCHEMA_VER && !!ss_().getSheetByName(PREF + 'Config'); }
 /** Instala o repara las hojas si el esquema cambio. La pantalla lanza varias consultas a la vez: sin candado dos de ellas intentaban crear
