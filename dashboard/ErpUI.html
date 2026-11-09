@@ -408,6 +408,7 @@ function clienteForm(id, pre, cb){
   var c = id ? ((E.cache.clientes || []).filter(function(x){ return x.ID === id; })[0] || {}) : (pre || {});
   var puede = P('crm');
   var coms = (E.lk.comerciales || []).map(function(x){ return { v: x.Email, t: x.Nombre || x.Email }; });
+  if (c.Comercial && !coms.some(function(x){ return x.v === c.Comercial; })) { coms.push({ v: c.Comercial, t: c.Comercial + ' (sin usuario en el ERP)' }); }
   var w = ventana(id ? 'Cliente ' + esc(id) : 'Nuevo cliente',
     '<div class="erp-form">' + campo('Nombre', 'Nombre comercial', c.Nombre, 'text', { c2: 1 }) + campo('RFC', 'RFC', c.RFC) + campo('RazonSocial', 'Razón social', c.RazonSocial) +
     campo('Contacto', 'Contacto', c.Contacto) + campo('Telefono', 'Teléfono', c.Telefono) + campo('Email', 'Correo', c.Email, 'email') +

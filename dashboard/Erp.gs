@@ -402,8 +402,8 @@ function a_clientes(u) { needAny_(u, ['crm', 'crm_ver', 'facturas', 'cxc']); ret
 
 function a_saveCliente(u, p) {
   need_(u, 'crm');
-  const nombre = req_(p.Nombre, 'Nombre');
-  let comercial = str_(p.Comercial).toLowerCase() || u.email;
+  const nombre = _clienteCanon_(req_(p.Nombre, 'Nombre'));   // IMJ, LA PERLA y GUADALUPE: un solo nombre
+  let comercial = str_(p.Comercial); comercial = comercial ? (comercial.indexOf('@') > 0 ? comercial.toLowerCase() : comercial) : u.email;   // un vendedor sin usuario conserva su nombre
   if (esComercial_(u)) comercial = u.email;
   const data = { Nombre: nombre, RFC: str_(p.RFC).toUpperCase(), Contacto: str_(p.Contacto), Telefono: str_(p.Telefono), Email: str_(p.Email),
                  Comercial: comercial, DiasCredito: num_(p.DiasCredito), Notas: str_(p.Notas),
@@ -1759,39 +1759,86 @@ function impReserva_(key, prefix, pad, n) {
   const out = []; for (let i = 0; i < n; i++) out.push(prefix + String(ini + i).padStart(pad, '0'));
   return out;
 }
+/** Escribe `map[clave] = valor` en UNA columna de una hoja ERP (una sola escritura). Devuelve cuantas celdas cambio. */
+function impCol_(name, keyCol, col, map) {
+  const s = sh_(name), h = hdr_(name), lr = s.getLastRow(); if (lr < 2) return 0;
+  const ki = h.indexOf(keyCol) + 1, ci = h.indexOf(col) + 1; if (!ki || !ci) return 0;
+  const keys = s.getRange(2, ki, lr - 1, 1).getValues(), rg = s.getRange(2, ci, lr - 1, 1), vals = rg.getValues(); let n = 0;
+  for (let i = 0; i < vals.length; i++) {
+    const k = str_(keys[i][0]);
+    if (Object.prototype.hasOwnProperty.call(map, k)) { const nv = cell_(map[k]); if (String(vals[i][0]) !== String(nv)) { vals[i][0] = nv; n++; } }
+  }
+  if (n) rg.setValues(vals);
+  delete _C[name];
+  return n;
+}
+/** Une clientes que son el mismo (CLIENTE_ALIAS en Code.gs): VENTAS/BASE, clientes del ERP y todo lo que los referencia. */
+function homologarClientes() {
+  asegura_(); resetCache_();
+  const res = { hojas: _homologaClientesHojas_(), fusionados: 0, renombrados: 0, textos: 0 };
+  const lock = LockService.getScriptLock(); lock.waitLock(60000);
+  try {
+    resetCache_();
+    const canonNorm = {}; Object.keys(CLIENTE_ALIAS).forEach(function (k) { canonNorm[CLIENTE_ALIAS[k]] = _clienteClave_(CLIENTE_ALIAS[k]); });
+    const oficiales = {}; Object.keys(CLIENTE_ALIAS).forEach(function (k) { oficiales[CLIENTE_ALIAS[k]] = 1; });
+    const hojasRef = ['Cotizaciones', 'Seguimiento', 'ODP', 'Facturas', 'Negociaciones'];
+    Object.keys(oficiales).forEach(function (canon) {
+      const claves = Object.keys(CLIENTE_ALIAS).filter(function (k) { return CLIENTE_ALIAS[k] === canon; }).concat([_clienteClave_(canon)]);
+      const regs = read_('Clientes').filter(function (c) { return claves.indexOf(_clienteClave_(c.Nombre)) >= 0; });
+      if (!regs.length) return;
+      let meta = regs.filter(function (c) { return _clienteClave_(c.Nombre) === _clienteClave_(canon); })[0] || regs[0];
+      if (meta.Nombre !== canon) { update_('Clientes', meta, { Nombre: canon }); res.renombrados++; }
+      regs.filter(function (c) { return c !== meta; }).forEach(function (dup) {
+        const ch = {}; ['RFC', 'RazonSocial', 'Contacto', 'Telefono', 'Email', 'Comercial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona'].forEach(function (k) { if (!str_(meta[k]) && str_(dup[k])) ch[k] = dup[k]; });
+        if (!str_(meta.Notas) && str_(dup.Notas)) ch.Notas = dup.Notas;
+        if (Object.keys(ch).length) update_('Clientes', meta, ch);
+        hojasRef.forEach(function (h) { read_(h).forEach(function (r) { if (str_(r.ClienteID) === str_(dup.ID)) update_(h, r, { ClienteID: meta.ID, Cliente: canon }); }); });
+        read_('Actividades').forEach(function (a) { if (a.RefTipo === 'cliente' && str_(a.RefID) === str_(dup.ID)) update_('Actividades', a, { RefID: meta.ID, RefTexto: meta.ID + ' · ' + canon }); });
+        deleteWhere_('Clientes', function (c) { return str_(c.ID) === str_(dup.ID); }); resetCache_();
+        meta = find_('Clientes', 'ID', meta.ID);
+        res.fusionados++;
+      });
+    });
+    // textos sueltos con el nombre alterno
+    hojasRef.forEach(function (h) {
+      read_(h).forEach(function (r) { const k = _clienteClave_(r.Cliente); if (CLIENTE_ALIAS.hasOwnProperty(k) && r.Cliente !== CLIENTE_ALIAS[k]) { update_(h, r, { Cliente: CLIENTE_ALIAS[k] }); res.textos++; } });
+    });
+    resetCache_();
+  } finally { lock.releaseLock(); }
+  return res;
+}
+
 /**
  * Carga el historial de VENTAS (negociaciones) y BASE (ordenes de produccion) al ERP SIN duplicar nada en el Dashboard:
- *  - NO escribe en VENTAS ni en BASE (solo las lee).
- *  - Cada ODP/negociacion queda marcada Origen = IMPORTADA: ventaSync_ y recalcODP_ las ignoran, no se mueven, no comisionan
- *    y no entran al embudo del Dashboard.
- *  - Se puede correr de nuevo: lo que ya se cargo se salta. ODP = numero de ODP de VENTAS (las que comparten numero y cliente son una sola).
+ *  - NO agrega ni borra renglones de VENTAS/BASE (solo las lee; "homologar clientes" solo corrige el nombre del cliente).
+ *  - Cada ODP/negociacion queda marcada Origen = IMPORTADA: ventaSync_ y recalcODP_ las ignoran, no se mueven y no entran al embudo del Dashboard.
+ *  - Las negociaciones historicas se tratan como pagadas por TRANSFERENCIA y LIQUIDADAS el dia de la venta: en Pago de comisiones caen en PAGADA
+ *    cuando el vendedor es usuario del ERP con tipo de comision y el cliente comisiona (si el cliente no esta definido, esperan en POR COMISIONAR).
+ *  - Cada cliente toma su Comercial de la columna VENDEDOR de VENTAS (el mas frecuente), sea o no usuario del ERP.
+ *  - Se puede correr de nuevo: lo cargado se salta y solo se completan datos faltantes.
  * Un renglon de VENTAS y su renglon de BASE comparten ID: asi se liga cada produccion con su venta.
  */
 function importarHistorico(opts) {
   opts = opts || {};
   asegura_(); resetCache_();
+  if (!opts.simular) homologarClientes();
   const lock = LockService.getScriptLock(); lock.waitLock(60000);
   try {
     resetCache_();
-    const hoy = hoy_(), ventas = _leerVentas_(), base = _leerBase_(), res = { odp: 0, neg: 0, cli: 0, det: 0, saltadas: 0, base: 0, sinVenta: 0 };
-    let yo = ''; try { yo = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { yo = ''; }
-    if (!yo) yo = comAdmins_()[0] || '';
+    const hoy = hoy_(), ventas = _leerVentas_(), base = _leerBase_(), res = { odp: 0, neg: 0, cli: 0, det: 0, base: 0, sinVenta: 0, actualizadas: 0, comercial: 0, porDefinir: 0 };
+    const nomCli = function (t) { return _clienteCanon_(str_(t).trim()); };
     const baseId = {}; base.forEach(function (b) { if (b.id) baseId[b.id] = b; });
     // ---- grupos: una ODP por (numero de ODP, cliente)
-    const grupos = [], porClave = {}, usados = {}, folioDe = {};
-    function folioLibre_(f) { let k = f, i = 1; while (usados[k] || folioDe[k]) { i++; k = f + '-' + i; } return k; }
+    const grupos = [], porClave = {}, usados = {};
+    function folioLibre_(f) { let k = f, i = 1; while (usados[k]) { i++; k = f + '-' + i; } return k; }
     ventas.forEach(function (v) {
-      const num = str_(v.odp), cli = impNorm_(v.cliente);
+      const num = str_(v.odp), cli = impNorm_(nomCli(v.cliente));
       const clave = num ? 'O|' + num + '|' + cli : 'V|' + v.id;
       let g = porClave[clave];
-      if (!g) {
-        const f = folioLibre_(num || ('H' + String(v.id).padStart(4, '0')));
-        usados[f] = 1; g = { folio: f, ventas: [], base: [] }; porClave[clave] = g; grupos.push(g);
-      }
+      if (!g) { const f = folioLibre_(num || ('H' + String(v.id).padStart(4, '0'))); usados[f] = 1; g = { folio: f, ventas: [], base: [] }; porClave[clave] = g; grupos.push(g); }
       g.ventas.push(v);
       if (v.id && baseId[v.id]) { g.base.push(baseId[v.id]); baseId[v.id].__uso = 1; }
     });
-    // renglones de BASE sin venta con el mismo ID: se agrupan por su orden
     base.forEach(function (b) {
       if (b.__uso) return;
       res.sinVenta++;
@@ -1801,30 +1848,45 @@ function importarHistorico(opts) {
       g.base.push(b);
     });
     res.base = base.length;
-    // ---- lo que ya existe
-    const odpEx = {}; read_('ODP').forEach(function (o) { odpEx[str_(o.Folio)] = 1; });
-    const negEx = {}; read_('Negociaciones').forEach(function (n) { if (str_(n.OrigenRef)) negEx[str_(n.OrigenRef)] = 1; });
-    const nuevos = grupos.filter(function (g) { return !odpEx[g.folio] || !negEx['ODP:' + g.folio]; });
-    // ---- clientes
-    const cliEx = {}; read_('Clientes').forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; if (str_(c.RazonSocial)) cliEx[impNorm_(c.RazonSocial)] = c; });
-    const nombreCli = function (g) { const v = g.ventas[0], b = g.base[0]; return str_(v ? v.cliente : (b ? b.cliente : '')).trim(); };
-    const faltan = {}; nuevos.forEach(function (g) { const n = nombreCli(g); if (n && !cliEx[impNorm_(n)]) faltan[impNorm_(n)] = n; });
-    const claves = Object.keys(faltan);
-    if (claves.length) {
-      const ids = impReserva_('SEQ_CLIENTE', 'CL-', 4, claves.length), filas = claves.map(function (k, i) {
-        return { ID: ids[i], Nombre: faltan[k], DiasCredito: 0, FechaAlta: hoy, Notas: 'Alta automática por la carga histórica de VENTAS', Origen: 'IMPORTADO' }; });
-      insertMany_('Clientes', filas); filas.forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; }); res.cli = filas.length;
-    }
+    const odpEx = {}; read_('ODP').forEach(function (o) { odpEx[str_(o.Folio)] = o; });
+    const negEx = {}; read_('Negociaciones').forEach(function (n) { if (str_(n.OrigenRef)) negEx[str_(n.OrigenRef)] = n; });
     // ---- usuarios por nombre de vendedor
     const us = read_('Usuarios');
     const usuarioDe = function (nombre) {
       const t = impNorm_(nombre); if (!t) return null;
       return us.filter(function (x) { const n = impNorm_(x.Nombre); return n === t || n.indexOf(t + ' ') === 0; })[0] || null;
     };
-    const odpRows = [], detRows = [], negRows = [];
-    const idsNeg = impReserva_('SEQ_NEG', 'NG-', 5, nuevos.filter(function (g) { return !negEx['ODP:' + g.folio]; }).length); let kn = 0;
-    nuevos.forEach(function (g) {
-      const V = g.ventas, B = g.base, c = cliEx[impNorm_(nombreCli(g))] || {};
+    const nombreCli = function (g) { const v = g.ventas[0], b = g.base[0]; return nomCli(v ? v.cliente : (b ? b.cliente : '')); };
+    // ---- clientes
+    const cliEx = {}; read_('Clientes').forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; if (str_(c.RazonSocial)) cliEx[impNorm_(c.RazonSocial)] = c; });
+    const faltan = {}; grupos.forEach(function (g) { const n = nombreCli(g); if (n && !cliEx[impNorm_(n)]) faltan[impNorm_(n)] = n; });
+    // comercial de cada cliente: el vendedor mas frecuente en VENTAS (usuario del ERP -> su correo; si no existe como usuario, su nombre)
+    const cuenta = {};
+    ventas.forEach(function (v) { const c = impNorm_(nomCli(v.cliente)), vd = str_(v.vendedor).trim(); if (!c || !vd) return; const m = cuenta[c] = cuenta[c] || {}; m[vd] = (m[vd] || 0) + 1; });
+    const comercialDe = function (cli) {
+      const m = cuenta[impNorm_(cli)] || {}; let best = '', n = 0;
+      Object.keys(m).forEach(function (k) { if (m[k] > n) { n = m[k]; best = k; } });
+      if (!best) return '';
+      const u = usuarioDe(best); return u ? str_(u.Email).toLowerCase() : best.toUpperCase();
+    };
+    const claves = Object.keys(faltan);
+    if (!opts.simular && claves.length) {
+      const ids = impReserva_('SEQ_CLIENTE', 'CL-', 4, claves.length), filas = claves.map(function (k, i) {
+        return { ID: ids[i], Nombre: faltan[k], Comercial: comercialDe(faltan[k]), DiasCredito: 0, FechaAlta: hoy, Notas: 'Alta automática por la carga histórica de VENTAS', Origen: 'IMPORTADO' }; });
+      insertMany_('Clientes', filas); filas.forEach(function (c) { cliEx[impNorm_(c.Nombre)] = c; });
+    }
+    res.cli = claves.length;
+    // clientes existentes sin comercial: se completa con el vendedor de VENTAS
+    const mapCom = {};
+    read_('Clientes').forEach(function (c) { if (!str_(c.Comercial)) { const cm = comercialDe(c.Nombre); if (cm) mapCom[str_(c.ID)] = cm; } });
+    res.comercial = Object.keys(mapCom).length;
+    if (!opts.simular && res.comercial) impCol_('Clientes', 'ID', 'Comercial', mapCom);
+    // ---- ODP, partidas y negociaciones
+    const odpRows = [], detRows = [], negRows = [], updNeg = { f: {}, e: {}, l: {}, r: {}, n: {}, c: {} }, updOdp = {};
+    const nuevasNeg = grupos.filter(function (g) { return !negEx['ODP:' + g.folio]; }).length;
+    const idsNeg = opts.simular ? [] : impReserva_('SEQ_NEG', 'NG-', 5, nuevasNeg); let kn = 0;
+    grupos.forEach(function (g) {
+      const V = g.ventas, B = g.base, cn = nombreCli(g), c = cliEx[impNorm_(cn)] || {};
       const fechas = V.map(function (v) { return v.fecha; }).concat(B.map(function (b) { return b.fecha; })).filter(Boolean).sort();
       const fecha = fechas[0] || hoy;
       const fprod = V.map(function (v) { return v.fprod; }).concat(B.map(function (b) { return b.fecha; })).filter(Boolean).sort().pop() || fecha;
@@ -1833,10 +1895,11 @@ function importarHistorico(opts) {
       const m2p = r2_(S('m2p')), m2u = r2_(S('m2r')), total = r2_(cMat + maq + mo + otros), util = r2_(venta - total), merma = m2u > 0 ? Math.max(0, r2_(m2u - m2p)) : 0;
       const primero = function (k) { const x = V.filter(function (v) { return str_(v[k]); })[0]; return x ? str_(x[k]) : ''; };
       const uniq = function (arr) { const o = []; arr.forEach(function (x) { x = str_(x); if (x && o.indexOf(x) < 0) o.push(x); }); return o; };
-      const vendedor = primero('vendedor'), uv = usuarioDe(vendedor), proyecto = primero('proyecto') || str_(B[0] && B[0].cliente) || nombreCli(g);
+      const vendedor = primero('vendedor'), uv = usuarioDe(vendedor), proyecto = primero('proyecto') || str_(B[0] && B[0].cliente) || cn;
+      const quien = uv ? str_(uv.Email).toLowerCase() : vendedor.toUpperCase();   // vendedor que no es usuario: queda su nombre (sirve para metricas e informes)
       const bIds = B.map(function (b) { return b.id; }).filter(Boolean);
       if (!odpEx[g.folio]) {
-        odpRows.push({ Folio: g.folio, Fecha: fecha, Cotizacion: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || nombreCli(g), Comercial: uv ? str_(uv.Email).toLowerCase() : '', Descripcion: proyecto,
+        odpRows.push({ Folio: g.folio, Fecha: fecha, Cotizacion: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || cn, Comercial: quien, Descripcion: proyecto,
           M2Vendidos: m2p, PrecioVenta: venta, FechaEntrega: fprod, Estatus: 'Cerrada', Facturado: 0, CostoMaterial: cMat, CostoTinta: 0, CostoMO: mo, CostoMaquila: maq, CostoOtros: otros,
           CostoTotal: total, Utilidad: util, Margen: venta ? r4_(util / venta) : 0, M2Usados: m2u, MermaM2: merma, MermaPct: m2u > 0 ? r4_(merma / m2u) : 0, CostoMerma: cMer,
           Factura: uniq(V.map(function (v) { return v.factura; })).join(' / '), Proyecto: proyecto, TipoProyecto: primero('tipo'), AgenteVentas: vendedor,
@@ -1848,20 +1911,43 @@ function importarHistorico(opts) {
           const m2 = /^M(T)?2$/.test(un) ? r4_(cant) : '', pz = /^(PZ|PIEZA|PIEZAS)$/.test(un) ? cant : '';
           detRows.push({ ODP: g.folio, Linea: i + 1, Piezas: pz, Ancho: '', Alto: '', M2: m2, Material: str_(x.material), Maquina: str_(x.maquina), Archivo: '', Acabados: esB ? [x.ac1, x.ac2, x.ac3].filter(Boolean).join(', ') : '' });
         });
+      } else if (esHistorica_(odpEx[g.folio])) {
+        if (str_(odpEx[g.folio].Comercial) !== quien) updOdp[g.folio] = quien;
+        if (c.ID && str_(odpEx[g.folio].ClienteID) !== c.ID) updOdp[g.folio] = quien;
       }
-      if (!negEx['ODP:' + g.folio]) {
-        const email = uv ? str_(uv.Email).toLowerCase() : yo;
-        const cobrado = V.length > 0 && V.every(function (v) { return str_(v.cobro).toUpperCase() === 'COBRADO'; });
-        negRows.push({ ID: idsNeg[kn++], Nombre: proyecto, Monto: venta, Fecha: fecha, Hora: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || nombreCli(g), ResponsableEmail: email, ResponsableNombre: vendedor || (uv ? str_(uv.Nombre) : ''),
-          Etapa: 'TERMINADO', Cotizacion: '', ODP: g.folio, EtapaDesde: fecha, CreadoPor: email, ActualizadoEn: hoy,
+      const ref = 'ODP:' + g.folio, ne = negEx[ref];
+      if (!ne) {
+        negRows.push({ ID: idsNeg[kn++], Nombre: proyecto, Monto: venta, Fecha: fecha, Hora: '', ClienteID: c.ID || '', Cliente: str_(c.Nombre) || cn, ResponsableEmail: quien, ResponsableNombre: vendedor || (uv ? str_(uv.Nombre) : ''),
+          Etapa: 'TERMINADO', Cotizacion: '', ODP: g.folio, EtapaDesde: fecha, CreadoPor: quien, ActualizadoEn: hoy,
           Historial: JSON.stringify([{ f: hoy + ' ' + negHora_(), p: 'carga-historica', n: 'Carga histórica', t: 'Importada de VENTAS (renglones ' + V.map(function (v) { return v.id; }).join(', ') + '). Solo consulta.' }]),
-          FormaPago: impFormaPago_(primero('metodo')), EstatusPago: cobrado ? 'LIQUIDADO' : '', LiquidadoEn: '', Origen: 'IMPORTADA', OrigenRef: 'ODP:' + g.folio });
+          FormaPago: 'transferencia', EstatusPago: 'LIQUIDADO', LiquidadoEn: fecha, Origen: 'IMPORTADA', OrigenRef: ref });
         res.neg++;
+      } else if (esHistorica_(ne)) {
+        updNeg.f[ref] = 'transferencia'; updNeg.e[ref] = 'LIQUIDADO'; updNeg.l[ref] = fecha; updNeg.r[ref] = quien; updNeg.n[ref] = vendedor || (uv ? str_(uv.Nombre) : ''); updNeg.c[ref] = quien;
       }
     });
-    if (opts.simular) return res;
+    if (opts.simular) { res.actualizadas = Object.keys(updNeg.f).length; return res; }
     insertMany_('ODP', odpRows); insertMany_('ODPDetalle', detRows); insertMany_('Negociaciones', negRows);
-    res.det = detRows.length; resetCache_();
+    res.det = detRows.length;
+    // negociaciones historicas ya cargadas: se completan pago, vendedor y cliente
+    res.actualizadas = impCol_('Negociaciones', 'OrigenRef', 'FormaPago', updNeg.f) + impCol_('Negociaciones', 'OrigenRef', 'EstatusPago', updNeg.e) + impCol_('Negociaciones', 'OrigenRef', 'LiquidadoEn', updNeg.l) +
+      impCol_('Negociaciones', 'OrigenRef', 'ResponsableEmail', updNeg.r) + impCol_('Negociaciones', 'OrigenRef', 'ResponsableNombre', updNeg.n) + impCol_('Negociaciones', 'OrigenRef', 'CreadoPor', updNeg.c);
+    impCol_('ODP', 'Folio', 'Comercial', updOdp);
+    // clientes: nombre oficial en lo ya cargado (ClienteID correcto tras la fusion)
+    resetCache_();
+    // aviso y tarea para definir que clientes comisionan
+    const pend = read_('Clientes').filter(function (c) { return !str_(c.Comisiona); });
+    res.porDefinir = pend.length;
+    const adm = comAdmins_();
+    if (pend.length && adm.length) {
+      const yaTarea = read_('Actividades').some(function (a) { return a.Estado !== 'TERMINADAS' && /^Definir qué clientes comisionan/.test(a.Titulo); });
+      if (!yaTarea) {
+        const sis = { email: 'carga-historica', nombre: 'Carga histórica', rol: 'ADMIN' };
+        const act = actCrearInterna_(sis, { Titulo: 'Definir qué clientes comisionan (' + pend.length + ' por definir)', Descripcion: 'La carga histórica de VENTAS dejó ' + pend.length + ' clientes sin definir. Entra a Comercial → Pago de comisiones → «Clientes por definir» y marca SÍ o NO. Al marcar SÍ, las negociaciones históricas de sus vendedores pasan a PAGADA.',
+          Prioridad: 'Alta', ResponsableEmail: adm[0], Participantes: adm.slice(1), Fin: addDays_(hoy, 7) }, true);
+        negNotifica_(adm, sis, 'Define qué clientes comisionan', 'Hay ' + pend.length + ' clientes por definir tras la carga histórica. Se creó la tarea en Actividades.', act.ID);
+      }
+    }
     return res;
   } finally { lock.releaseLock(); }
 }
@@ -2315,24 +2401,26 @@ function comContexto_() {
 }
 /** Una negociacion (de APROBADO en adelante) vista como tarjeta de comisiones. */
 function comItem_(n, cx) {
+  const hist = esHistorica_(n);   // historica: se pago por transferencia al 100%; se liquido el dia de la venta
   const base = num_(n.Monto), creador = str_(n.CreadoPor).toLowerCase(), us = cx.usr[creador];
   const tipo = us ? str_(us.TipoComision).toUpperCase() : '', pct = (tipo && tipo !== 'NINGUNA') ? comPct_(tipo) : null;
   const cli = n.ClienteID ? cx.cli[n.ClienteID] : null, comis = cli ? str_(cli.Comisiona).toUpperCase() : '';
-  const est = str_(n.EstatusPago).toUpperCase() || 'PENDIENTE', liq = str_(n.LiquidadoEn).slice(0, 10), man = cx.man[n.ID];
+  const est = hist ? 'LIQUIDADO' : (str_(n.EstatusPago).toUpperCase() || 'PENDIENTE'), liq = (str_(n.LiquidadoEn) || (hist ? str_(n.Fecha) : '')).slice(0, 10), man = cx.man[n.ID];
   let col = 'POR COMISIONAR', nota = '', pctU = pct, monto = pct !== null ? r2_(base * pct / 100) : null, mes = liq ? liq.slice(0, 7) : '', fechaPago = liq ? comPagoDe_(liq) : '';
   if (man && man.Estado === 'PAGADA') { col = 'PAGADA'; pctU = num_(man.Pct); monto = num_(man.Monto); mes = str_(man.Mes) || mes; fechaPago = str_(man.PagadaEn).slice(0, 10); }
   else if (man && man.Estado === 'NO_APLICA') { col = 'NO APLICA'; nota = 'Marcada por la administración'; }
   else if (tipo === 'NINGUNA') { col = 'NO APLICA'; nota = 'El usuario está omitido de comisiones'; }
+  else if (hist && !us) { col = 'NO APLICA'; nota = 'Vendedor sin usuario en el ERP: no comisiona'; }
   else if (comis === 'NO') { col = 'NO APLICA'; nota = 'Cliente que no comisiona'; }
-  else if (est === 'LIQUIDADO' && comis === 'SI' && pct !== null) { col = 'A PAGO'; }
-  return { ID: n.ID, Nombre: n.Nombre, Cliente: n.Cliente, ClienteID: n.ClienteID, Etapa: n.Etapa, Fecha: str_(n.Fecha).slice(0, 10), Creador: creador, CreadorNombre: us && str_(us.Nombre) ? str_(us.Nombre) : creador,
+  else if (est === 'LIQUIDADO' && comis === 'SI' && pct !== null) { col = hist ? 'PAGADA' : 'A PAGO'; }   // las historicas ya estan pagadas
+  return { ID: n.ID, Nombre: n.Nombre, Cliente: n.Cliente, ClienteID: n.ClienteID, Etapa: n.Etapa, Fecha: str_(n.Fecha).slice(0, 10), Creador: creador, CreadorNombre: us && str_(us.Nombre) ? str_(us.Nombre) : (str_(n.ResponsableNombre) || creador),
            Monto: base, Pct: pctU, Comision: monto, col: col, EstatusPago: est, FormaPago: str_(n.FormaPago), LiquidadoEn: liq, Mes: mes, MesTxt: comMesTxt_(mes), FechaPago: fechaPago, Nota: nota,
-           faltaCliente: comis === '' && col === 'POR COMISIONAR', faltaTipo: tipo === '' && col === 'POR COMISIONAR', sinComprobante: est === 'LIQUIDADO' && !cx.comp[n.ID], tipo: tipo };
+           faltaCliente: comis === '' && col === 'POR COMISIONAR', faltaTipo: tipo === '' && col === 'POR COMISIONAR', sinComprobante: !hist && est === 'LIQUIDADO' && !cx.comp[n.ID], tipo: tipo, historica: hist };
 }
 function a_comisiones(u, p) {
   needAny_(u, ['com_ver', 'neg_ver', 'neg']);
   const admin = esAdminCom_(u.email), filtro = admin ? str_(p.usuario).toLowerCase() : u.email, cx = comContexto_();
-  let items = read_('Negociaciones').filter(function (n) { return n.Etapa !== NEG_PERDIDO && negIdx_(n.Etapa) >= NEG_IDX_APROBADO && !esHistorica_(n); }).map(function (n) { return comItem_(n, cx); });   // las historicas no comisionan
+  let items = read_('Negociaciones').filter(function (n) { return n.Etapa !== NEG_PERDIDO && negIdx_(n.Etapa) >= NEG_IDX_APROBADO; }).map(function (n) { return comItem_(n, cx); });
   if (filtro) items = items.filter(function (i) { return i.Creador === filtro; });
   items.sort(function (a, b) { return (b.Fecha + b.ID) < (a.Fecha + a.ID) ? -1 : 1; });
   const sig = comSiguientePago_(), mesPago = sig.slice(0, 7), r = { venta: 0, proxima: 0, aPago: 0, enEspera: 0, porComisionar: 0, pagada: 0, pagadaN: 0 };
@@ -2348,8 +2436,7 @@ function a_comisiones(u, p) {
   const us = cx.usr[u.email]; out.miTipo = us ? str_(us.TipoComision).toUpperCase() : '';
   if (admin) {
     out.usuarios = negUsuarios_().map(function (x) { const f = cx.usr[x.Email]; return { Email: x.Email, Nombre: x.Nombre, tipo: f ? str_(f.TipoComision).toUpperCase() : '' }; });
-    const usados = {}; read_('Negociaciones').forEach(function (n) { if (!esHistorica_(n) && n.ClienteID) usados[n.ClienteID] = 1; });
-    out.sinDefinir = read_('Clientes').filter(function (c) { return !str_(c.Comisiona) && (str_(c.Origen) !== 'IMPORTADO' || usados[c.ID]); }).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: str_(c.Comercial) }; });
+    out.sinDefinir = read_('Clientes').filter(function (c) { return !str_(c.Comisiona); }).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: str_(c.Comercial) }; });
   }
   return out;
 }
@@ -2368,7 +2455,7 @@ function a_comMover(u, p) {
     negNotifica_([it.Creador], u, 'Tu comisión fue pagada', 'Se pagó tu comisión de «' + n.Nombre + '»: ' + $mx_(it.Comision) + ' (' + it.Pct + '% de ' + $mx_(it.Monto) + ').', n.ID);
     return { ok: true };
   }
-  if (it.col === 'PAGADA') throw new Error('La comisión ya está PAGADA. Para corregirla, primero devuélvela a automático.');
+  if (it.col === 'PAGADA' && !esHistorica_(n)) throw new Error('La comisión ya está PAGADA. Para corregirla, primero devuélvela a automático.');
   const fila2 = { Negociacion: n.ID, Estado: 'NO_APLICA', Usuario: it.Creador, Pct: '', Base: it.Monto, Monto: '', Mes: '', PagadaEn: '', PagadaPor: u.email, Nota: str_(p.Nota), ActualizadoEn: hoy_() };
   if (man) update_('Comisiones', man, fila2); else insert_('Comisiones', fila2);
   return { ok: true };
@@ -2669,7 +2756,7 @@ function clienteDeProspecto(ses, p) {
   return { ID: c.ID, Nombre: c.Nombre, nuevo: true };
 }
 
-return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, importarHistorico: importarHistorico, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, importarHistorico: importarHistorico, homologarClientes: homologarClientes, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================
@@ -2710,13 +2797,19 @@ function erpImportarDatos() {
   try { SpreadsheetApp.getUi().alert('Importación del ERP\n\n' + msg); } catch (e) { /* sin interfaz */ }
   return msg;
 }
+function erpHomologarClientes() {
+  var r = ERP.homologarClientes();
+  var msg = 'Celdas corregidas en VENTAS/BASE: ' + r.hojas + '\nClientes del ERP unidos: ' + r.fusionados + ' · renombrados: ' + r.renombrados + '\nTextos corregidos en el ERP: ' + r.textos;
+  try { SpreadsheetApp.getUi().alert('Clientes homologados', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { /* sin interfaz */ }
+  return r;
+}
 function erpImportarHistorico() {
   var ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
   var sim = ERP.importarHistorico({ simular: true });
   var msg = 'Se cargarán al ERP:\n• ' + sim.neg + ' negociaciones (de VENTAS, etapa TERMINADO)\n• ' + sim.odp + ' órdenes de producción (de BASE, ' + sim.base + ' renglones)\n• ' + sim.cli + ' clientes nuevos\n\nNo se escribe nada en VENTAS ni en BASE: el Dashboard no cambia. Lo que ya estaba cargado se salta.';
   if (ui) { if (ui.alert('Cargar historial al ERP', msg + '\n\n¿Continuar?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return sim; }
   var r = ERP.importarHistorico();
-  if (ui) { ui.alert('Listo', 'Negociaciones: ' + r.neg + '\nODP: ' + r.odp + ' (' + r.det + ' partidas)\nClientes nuevos: ' + r.cli, ui.ButtonSet.OK); }
+  if (ui) { ui.alert('Listo', 'Negociaciones nuevas: ' + r.neg + ' (completadas: ' + r.actualizadas + ')\nODP: ' + r.odp + ' (' + r.det + ' partidas)\nClientes nuevos: ' + r.cli + ' · con comercial asignado: ' + r.comercial + '\nClientes por definir si comisionan: ' + r.porDefinir, ui.ButtonSet.OK); }
   return r;
 }
 function erpResincronizar() {

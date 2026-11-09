@@ -2356,6 +2356,36 @@ function listarVentas(filtro, clave) {
   return { total: total, filas: res };
 }
 
+/* Clientes que son el MISMO con distinto nombre: clave = nombre normalizado (mayusculas, sin acentos ni signos), valor = nombre oficial.
+   Se aplica al capturar ventas, al dar de alta clientes en el ERP y en "Homologar clientes". Para sumar otro duplicado, agregalo aqui. */
+var CLIENTE_ALIAS = {
+  'IMAGENES MOVILES DE JALISCO': 'IMJ',
+  'FIBRA SHOP ADMINISTRACION PLAZA LA PERLA': 'LA PERLA',
+  'GUADALUOE': 'GUADALUPE'
+};
+function _clienteClave_(t) { return String(t == null ? '' : t).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
+function _clienteCanon_(nombre) {
+  var k = _clienteClave_(nombre);
+  return CLIENTE_ALIAS.hasOwnProperty(k) ? CLIENTE_ALIAS[k] : String(nombre == null ? '' : nombre).trim();
+}
+/** Reescribe en VENTAS (y en BASE si ahi hay el nombre del cliente) los nombres alternos por el oficial. Devuelve cuantas celdas cambio. */
+function _homologaClientesHojas_() {
+  var n = 0;
+  [[CFG.HOJA_VENTAS, CV.CLIENTE], [CFG.HOJA_BASE, COL.CLIENTE_OT]].forEach(function (p) {
+    var h = _hoja_(p[0]), ult = h.getLastRow(); if (ult < 2) { return; }
+    var rg = h.getRange(2, p[1], ult - 1, 1), v = rg.getValues(), cambio = false;
+    for (var i = 0; i < v.length; i++) {
+      var x = v[i][0]; if (typeof x !== 'string' || !x) { continue; }
+      var k = _clienteClave_(x);
+      if (CLIENTE_ALIAS.hasOwnProperty(k) && x !== CLIENTE_ALIAS[k]) { v[i][0] = CLIENTE_ALIAS[k]; n++; cambio = true; }
+    }
+    if (cambio) { rg.setValues(v); }
+  });
+  try { _limpiaCacheVentas_(); } catch (e) { /* nada */ }
+  try { _limpiaCacheBase_(); } catch (e2) { /* nada */ }
+  return n;
+}
+
 function guardarVenta(d, clave) {
   var ses = _ses_(clave, true);
   _exigeVenta_(ses, true);
@@ -2366,7 +2396,7 @@ function guardarVenta(d, clave) {
   var tar = _leerTarifas_();
   var fecha    = _texto_(d.fecha, 10);
   var fprod    = _texto_(d.fprod, 10);
-  var cliente  = _texto_(d.cliente, 80).toUpperCase().replace(/\s+/g, ' ');
+  var cliente  = _clienteCanon_(_texto_(d.cliente, 80).toUpperCase().replace(/\s+/g, ' '));
   var proyecto = _texto_(d.proyecto, 160);
   var odc      = _texto_(d.odc, 30);
   var odp      = _texto_(d.odp, 30);
@@ -2850,6 +2880,7 @@ function onOpen() {
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
         .addItem('Cargar historial (VENTAS y BASE) al ERP', 'erpImportarHistorico')
+        .addItem('Homologar clientes duplicados (IMJ, LA PERLA, GUADALUPE)', 'erpHomologarClientes')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar')
         .addItem('Autorizar archivos grandes (Negociaciones, 100 MB)', 'erpAutorizarArchivos'))
       .addSubMenu(SpreadsheetApp.getUi().createMenu('Migración de propietario')
