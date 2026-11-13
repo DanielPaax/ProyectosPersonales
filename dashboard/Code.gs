@@ -798,6 +798,16 @@ function _leerCatalogos_() {
     var tn = _leerTarifas_().nombres;
     if (tn && tn.length) { out.MATERIAL_CATALOGO = out.MATERIAL || []; out.MATERIAL = tn.slice(); }
   } catch (e) { /* sin TARIFAS: se usa la lista de CATALOGOS */ }
+  /* ACABADO igual: la tabla ERP_Acabados (ERP > Administracion > Costos de acabados) manda. Asi cotizaciones, ODP y captura de produccion
+     ofrecen siempre los mismos acabados. */
+  try {
+    var ha = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ERP_Acabados');
+    if (ha && ha.getLastRow() > 1) {
+      var va = ha.getRange(2, 1, ha.getLastRow() - 1, 5).getValues(), la = [];
+      for (var q = 0; q < va.length; q++) { var nm = String(va[q][0] || '').trim(); if (nm && String(va[q][4] || '').toUpperCase() !== 'NO') { la.push(nm); } }
+      if (la.length) { out.ACABADO_CATALOGO = out.ACABADO || []; out.ACABADO = la; }
+    }
+  } catch (e) { /* sin ERP_Acabados: se usa la lista de CATALOGOS */ }
   try { cache.put('catalogos_v' + JG_SELLO.esquema, JSON.stringify(out), CACHE_CATALOGOS_SEG); } catch (e) {}
   return out;
 }

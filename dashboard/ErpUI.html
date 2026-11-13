@@ -30,6 +30,8 @@
 .erp-navabre{display:none; position:fixed; left:10px; top:74px; z-index:45; background:var(--naranja); color:#fff; border:none; border-radius:999px; padding:9px 16px; font:700 13px Montserrat,sans-serif; cursor:pointer; box-shadow:0 4px 14px rgba(223,74,16,.45)}
 .erp-navabre:hover{background:var(--naranja-d)}
 .erp-navabre.on{display:inline-flex; align-items:center; gap:8px}
+.acOdp{min-width:170px; max-width:260px} .acOdp summary{cursor:pointer; padding:7px 9px; border:1px solid var(--linea); border-radius:8px; background:#fff; font-size:13px}
+.acOdpL{position:absolute; z-index:6; background:#fff; border:1px solid var(--linea); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:6px 10px; max-height:240px; overflow:auto} .acOdpL label{display:block; font-size:13px; padding:3px 0; white-space:nowrap}
 .ng-barra{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:0 0 10px}
 .ng-barra select,.ng-barra input{padding:8px 10px; border:1px solid var(--linea); border-radius:8px; font:inherit; background:#fff; min-width:0}
 .ng-tablero{display:flex; gap:12px; overflow-x:auto; padding-bottom:14px; align-items:flex-start}
@@ -446,7 +448,8 @@ function pintaCots(){
 /* Partidas: cada una es un <tbody class="par"> con dos renglones (datos y opciones). Los precios, M2 y unidades los calcula el
    servidor (cotCalcular) con la tarifa de TARIFAS, la tinta, el multiplicador UV y los acabados; aqui solo se muestran. */
 function acabDef(n){ var s = String(n || '').toUpperCase(); return (E.init.cat.ACABADOS_COT || []).filter(function(x){ return x.nombre.toUpperCase() === s; })[0] || null; }
-function acabPide(n){ var d = acabDef(n); return !!d && d.unidad === 'ojillo'; }
+function acabPide(n){ var d = acabDef(n); return !!d && (d.unidad === 'ojillo' || d.unidad === 'manual'); }
+function acabPh(n){ var d = acabDef(n); return d && d.unidad === 'manual' ? '$ por m²' : 'ojillos por pieza'; }
 function partidaHtml(l, bloq){
   l = l || {};
   var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lamina', 'pz'], imps = E.init.cat.IMPRESIONES || ['Gran Formato', 'HD', 'UV', 'Sin impresión'];
@@ -456,7 +459,7 @@ function partidaHtml(l, bloq){
   var ac = [1, 2, 3].map(function(i){
     var n = l['Acabado' + i] || '';
     return '<span class="ac"><select data-c="Acabado' + i + '"><option value="">Acabado ' + i + '</option>' + (E.init.cat.ACABADOS_COT || []).map(function(x){ return '<option' + (x.nombre === n ? ' selected' : '') + '>' + esc(x.nombre) + '</option>'; }).join('') + '</select>' +
-      '<input data-c="Param' + i + '" type="number" step="1" value="' + esc(l['Param' + i] || '') + '" style="' + (acabPide(n) ? '' : 'display:none') + '" placeholder="ojillos por pieza"></span>';
+      '<input data-c="Param' + i + '" type="number" step="1" value="' + esc(l['Param' + i] || '') + '" style="' + (acabPide(n) ? '' : 'display:none') + '" placeholder="' + acabPh(n) + '"></span>';
   }).join('');
   return '<tbody class="par"><tr><td><input data-c="Descripcion" list="erpMats" value="' + esc(l.Descripcion || '') + '" placeholder="Escribe para buscar el material" style="min-width:230px"></td>' +
     '<td><input data-c="Ancho" type="number" step="0.01" value="' + esc(l.Ancho || '') + '"></td><td><input data-c="Alto" type="number" step="0.01" value="' + esc(l.Alto || '') + '"></td>' +
@@ -552,7 +555,7 @@ function cotForm(folio, pre, after){
         if (cc === 'Impresion') { tb.querySelector('.uvx').style.display = ev.target.value === 'UV' ? '' : 'none'; }
         if (/^Acabado\d$/.test(cc)) {
           var pi = ev.target.parentNode.querySelector('input');
-          pi.style.display = acabPide(ev.target.value) ? '' : 'none'; pi.value = ''; pi.placeholder = 'ojillos por pieza';
+          pi.style.display = acabPide(ev.target.value) ? '' : 'none'; pi.value = ''; pi.placeholder = acabPh(ev.target.value);
         }
         cotRecalc();
       });
@@ -1760,13 +1763,26 @@ function pintaOdps(){
     rows.slice(0, 300).map(function(o){ return '<tr class="clic" onclick="erpVista(\'odpdet\',\'' + esc(o.Folio) + '\')"><td><b>' + esc(o.Folio) + '</b></td><td>' + fFecha(o.Fecha) + '</td><td>' + esc(o.Cliente) + '</td><td>' + esc(o.Proyecto || o.Descripcion) + '</td><td>' + fFecha(o.FechaEntrega) + '</td><td class="n">' + $n(o.M2Vendidos) + '</td>' +
       (E.init.cfg.VE_PRECIO ? '<td class="n">' + $m(o.Facturado > 0 ? o.Facturado : o.PrecioVenta) + '</td>' : '') + (vc ? '<td class="n">' + (o.CostoTotal ? $p(o.Margen) : '—') + '</td><td class="n">' + (o.M2Usados ? $p(o.MermaPct) : '—') + '</td>' : '') + '<td>' + ePill(o.Estatus) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="erp-vacio">Sin ODP.</div>';
 }
+/* Acabados de la partida de ODP: la MISMA lista de la cotizacion y de produccion (tabla de costos). Se guardan separados por coma. */
+function acabadosOdpHtml(txt){
+  var lista = E.cat.ACABADO || [], sel = String(txt || '').split(/\s*,\s*/).filter(Boolean);
+  var extra = sel.filter(function(x){ return lista.indexOf(x) < 0; });
+  var todos = lista.concat(extra);
+  return '<input type="hidden" data-c="Acabados" value="' + esc(sel.join(', ')) + '"><details class="acOdp"><summary>' + esc(sel.length ? sel.join(', ') : 'Elegir acabados') + '</summary><div class="acOdpL">' +
+    todos.map(function(x){ return '<label><input type="checkbox" value="' + esc(x) + '"' + (sel.indexOf(x) >= 0 ? ' checked' : '') + ' onchange="odpAcab(this)"> ' + esc(x) + '</label>'; }).join('') + '</div></details>';
+}
+function odpAcab(cb){
+  var d = cb.closest('details'), h = d.parentNode.querySelector('input[data-c=Acabados]');
+  var v = [].map.call(d.querySelectorAll('input:checked'), function(i){ return i.value; });
+  h.value = v.join(', '); d.querySelector('summary').textContent = v.length ? v.join(', ') : 'Elegir acabados';
+}
 function lineaOdpHtml(l){
   l = l || {};
   var mats = E.cat.MATERIAL || [], maqs = E.cat.MAQUINA || [];
   return '<tr><td><input data-c="Piezas" type="number" step="1" value="' + esc(l.Piezas || '') + '" style="width:64px"></td><td><input data-c="Ancho" type="number" step="0.01" value="' + esc(l.Ancho || '') + '" style="width:72px"></td><td><input data-c="Alto" type="number" step="0.01" value="' + esc(l.Alto || '') + '" style="width:72px"></td>' +
     '<td><select data-c="Material">' + eOpts(mats, l.Material, '—') + (l.Material && mats.indexOf(l.Material) < 0 ? '<option selected>' + esc(l.Material) + '</option>' : '') + '</select></td>' +
     '<td><select data-c="Maquina">' + eOpts(maqs, l.Maquina, '—') + (l.Maquina && maqs.indexOf(l.Maquina) < 0 ? '<option selected>' + esc(l.Maquina) + '</option>' : '') + '</select></td>' +
-    '<td><input data-c="Archivo" value="' + esc(l.Archivo || '') + '"></td><td><input data-c="Acabados" value="' + esc(l.Acabados || '') + '"></td><td><button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tr\').remove()">×</button></td></tr>';
+    '<td><input data-c="Archivo" value="' + esc(l.Archivo || '') + '"></td><td>' + acabadosOdpHtml(l.Acabados) + '</td><td><button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tr\').remove()">×</button></td></tr>';
 }
 function odpForm(folio, det){
   var go = function(d){
@@ -1987,7 +2003,7 @@ function usrForm(email){
 
 /* ===================== ADMINISTRACION: costos de acabados y parametros del cotizador ===================== */
 var CS = { d: null };
-var CS_UN = { pz: 'por pieza', m2: 'por m² (con lo que crece)', ml: 'por metro lineal (perímetro)', ojillo: 'por ojillo (pide cuántos por pieza)' };
+var CS_UN = { pz: 'por pieza', m2: 'por m² (con lo que crece)', ml: 'por metro lineal (perímetro)', ojillo: 'por ojillo (pide cuántos por pieza)', manual: 'por m², costo capturado en cada cotización (COSTURA)' };
 var CS_PAR = { COT_MARGEN: 'Margen (0.40 = precio = costo ÷ 0.60)', COT_TINTA_GF: 'Tinta Gran Formato ($ por m²)', COT_TINTA_HD: 'Tinta HD ($ por m²)', COT_TINTA_UV: 'Tinta UV ($ por m²)' };
 function vCostos(m){
   erp('acabados').then(function(d){

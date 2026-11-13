@@ -132,7 +132,7 @@ const CONFIG_DEFAULTS = [
   ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '12';
+const SCHEMA_VER = '13';
 
 
 
@@ -702,9 +702,10 @@ function tipoAcabado_(nombre) {
 function tintaRate_(imp) { return imp === 'UV' ? num_(cfg_('COT_TINTA_UV', '25.35')) : imp === 'HD' ? num_(cfg_('COT_TINTA_HD', '15.35')) : imp === 'Gran Formato' ? num_(cfg_('COT_TINTA_GF', '3.25')) : 0; }
 
 /** Costos de acabados (hoja ERP_Acabados): unidad = pz (x cantidad), m2 (x m2 de la partida, ya con lo que crece), ml (perimetro x cantidad) u ojillo (x ojillos por pieza x cantidad). */
-const ACABADO_UNIDADES = ['pz', 'm2', 'ml', 'ojillo'];
+const ACABADO_UNIDADES = ['pz', 'm2', 'ml', 'ojillo', 'manual'];   // manual = el costo por m² se captura en cada cotizacion (COSTURA)
 const ACABADOS_INICIALES = [['BASTILLA', 'pz', 0, 0], ['OJILLOS', 'ojillo', 2, 0], ['BOLSA 10 CM', 'pz', 0, 50], ['BOLSA 15 CM', 'pz', 0, 70], ['BOLSA 10 CM REFORZADA', 'pz', 0, 100], ['BOLSA 15 CM REFORZADA', 'pz', 0, 140],
   ['BARNIZ UV', 'm2', 100, 0], ['EMPAPELADO Y DEPILADO', 'm2', 30, 0], ['CORTE CNC', 'm2', 10, 0], ['CORTE PLOTTER', 'm2', 10, 0], ['CORTE A MANO', 'm2', 5, 0]];
+const ACABADOS_V13 = [['SOLO REFILADO', 'pz', 0, 0], ['COSTURA', 'manual', 0, 0]];
 function acabadosActivos_() { return read_('Acabados').filter(function (a) { return str_(a.Activo).toUpperCase() !== 'NO' && str_(a.Nombre); }); }
 function acabadosPublicos_() { try { return acabadosActivos_().map(function (a) { return { nombre: str_(a.Nombre), unidad: str_(a.Unidad).toLowerCase(), incremento: num_(a.Incremento) }; }); } catch (e) { return []; } }
 /** Costos del cotizador editables desde Administracion (los de acabados ya viven en la tabla ERP_Acabados). */
@@ -727,6 +728,7 @@ function a_saveAcabado(u, p) {
   if (dup) throw new Error('Ya existe un acabado con ese nombre.');
   if (orig && !ex) throw new Error('No encontré el acabado a editar.');
   if (ex) update_('Acabados', ex, data); else insert_('Acabados', data);
+  try { _limpiaCacheCatalogos_(); } catch (e) { /* nada */ }   // la lista de acabados es la misma en cotizaciones, ODP y produccion
   return { rows: read_('Acabados').map(clean_), publicos: acabadosPublicos_() };
 }
 
@@ -749,6 +751,7 @@ function calcPartida_(t, l, cats) {
     if (acab.some(function (a) { return a.nombre === def.Nombre; })) throw new Error('El acabado "' + def.Nombre + '" está repetido.');
     const un = str_(def.Unidad).toLowerCase(), par = num_(l['Param' + i]);
     if (un === 'ojillo' && !(par > 0)) throw new Error('Indica cuántos ojillos lleva cada pieza.');
+    if (un === 'manual' && !(par > 0)) throw new Error('Captura el costo por m² de ' + def.Nombre + '.');
     ext = Math.max(ext, num_(def.Incremento) / 100);   // la bolsa agrega cm al ancho Y al alto (total, no por lado)
     acab.push({ nombre: def.Nombre, unidad: un, costo: num_(def.Costo), inc: num_(def.Incremento), par: par });
   });
@@ -768,14 +771,14 @@ function calcPartida_(t, l, cats) {
     const mult = (blanca && barniz) ? 3 : (blanca || barniz) ? 2 : 1, sobreTotal = str_(cfg_('COT_MULT_SOBRE', 'TINTA')).toUpperCase() === 'TOTAL';
     cTin = m2 * tintaRate_(imp) * (sobreTotal ? 1 : mult);
     acab.forEach(function (a) {
-      cAca += a.unidad === 'ojillo' ? a.costo * a.par * q : a.unidad === 'm2' ? a.costo * m2 : a.unidad === 'ml' ? a.costo * 2 * (anE + alE) * q : a.costo * q;
+      cAca += a.unidad === 'manual' ? a.par * m2 : a.unidad === 'ojillo' ? a.costo * a.par * q : a.unidad === 'm2' ? a.costo * m2 : a.unidad === 'ml' ? a.costo * 2 * (anE + alE) * q : a.costo * q;
     });
     let costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
     const mg = margenCot_();
     importe = r2_(costo / (1 - mg)); precio = base ? r4_(importe / base) : 0;
   }
   const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
-    return a.nombre + (a.unidad === 'ojillo' ? ' (' + a.par + ' por pieza)' : '') + (a.inc > 0 ? ' (+' + a.inc + ' cm al ancho y al alto)' : ''); })).join(' · ');
+    return a.nombre + (a.unidad === 'ojillo' ? ' (' + a.par + ' por pieza)' : a.unidad === 'manual' ? ' ($' + a.par + ' por m²)' : '') + (a.inc > 0 ? ' (+' + a.inc + ' cm al ancho y al alto)' : ''); })).join(' · ');
   return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
            TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det, CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
 }
@@ -1519,7 +1522,12 @@ function instalar() {
     });
   }
   unirUsuarios_();
-  if (read_('Acabados').length === 0) insertMany_('Acabados', ACABADOS_INICIALES.map(function (a) { return { Nombre: a[0], Unidad: a[1], Costo: a[2], Incremento: a[3], Activo: 'SI' }; }));
+  if (read_('Acabados').length === 0) insertMany_('Acabados', ACABADOS_INICIALES.concat(ACABADOS_V13).map(function (a) { return { Nombre: a[0], Unidad: a[1], Costo: a[2], Incremento: a[3], Activo: 'SI' }; }));
+  if (!find_('Config', 'Clave', 'ACABADOS_V13')) {   // una sola vez: regresan SOLO REFILADO y COSTURA
+    ACABADOS_V13.forEach(function (a) { if (!find_('Acabados', 'Nombre', a[0])) insert_('Acabados', { Nombre: a[0], Unidad: a[1], Costo: a[2], Incremento: a[3], Activo: 'SI' }); });
+    insert_('Config', { Clave: 'ACABADOS_V13', Valor: '1', Descripcion: 'Marca interna: acabados SOLO REFILADO y COSTURA agregados' });
+  }
+  try { _limpiaCacheCatalogos_(); } catch (e) { /* nada */ }
   PropertiesService.getScriptProperties().setProperty('ERP_SCHEMA_VER', SCHEMA_VER);
   return 'ERP listo: hojas ' + Object.keys(SCHEMA).length + ', consecutivo ODP desde ' + cfg_('CONSEC_ODP', '?') + '.';
 }
