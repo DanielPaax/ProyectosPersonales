@@ -40,6 +40,7 @@ var ERP = (function () {
 // ==================== ESQUEMA ====================
 const SCHEMA = {
   Config:        ['Clave', 'Valor', 'Descripcion'],
+  Acabados:      ['Nombre', 'Unidad', 'Costo', 'Incremento', 'Activo'],
   Usuarios:      ['Email', 'Nombre', 'Rol', 'Activo', 'PrefijoCot', 'TipoComision'],
   Clientes:      ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'Comercial', 'DiasCredito', 'FechaAlta', 'Notas',
                   'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona', 'Origen'],
@@ -131,7 +132,7 @@ const CONFIG_DEFAULTS = [
   ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '11';
+const SCHEMA_VER = '12';
 
 
 
@@ -183,7 +184,7 @@ const ACTIONS = {
   savePagoNeg: a_savePagoNeg, negSubirPago: a_negSubirPago, comisiones: a_comisiones, comMover: a_comMover, comCliente: a_comCliente,
   actividades: a_actividades, actDetalle: a_actDetalle, saveAct: a_saveAct, moveAct: a_moveAct, actChecklist: a_actChecklist, delAct: a_delAct,
   actComentar: a_actComentar, actSubir: a_actSubir, actArchivo: a_actArchivo, notifs: a_notifs, notifLeer: a_notifLeer,
-  usuarios: a_usuarios, saveUsuario: a_saveUsuario, config: a_config, saveConfig: a_saveConfig,
+  acabados: a_acabados, saveAcabado: a_saveAcabado, usuarios: a_usuarios, saveUsuario: a_saveUsuario, config: a_config, saveConfig: a_saveConfig,
 };
 
 
@@ -289,7 +290,7 @@ function a_init(u) {
       VE_COSTOS: veCostos_(u), VE_PRECIO: vePrecio_(u),
     },
     cat: { UNIDADES_COT: UNIDADES_COT, DESCUENTOS_COT: DESCUENTOS_COT, TIPOS_MATERIAL: TIPOS_MATERIAL, UNIDADES: UNIDADES, TIPOS_COSTO: TIPOS_COSTO, EST_COT: EST_COT, EST_ODP: EST_ODP,
-           TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_SEG: TIPOS_SEG, ROLES_ERP: Object.keys(ROLES_ERP) },
+           TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_SEG: TIPOS_SEG, ACABADOS_COT: acabadosPublicos_(), ROLES_ERP: Object.keys(ROLES_ERP) },
   };
 }
 
@@ -700,31 +701,58 @@ function tipoAcabado_(nombre) {
 }
 function tintaRate_(imp) { return imp === 'UV' ? num_(cfg_('COT_TINTA_UV', '25.35')) : imp === 'HD' ? num_(cfg_('COT_TINTA_HD', '15.35')) : imp === 'Gran Formato' ? num_(cfg_('COT_TINTA_GF', '3.25')) : 0; }
 
+/** Costos de acabados (hoja ERP_Acabados): unidad = pz (x cantidad), m2 (x m2 de la partida, ya con lo que crece), ml (perimetro x cantidad) u ojillo (x ojillos por pieza x cantidad). */
+const ACABADO_UNIDADES = ['pz', 'm2', 'ml', 'ojillo'];
+const ACABADOS_INICIALES = [['BASTILLA', 'pz', 0, 0], ['OJILLOS', 'ojillo', 2, 0], ['BOLSA 10 CM', 'pz', 0, 50], ['BOLSA 15 CM', 'pz', 0, 70], ['BOLSA 10 CM REFORZADA', 'pz', 0, 100], ['BOLSA 15 CM REFORZADA', 'pz', 0, 140],
+  ['BARNIZ UV', 'm2', 100, 0], ['EMPAPELADO Y DEPILADO', 'm2', 30, 0], ['CORTE CNC', 'm2', 10, 0], ['CORTE PLOTTER', 'm2', 10, 0], ['CORTE A MANO', 'm2', 5, 0]];
+function acabadosActivos_() { return read_('Acabados').filter(function (a) { return str_(a.Activo).toUpperCase() !== 'NO' && str_(a.Nombre); }); }
+function acabadosPublicos_() { try { return acabadosActivos_().map(function (a) { return { nombre: str_(a.Nombre), unidad: str_(a.Unidad).toLowerCase(), incremento: num_(a.Incremento) }; }); } catch (e) { return []; } }
+/** Costos del cotizador editables desde Administracion (los de acabados ya viven en la tabla ERP_Acabados). */
+const COT_PARAMS_OCULTOS = ['COT_OJILLO', 'COT_BASTILLA_CM', 'COT_BOLSA_SELLADO_CM'];
+function a_acabados(u) {
+  need_(u, '*');
+  return { rows: read_('Acabados').map(clean_), unidades: ACABADO_UNIDADES,
+           params: read_('Config').filter(function (c) { return /^COT_/.test(str_(c.Clave)) && COT_PARAMS_OCULTOS.indexOf(str_(c.Clave)) < 0; }).map(clean_) };
+}
+function a_saveAcabado(u, p) {
+  need_(u, '*');
+  const nombre = req_(p.Nombre, 'Nombre').toUpperCase().replace(/\s+/g, ' ').slice(0, 60);
+  const un = inList_(str_(p.Unidad).toLowerCase(), ACABADO_UNIDADES, 'Unidad');
+  const costo = num_(p.Costo), inc = num_(p.Incremento);
+  if (costo < 0 || inc < 0) throw new Error('El costo y el incremento no pueden ser negativos.');
+  const data = { Nombre: nombre, Unidad: un, Costo: r2_(costo), Incremento: inc, Activo: str_(p.Activo).toUpperCase() === 'NO' ? 'NO' : 'SI' };
+  const orig = str_(p.NombreOriginal);
+  const ex = orig ? find_('Acabados', 'Nombre', orig) : null;
+  const dup = read_('Acabados').filter(function (a) { return sinAcentos_(a.Nombre) === sinAcentos_(nombre) && (!ex || a._row !== ex._row); })[0];
+  if (dup) throw new Error('Ya existe un acabado con ese nombre.');
+  if (orig && !ex) throw new Error('No encontré el acabado a editar.');
+  if (ex) update_('Acabados', ex, data); else insert_('Acabados', data);
+  return { rows: read_('Acabados').map(clean_), publicos: acabadosPublicos_() };
+}
+
 /** Calculo de UNA partida. Precio = (material + tinta + acabados) / (1 - margen).
  *  - material: costo de TARIFAS de la unidad (m2, mtl, lamina, pz) x cantidad base; m2 incluye lo que suman bastilla/bolsa.
  *  - tinta: m2 x tarifa (GF 3.25, HD 15.35, UV 25.35); en UV, tinta blanca x2, barniz a registro x2, ambos x3.
- *  - acabados: ojillos = $2 c/u (por pieza x cantidad); bastilla suma cm a cada lado (ancho y alto + 2 x cm);
- *    bolsa suma 2 x cm + sellado a cada lado.
+ *  - acabados: costo y unidad de la tabla ERP_Acabados; las bolsas no cuestan pero agregan cm al ancho y al alto (suben los m2).
  *  Si capturan el precio a mano (PrecioManual) el importe es cantidad base x ese precio. Lanza error si no se puede calcular. */
 function calcPartida_(t, l, cats) {
   const an = num_(l.Ancho), al = num_(l.Alto), q = num_(l.Cantidad) || 1;
   const imp = IMPRESIONES.indexOf(str_(l.Impresion)) >= 0 ? str_(l.Impresion) : 'Gran Formato';
   const blanca = imp === 'UV' && /^(si|sí|1|true|on)$/i.test(str_(l.TintaBlanca)), barniz = imp === 'UV' && /^(si|sí|1|true|on)$/i.test(str_(l.Barniz));
-  // acabados
-  const acab = [], marg = [];
-  let ojillos = 0, ext = 0;
+  // acabados: salen de la tabla ERP_Acabados (Administracion > Costos). Cada uno tiene unidad de cobro, costo y, si aplica, cuanto crece el ancho y el alto.
+  const acab = [], tabla = acabadosActivos_();
+  let ext = 0;
   [1, 2, 3].forEach(function (i) {
     const nom = str_(l['Acabado' + i]); if (!nom) return;
-    const cat = enCatalogo_((cats || {}).ACABADO, nom);
-    if (!cat) throw new Error('El acabado "' + nom + '" no está en el catálogo ACABADO.');
-    if (acab.some(function (a) { return a.nombre === cat; })) throw new Error('El acabado "' + cat + '" está repetido.');
-    const tipo = tipoAcabado_(cat), par = num_(l['Param' + i]);
-    if (tipo === 'ojillos') { if (!(par > 0)) throw new Error('Indica cuántos ojillos lleva cada pieza.'); ojillos += par; }
-    if (tipo === 'bastilla') { const cm = par > 0 ? par : num_(cfg_('COT_BASTILLA_CM', '5')); ext = Math.max(ext, cm / 100); }
-    if (tipo === 'bolsa') { if (!(par > 0)) throw new Error('Indica los cm de la bolsa.'); ext = Math.max(ext, (2 * par + num_(cfg_('COT_BOLSA_SELLADO_CM', '5'))) / 100); }
-    acab.push({ nombre: cat, tipo: tipo, par: par });
+    const def = tabla.filter(function (x) { return sinAcentos_(x.Nombre) === sinAcentos_(nom); })[0];
+    if (!def) throw new Error('El acabado "' + nom + '" no está en la tabla de costos (Administración → Costos de acabados).');
+    if (acab.some(function (a) { return a.nombre === def.Nombre; })) throw new Error('El acabado "' + def.Nombre + '" está repetido.');
+    const un = str_(def.Unidad).toLowerCase(), par = num_(l['Param' + i]);
+    if (un === 'ojillo' && !(par > 0)) throw new Error('Indica cuántos ojillos lleva cada pieza.');
+    ext = Math.max(ext, num_(def.Incremento) / 100);   // la bolsa agrega cm al ancho Y al alto (total, no por lado)
+    acab.push({ nombre: def.Nombre, unidad: un, costo: num_(def.Costo), inc: num_(def.Incremento), par: par });
   });
-  const anE = an + 2 * ext, alE = al + 2 * ext;
+  const anE = an + ext, alE = al + ext;
   const m2 = num_(l.M2) > 0 ? num_(l.M2) : anE * alE * q;
   const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 && costoUnidad_(t, t.cobroPor) ? t.cobroPor : (UNIDADES_COT.filter(function (u) { return costoUnidad_(t, u); })[0] || 'm2'));
   const base = uni === 'm2' ? m2 : uni === 'mtl' ? (alE > 0 ? alE * q : q) : q;
@@ -739,13 +767,15 @@ function calcPartida_(t, l, cats) {
     cMat = base * cu;
     const mult = (blanca && barniz) ? 3 : (blanca || barniz) ? 2 : 1, sobreTotal = str_(cfg_('COT_MULT_SOBRE', 'TINTA')).toUpperCase() === 'TOTAL';
     cTin = m2 * tintaRate_(imp) * (sobreTotal ? 1 : mult);
-    cAca = ojillos * q * num_(cfg_('COT_OJILLO', '2'));
+    acab.forEach(function (a) {
+      cAca += a.unidad === 'ojillo' ? a.costo * a.par * q : a.unidad === 'm2' ? a.costo * m2 : a.unidad === 'ml' ? a.costo * 2 * (anE + alE) * q : a.costo * q;
+    });
     let costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
     const mg = margenCot_();
     importe = r2_(costo / (1 - mg)); precio = base ? r4_(importe / base) : 0;
   }
   const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
-    return a.nombre + (a.tipo === 'ojillos' ? ' (' + a.par + ' por pieza)' : (a.tipo === 'bastilla' || a.tipo === 'bolsa') ? ' (' + (a.par > 0 ? a.par : num_(cfg_('COT_BASTILLA_CM', '5'))) + ' cm)' : ''); })).join(' · ');
+    return a.nombre + (a.unidad === 'ojillo' ? ' (' + a.par + ' por pieza)' : '') + (a.inc > 0 ? ' (+' + a.inc + ' cm al ancho y al alto)' : ''); })).join(' · ');
   return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
            TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det, CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
 }
@@ -1489,6 +1519,7 @@ function instalar() {
     });
   }
   unirUsuarios_();
+  if (read_('Acabados').length === 0) insertMany_('Acabados', ACABADOS_INICIALES.map(function (a) { return { Nombre: a[0], Unidad: a[1], Costo: a[2], Incremento: a[3], Activo: 'SI' }; }));
   PropertiesService.getScriptProperties().setProperty('ERP_SCHEMA_VER', SCHEMA_VER);
   return 'ERP listo: hojas ' + Object.keys(SCHEMA).length + ', consecutivo ODP desde ' + cfg_('CONSEC_ODP', '?') + '.';
 }
@@ -1974,7 +2005,7 @@ function importarHistorico(opts) {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { acabados: 1, usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1, comisiones: 1, actividades: 1, actDetalle: 1, actArchivo: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };

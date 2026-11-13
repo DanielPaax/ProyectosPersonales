@@ -285,7 +285,8 @@ var NAV = [
     { id: 'compras', t: 'Compras y proveedores', ver: function(){ return PA(['compras', 'cxp', 'cxp_ver']); } } ] },
   { sec: 'Administración', items: [
     { id: 'carga', t: 'Carga de material', ver: function(){ return P('material'); } },
-    { id: 'usuarios', t: 'Usuarios del ERP', ver: function(){ return P('*'); } } ] }
+    { id: 'usuarios', t: 'Usuarios del ERP', ver: function(){ return P('*'); } },
+    { id: 'costos', t: 'Costos de acabados', ver: function(){ return P('*'); } } ] }
 ];
 var NAVEST = { min: false, abiertas: {} };   /* siempre arranca con el menu abierto y las secciones plegadas */
 function abrirErp(){
@@ -340,7 +341,7 @@ function erpVista(v, arg){
   var m = eq('erpMain');
   m.innerHTML = '<div class="erp-vacio">Cargando…</div>';
   window.scrollTo(0, 0);
-  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, actividades: vActividades, comisiones: vComisiones, armados: vArmados, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios }[v];
+  var f = { inicio: vInicio, clientes: vClientes, cotizaciones: vCotizaciones, seguimiento: vSeguimiento, odp: vOdp, odpdet: vOdpDet, negociaciones: vNegociaciones, actividades: vActividades, comisiones: vComisiones, armados: vArmados, inventario: vDesarrollo, compras: vDesarrollo, facturas: vFacturas, carga: vCarga, usuarios: vUsuarios, costos: vCostos }[v];
   if (f) { f(m, arg); }
 }
 function vDesarrollo(m){
@@ -444,10 +445,8 @@ function pintaCots(){
 }
 /* Partidas: cada una es un <tbody class="par"> con dos renglones (datos y opciones). Los precios, M2 y unidades los calcula el
    servidor (cotCalcular) con la tarifa de TARIFAS, la tinta, el multiplicador UV y los acabados; aqui solo se muestran. */
-function tipoAcab(n){
-  n = String(n || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return n.indexOf('OJILLO') >= 0 ? 'ojillos' : n.indexOf('BASTILLA') >= 0 ? 'bastilla' : n.indexOf('BOLSA') >= 0 ? 'bolsa' : 'otro';
-}
+function acabDef(n){ var s = String(n || '').toUpperCase(); return (E.init.cat.ACABADOS_COT || []).filter(function(x){ return x.nombre.toUpperCase() === s; })[0] || null; }
+function acabPide(n){ var d = acabDef(n); return !!d && d.unidad === 'ojillo'; }
 function partidaHtml(l, bloq){
   l = l || {};
   var un = E.init.cat.UNIDADES_COT || ['m2', 'mtl', 'lamina', 'pz'], imps = E.init.cat.IMPRESIONES || ['Gran Formato', 'HD', 'UV', 'Sin impresión'];
@@ -455,13 +454,13 @@ function partidaHtml(l, bloq){
   var man = l.M2 && Math.abs(Number(l.M2) - calc) > 0.0001 && !(l.Acabado1 || l.Acabado2 || l.Acabado3) ? '1' : '';
   var imp = l.Impresion || 'Gran Formato', uv = imp === 'UV';
   var ac = [1, 2, 3].map(function(i){
-    var n = l['Acabado' + i] || '', t = tipoAcab(n);
-    return '<span class="ac"><select data-c="Acabado' + i + '"><option value="">Acabado ' + i + '</option>' + (E.cat.ACABADO || []).map(function(x){ return '<option' + (x === n ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' +
-      '<input data-c="Param' + i + '" type="number" step="0.1" value="' + esc(l['Param' + i] || '') + '" style="' + (t === 'otro' || !n ? 'display:none' : '') + '" placeholder="' + (t === 'ojillos' ? 'ojillos por pieza' : t === 'bastilla' ? 'cm (5)' : 'cm') + '"></span>';
+    var n = l['Acabado' + i] || '';
+    return '<span class="ac"><select data-c="Acabado' + i + '"><option value="">Acabado ' + i + '</option>' + (E.init.cat.ACABADOS_COT || []).map(function(x){ return '<option' + (x.nombre === n ? ' selected' : '') + '>' + esc(x.nombre) + '</option>'; }).join('') + '</select>' +
+      '<input data-c="Param' + i + '" type="number" step="1" value="' + esc(l['Param' + i] || '') + '" style="' + (acabPide(n) ? '' : 'display:none') + '" placeholder="ojillos por pieza"></span>';
   }).join('');
   return '<tbody class="par"><tr><td><input data-c="Descripcion" list="erpMats" value="' + esc(l.Descripcion || '') + '" placeholder="Escribe para buscar el material" style="min-width:230px"></td>' +
     '<td><input data-c="Ancho" type="number" step="0.01" value="' + esc(l.Ancho || '') + '"></td><td><input data-c="Alto" type="number" step="0.01" value="' + esc(l.Alto || '') + '"></td>' +
-    '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad, con lo que sumen bastilla o bolsa); puedes corregirlo"></td>' +
+    '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad, con lo que sumen las bolsas); puedes corregirlo"></td>' +
     '<td><select data-c="Unidad" data-u="' + (l.Unidad ? '1' : '') + '">' + un.map(function(u){ return '<option' + (u === (l.Unidad || 'm2') ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></td>' +
     '<td><input data-c="Cantidad" type="number" step="1" value="' + esc(l.Cantidad || 1) + '"></td>' +
     '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioManual ? '1' : '') + '" title="Precio por la unidad elegida: (material + tinta + acabados) ÷ 0.60. Si lo cambias a mano se usa tal cual."></td>' +
@@ -552,8 +551,8 @@ function cotForm(folio, pre, after){
         if (cc === 'Unidad') { ev.target.dataset.u = '1'; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
         if (cc === 'Impresion') { tb.querySelector('.uvx').style.display = ev.target.value === 'UV' ? '' : 'none'; }
         if (/^Acabado\d$/.test(cc)) {
-          var t = tipoAcab(ev.target.value), pi = ev.target.parentNode.querySelector('input');
-          pi.style.display = (t === 'otro' || !ev.target.value) ? 'none' : ''; pi.value = ''; pi.placeholder = t === 'ojillos' ? 'ojillos por pieza' : t === 'bastilla' ? 'cm (5)' : 'cm';
+          var pi = ev.target.parentNode.querySelector('input');
+          pi.style.display = acabPide(ev.target.value) ? '' : 'none'; pi.value = ''; pi.placeholder = 'ojillos por pieza';
         }
         cotRecalc();
       });
@@ -1984,5 +1983,38 @@ function usrForm(email){
   if (email) { w.el.querySelector('[data-k=Email]').disabled = true; }
   var b = w.el.querySelector('#usG');
   b.onclick = function(){ var p = leer(w.el); if (email) { p.Email = email; } eGuardar(b, function(){ return erp('saveUsuario', p); }).then(function(){ w.cerrar(); ptToast('Usuario guardado.'); vUsuarios(eq('erpMain')); }, function(){}); };
+}
+
+/* ===================== ADMINISTRACION: costos de acabados y parametros del cotizador ===================== */
+var CS = { d: null };
+var CS_UN = { pz: 'por pieza', m2: 'por m² (con lo que crece)', ml: 'por metro lineal (perímetro)', ojillo: 'por ojillo (pide cuántos por pieza)' };
+var CS_PAR = { COT_MARGEN: 'Margen (0.40 = precio = costo ÷ 0.60)', COT_TINTA_GF: 'Tinta Gran Formato ($ por m²)', COT_TINTA_HD: 'Tinta HD ($ por m²)', COT_TINTA_UV: 'Tinta UV ($ por m²)' };
+function vCostos(m){
+  erp('acabados').then(function(d){
+    CS.d = d;
+    m.innerHTML = '<h2>Costos de acabados</h2><p class="erp-sub">Lo que suma cada acabado al costo de la cotización (el precio sale de costo ÷ 0.60). Las <b>bolsas</b> no cuestan, pero agregan centímetros al ancho y al alto de la pieza y por eso suben los m². Los cambios aplican a las cotizaciones que captures o edites desde ahora.</p>' +
+      '<div class="erp-bar"><span class="sp"></span><button class="erp-btn nar" type="button" onclick="csForm()">+ Agregar acabado</button></div>' +
+      '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Acabado</th><th>Se cobra</th><th class="n">Costo</th><th class="n">Crece ancho y alto</th><th>Activo</th></tr></thead><tbody>' +
+      d.rows.map(function(a){ return '<tr class="clic" onclick="csForm(\'' + esc(a.Nombre).replace(/'/g, '') + '\')"><td><b>' + esc(a.Nombre) + '</b></td><td>' + esc(CS_UN[a.Unidad] || a.Unidad) + '</td><td class="n">' + $m(a.Costo) + '</td><td class="n">' + (Number(a.Incremento) > 0 ? '+' + a.Incremento + ' cm' : '—') + '</td><td>' + esc(a.Activo) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="erp-card" style="margin-top:16px"><h3>Parámetros del cotizador</h3><p class="erp-sub" style="margin:0 0 8px">Margen y costo de tinta por m². Quedan en la hoja ERP_Config.</p>' +
+      d.params.filter(function(p){ return CS_PAR[p.Clave]; }).map(function(p){ return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><label style="flex:1;font-size:13px">' + esc(CS_PAR[p.Clave] || p.Descripcion || p.Clave) + '</label><input type="number" step="0.01" id="csP_' + esc(p.Clave) + '" value="' + esc(p.Valor) + '" style="width:110px"><button type="button" class="erp-btn sec chico" onclick="csParam(\'' + esc(p.Clave) + '\')">Guardar</button></div>'; }).join('') + '</div>';
+  }, function(e){ erpError(m, e); });
+}
+function csParam(clave){
+  var b = event.target, v = eq('csP_' + clave).value;
+  eGuardar(b, function(){ return erp('saveConfig', { Clave: clave, Valor: v }); }).then(function(){ ptToast('Parámetro guardado.'); }, function(){});
+}
+function csForm(nombre){
+  var a = nombre ? CS.d.rows.filter(function(x){ return x.Nombre === nombre; })[0] : { Unidad: 'm2', Costo: 0, Incremento: 0, Activo: 'SI' };
+  var w = ventana(nombre ? 'Acabado' : 'Agregar acabado', '<div class="erp-form">' + campo('Nombre', 'Nombre del acabado', a.Nombre, 'text', { c2: 1 }) +
+    '<div class="c2"><label>Se cobra</label><select data-k="Unidad">' + eOpts(CS.d.unidades.map(function(x){ return { v: x, t: CS_UN[x] || x }; }), a.Unidad, false) + '</select></div>' +
+    campo('Costo', 'Costo ($ por la unidad elegida)', a.Costo, 'number', { step: '0.01' }) + campo('Incremento', 'Crece el ancho y el alto (cm)', a.Incremento, 'number', { step: '1' }) +
+    selCampo('Activo', 'Activo (aparece en cotizaciones)', ['SI', 'NO'], a.Activo || 'SI', false) +
+    '</div><p class="erp-sub" style="margin-top:8px">Ejemplo: «Crece 50 cm» suma 50 cm al ancho y 50 cm al alto antes de calcular los m². Déjalo en 0 si el acabado no cambia el tamaño.</p>', '<button class="erp-btn" id="csG">Guardar</button>');
+  var b = w.el.querySelector('#csG');
+  b.onclick = function(){
+    var d = leer(w.el); if (nombre) { d.NombreOriginal = nombre; }
+    eGuardar(b, function(){ return erp('saveAcabado', d); }).then(function(r){ E.init.cat.ACABADOS_COT = r.publicos; w.cerrar(); ptToast('Acabado guardado.'); vCostos(eq('erpMain')); }, function(){});
+  };
 }
 </script>
