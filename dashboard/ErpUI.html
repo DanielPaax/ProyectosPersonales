@@ -1408,7 +1408,27 @@ function cmDefine(id, v){
 }
 
 /* ---------- notificaciones (campanita) ---------- */
+/* ---------- aviso de version nueva: compara la huella de lo que cargo esta pagina con la de la version publicada ---------- */
+var VG = { h: null, avisado: false };
+function erpVigila(){
+  clearInterval(VG.h); VG.h = setInterval(erpRevisaVersion, 180000);
+  if (!VG.vis) { VG.vis = true; document.addEventListener('visibilitychange', function(){ if (!document.hidden && eq('appErp') && eq('appErp').className !== 'oculto') { erpRevisaVersion(); } }); }
+}
+function erpRevisaVersion(){
+  if (VG.avisado || typeof UI_HASH === 'undefined' || !UI_HASH) { return; }
+  erp('version').then(function(d){
+    if (!d || !d.hash || d.hash === UI_HASH) { return; }
+    VG.avisado = true;
+    var b = document.createElement('div'); b.id = 'erpNueva';
+    b.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;background:#18303C;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.35);display:flex;gap:12px;align-items:center;flex-wrap:wrap;max-width:92vw;font-size:14px';
+    b.innerHTML = '<span><b>Hay una actualización del ERP.</b> Guarda lo que estés haciendo y recarga para verla.</span>' +
+      '<a href="' + esc(d.url || '#') + '" target="_top" style="background:var(--naranja);color:#fff;text-decoration:none;font-weight:700;padding:8px 14px;border-radius:8px">Recargar ahora</a>' +
+      '<button type="button" style="background:none;border:1px solid #fff6;color:#fff;border-radius:8px;padding:7px 10px;cursor:pointer" onclick="this.parentNode.remove()">Después</button>';
+    document.body.appendChild(b);
+  }, function(){});
+}
 function notifIniciar(){
+  erpVigila();
   clearInterval(NT.h); notifCarga();
   NT.h = setInterval(function(){ if (eq('appErp').className === 'oculto') { return; } notifCarga(); }, 60000);
 }

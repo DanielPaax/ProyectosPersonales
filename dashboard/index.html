@@ -957,7 +957,7 @@ var SES_KEY = 'bfp_sesion_v1';
 function sesionGuardada(){ try { return window.localStorage.getItem(SES_KEY) || ''; } catch (e) { return ''; } }
 function sesionGuardar(t){ try { if (t) { window.localStorage.setItem(SES_KEY, t); } else { window.localStorage.removeItem(SES_KEY); } } catch (e) { /* sin almacenamiento: pedira codigo cada vez */ } }
 if (!CLAVE) { CLAVE = sesionGuardada(); }
-var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>, NEG0 = <?!= neg ?>;
+var LOGO_AZUL = <?!= logo ?>, LOGO_BLANCO = <?!= logoBlanco ?>, VISTA0 = <?!= vista ?>, NEG0 = <?!= neg ?>, UI_HASH = <?!= uiHash ?>;
 var MODO = 'dashboard';     /* 'dashboard' (todo) o 'direccion' (informativo, seleccion de lo anterior) */
 var DASH_LISTO = false;     /* el tablero se carga la primera vez que se entra */
 var perTendDir = 'mes';     /* Direccion: la tendencia abre mensual */

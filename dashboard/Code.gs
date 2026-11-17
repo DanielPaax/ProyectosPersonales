@@ -246,6 +246,7 @@ function doGet(e) {
   /* La clave viaja al navegador solo para reenviarla en cada consulta de lectura. */
   t.clave = JSON.stringify(k).replace(/</g, '\\u003c');
   t.vista = JSON.stringify(_areaPorId_(a) ? a : '');
+  t.uiHash = JSON.stringify(_hashUi_());
   t.neg = JSON.stringify(/^(NG|AC)-\d{3,8}$/.test((e && e.parameter && e.parameter.neg) || '') ? String(e.parameter.neg) : '');
   t.logo = JSON.stringify(typeof LOGO_DATA_URI === 'string' ? LOGO_DATA_URI : '');
   t.logoBlanco = JSON.stringify(typeof LOGO_BLANCO_DATA_URI === 'string' ? LOGO_BLANCO_DATA_URI : '');
@@ -2394,6 +2395,15 @@ function _homologaClientesHojas_() {
   try { _limpiaCacheVentas_(); } catch (e) { /* nada */ }
   try { _limpiaCacheBase_(); } catch (e2) { /* nada */ }
   return n;
+}
+
+/** Huella de los archivos de pantalla (index, ERP, Admin, Marketing) de la version publicada. La pagina abierta guarda la que cargo y el ERP la compara
+ *  de vez en cuando: si ya no coincide, avisa que hay una actualizacion para recargar. */
+function _hashUi_() {
+  var txt = ['index', 'ErpUI', 'AdminUI', 'MarketingUI'].map(function (n) {
+    try { return HtmlService.createHtmlOutputFromFile(n).getContent(); } catch (e) { return ''; }
+  }).join('|');
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, txt, Utilities.Charset.UTF_8).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
 }
 
 function guardarVenta(d, clave) {

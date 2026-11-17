@@ -166,6 +166,7 @@ function fixSheets_(ss) {
 
 // ==================== API ====================
 const ACTIONS = {
+  version: function () { return { hash: _hashUi_(), url: _urlPublica_() }; },
   init: a_init, lookups: a_lookups, dashboard: a_dashboard,
   clientes: a_clientes, saveCliente: a_saveCliente,
   proveedores: a_proveedores, saveProveedor: a_saveProveedor,
@@ -2037,7 +2038,7 @@ function importarHistorico(opts) {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { acabados: 1, usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { version: 1, acabados: 1, usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1, comisiones: 1, actividades: 1, actDetalle: 1, actArchivo: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
