@@ -276,6 +276,8 @@ function need_(u, p) { if (!can_(u, p)) throw new Error('Tu rol (' + u.rol + ') 
 function needAny_(u, ps) { if (!ps.some(function (p) { return can_(u, p); })) throw new Error('Tu rol (' + u.rol + ') no tiene permiso para esta acción.'); }
 function esComercial_(u) { return u.rol === 'COMERCIAL'; }
 function scope_(u, rows) { return esComercial_(u) ? rows.filter(function (r) { return str_(r.Comercial).toLowerCase() === u.email; }) : rows; }
+/** Un comercial puede USAR cualquier cliente (negociar, cotizar, abrir ODP) para no duplicarlo; lo que crea queda a su nombre. */
+function comDe_(u, cli) { return esComercial_(u) ? u.email : (str_(cli.Comercial).indexOf('@') > 0 ? str_(cli.Comercial).toLowerCase() : (str_(cli.Comercial) || u.email)); }
 function ownOr_(u, row) { if (esComercial_(u) && str_(row.Comercial).toLowerCase() !== u.email) throw new Error('Este registro pertenece a otro comercial.'); }
 function veCostos_(u) { return can_(u, 'fin') || (esComercial_(u) && cfg_('COMERCIAL_VE_COSTOS', 'NO').toUpperCase() === 'SI'); }
 function vePrecio_(u) { return veCostos_(u) || can_(u, 'crm') || can_(u, 'crm_ver'); }
@@ -298,7 +300,7 @@ function a_lookups(u) {
   const st = stockMap_();
   const verProv = can_(u, 'compras') || can_(u, 'cxp') || can_(u, 'cxp_ver');
   return {
-    clientes: scope_(u, read_('Clientes')).map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: c.Comercial, DiasCredito: c.DiasCredito, RazonSocial: c.RazonSocial || '', Contacto: str_(c.Contacto), Telefono: str_(c.Telefono), Email: str_(c.Email) }; })
+    clientes: read_('Clientes').map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: c.Comercial, DiasCredito: c.DiasCredito, RazonSocial: c.RazonSocial || '', Contacto: str_(c.Contacto), Telefono: str_(c.Telefono), Email: str_(c.Email) }; })
       .sort(function (a, b) { return str_(a.Nombre).localeCompare(str_(b.Nombre)); }),
     proveedores: verProv ? read_('Proveedores').map(function (p) { return { ID: p.ID, Nombre: p.Nombre, DiasCredito: p.DiasCredito, RFC: str_(p.RFC).toUpperCase() }; })
       .sort(function (a, b) { return str_(a.Nombre).localeCompare(str_(b.Nombre)); }) : [],
@@ -415,7 +417,8 @@ function a_saveCliente(u, p) {
     if (esAdminCom_(u.email) && ['SI', 'NO', ''].indexOf(str_(p.Comisiona).toUpperCase()) >= 0 && p.Comisiona !== undefined) data.Comisiona = str_(p.Comisiona).toUpperCase();   // solo la administración lo cambia
     return clean_(update_('Clientes', c, data));
   }
-  if (find_('Clientes', 'Nombre', nombre)) throw new Error('Ya existe un cliente con ese nombre.');
+  const clave = _clienteClave_(nombre), igual = read_('Clientes').filter(function (c) { return _clienteClave_(c.Nombre) === clave || (str_(c.RazonSocial) && _clienteClave_(c.RazonSocial) === clave); })[0];
+  if (igual) throw new Error('Ya existe el cliente «' + igual.Nombre + '» (' + igual.ID + '). Selecciónalo de la lista en lugar de darlo de alta otra vez.');
   data.ID = seq_('SEQ_CLIENTE', 'CL-', 4); data.FechaAlta = hoy_();
   data.Comisiona = esAdminCom_(u.email) && ['SI', 'NO'].indexOf(str_(p.Comisiona).toUpperCase()) >= 0 ? str_(p.Comisiona).toUpperCase() : '';
   const nuevo = insert_('Clientes', data);
@@ -977,7 +980,7 @@ function folioCot_(u) {
 
 function a_saveCot(u, p) {
   need_(u, 'crm');
-  const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente'); ownOr_(u, cli);
+  const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente');
   const lineas = lineasCot_(p.lineas);
   const usaLineas = lineas.length > 0;
   const bruto = usaLineas ? r2_(sum_(lineas, 'Importe')) : r2_(num_(p.Subtotal));
@@ -989,7 +992,7 @@ function a_saveCot(u, p) {
   const sub = r2_(bruto - descu), iva = r2_(sub * ivaRate_());
   const proyecto = str_(p.Proyecto);
   const descr = str_(p.Descripcion) || proyecto || lineas.map(function (l) { return l.Descripcion; }).join(' / ');
-  const data = { Fecha: fecha_(p.Fecha, 'Fecha'), ClienteID: cli.ID, Cliente: cli.Nombre, Comercial: str_(cli.Comercial).toLowerCase() || u.email,
+  const data = { Fecha: fecha_(p.Fecha, 'Fecha'), ClienteID: cli.ID, Cliente: cli.Nombre, Comercial: comDe_(u, cli),
                  Descripcion: req_(descr, 'Descripción o partidas'), M2: usaLineas ? r4_(sum_(lineas, 'M2')) : num_(p.M2),
                  Subtotal: sub, IVA: iva, Total: r2_(sub + iva),
                  ProximoSeguimiento: fechaOpc_(p.ProximoSeguimiento, 'Próximo seguimiento'), Notas: str_(p.Notas),
@@ -1041,12 +1044,12 @@ function a_seguimiento(u) { needAny_(u, ['crm', 'crm_ver']); return scope_(u, re
 
 function a_saveSeg(u, p) {
   need_(u, 'crm');
-  const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente'); ownOr_(u, cli);
+  const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente');
   const prox = fechaOpc_(p.ProximaAccion, 'Próxima acción');
   let cot = null;
   if (str_(p.Cotizacion)) { cot = mustFind_('Cotizaciones', 'Folio', p.Cotizacion, 'Cotización'); ownOr_(u, cot); }
   const s = insert_('Seguimiento', { ID: seq_('SEQ_SEG', 'SG-', 5), Fecha: fecha_(p.Fecha, 'Fecha'), ClienteID: cli.ID, Cliente: cli.Nombre,
-                                    Cotizacion: cot ? cot.Folio : '', Comercial: str_(cli.Comercial).toLowerCase() || u.email,
+                                    Cotizacion: cot ? cot.Folio : '', Comercial: comDe_(u, cli),
                                     Tipo: inList_(p.Tipo || 'Llamada', TIPOS_SEG, 'Tipo'), Nota: req_(p.Nota, 'Nota'), ProximaAccion: prox });
   if (cot && ['Borrador', 'Enviada', 'Negociación'].indexOf(cot.Estatus) >= 0) {
     const ch = { ProximoSeguimiento: prox };
@@ -1158,11 +1161,11 @@ function a_odpDetalle(u, p) {
 function a_saveODP(u, p) {
   needAny_(u, ['odp', 'crm']);
   if (!str_(p.Folio)) {
-    const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente'); ownOr_(u, cli);
+    const cli = mustFind_('Clientes', 'ID', req_(p.ClienteID, 'Cliente'), 'Cliente');
     const lin = lineasODP_(p.lineas);
     const d = datosCliODP_(cli);
     ODP_TXT.forEach(function (k) { if (p[k] !== undefined && str_(p[k]) !== '') d[k] = str_(p[k]); });
-    const o = crearODP_(Object.assign(d, { Fecha: fecha_(p.Fecha, 'Fecha'), Cotizacion: '', ClienteID: cli.ID, Cliente: cli.Nombre, Comercial: str_(cli.Comercial).toLowerCase(),
+    const o = crearODP_(Object.assign(d, { Fecha: fecha_(p.Fecha, 'Fecha'), Cotizacion: '', ClienteID: cli.ID, Cliente: cli.Nombre, Comercial: comDe_(u, cli),
                           Descripcion: req_(p.Descripcion || p.Proyecto, 'Descripción'), M2Vendidos: lin.length ? r4_(sum_(lin, 'M2')) : num_(p.M2Vendidos),
                           PrecioVenta: r2_(num_(p.PrecioVenta)), FechaEntrega: fechaOpc_(p.FechaEntrega, 'Fecha de entrega') }));
     if (lin.length) guardarLineasODP_(o.Folio, lin);
@@ -1839,21 +1842,23 @@ function homologarClientes() {
   const lock = LockService.getScriptLock(); lock.waitLock(60000);
   try {
     resetCache_();
-    const canonNorm = {}; Object.keys(CLIENTE_ALIAS).forEach(function (k) { canonNorm[CLIENTE_ALIAS[k]] = _clienteClave_(CLIENTE_ALIAS[k]); });
-    const oficiales = {}; Object.keys(CLIENTE_ALIAS).forEach(function (k) { oficiales[CLIENTE_ALIAS[k]] = 1; });
     const hojasRef = ['Cotizaciones', 'Seguimiento', 'ODP', 'Facturas', 'Negociaciones'];
-    Object.keys(oficiales).forEach(function (canon) {
-      const claves = Object.keys(CLIENTE_ALIAS).filter(function (k) { return CLIENTE_ALIAS[k] === canon; }).concat([_clienteClave_(canon)]);
-      const regs = read_('Clientes').filter(function (c) { return claves.indexOf(_clienteClave_(c.Nombre)) >= 0; });
-      if (!regs.length) return;
-      let meta = regs.filter(function (c) { return _clienteClave_(c.Nombre) === _clienteClave_(canon); })[0] || regs[0];
-      if (meta.Nombre !== canon) { update_('Clientes', meta, { Nombre: canon }); res.renombrados++; }
-      regs.filter(function (c) { return c !== meta; }).forEach(function (dup) {
-        const ch = {}; ['RFC', 'RazonSocial', 'Contacto', 'Telefono', 'Email', 'Comercial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona'].forEach(function (k) { if (!str_(meta[k]) && str_(dup[k])) ch[k] = dup[k]; });
+    // clientes que son el mismo: alias (IMJ, LA PERLA, GUADALUPE) o nombre igual sin importar mayusculas, acentos, espacios o signos
+    const grupos = {};
+    read_('Clientes').forEach(function (c) { const k = _clienteClave_(_clienteCanon_(c.Nombre)); if (k) (grupos[k] = grupos[k] || []).push(c); });
+    Object.keys(grupos).forEach(function (k) {
+      const regs = grupos[k]; if (regs.length < 2 && _clienteCanon_(regs[0].Nombre) === regs[0].Nombre) return;
+      const oficial = _clienteCanon_(regs[0].Nombre);
+      // se queda el que ya tiene mas datos: Comisiona definido, luego el mas antiguo (ID menor)
+      regs.sort(function (a, b) { return (str_(b.Comisiona) ? 1 : 0) - (str_(a.Comisiona) ? 1 : 0) || str_(a.ID).localeCompare(str_(b.ID)); });
+      let meta = regs[0];
+      if (meta.Nombre !== oficial) { update_('Clientes', meta, { Nombre: oficial }); res.renombrados++; }
+      regs.slice(1).forEach(function (dup) {
+        const ch = {}; ['RFC', 'RazonSocial', 'Contacto', 'Telefono', 'Email', 'Comercial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona'].forEach(function (f) { if (!str_(meta[f]) && str_(dup[f])) ch[f] = dup[f]; });
         if (!str_(meta.Notas) && str_(dup.Notas)) ch.Notas = dup.Notas;
         if (Object.keys(ch).length) update_('Clientes', meta, ch);
-        hojasRef.forEach(function (h) { read_(h).forEach(function (r) { if (str_(r.ClienteID) === str_(dup.ID)) update_(h, r, { ClienteID: meta.ID, Cliente: canon }); }); });
-        read_('Actividades').forEach(function (a) { if (a.RefTipo === 'cliente' && str_(a.RefID) === str_(dup.ID)) update_('Actividades', a, { RefID: meta.ID, RefTexto: meta.ID + ' · ' + canon }); });
+        hojasRef.forEach(function (h) { read_(h).forEach(function (r) { if (str_(r.ClienteID) === str_(dup.ID)) update_(h, r, { ClienteID: meta.ID, Cliente: oficial }); }); });
+        read_('Actividades').forEach(function (a) { if (a.RefTipo === 'cliente' && str_(a.RefID) === str_(dup.ID)) update_('Actividades', a, { RefID: meta.ID, RefTexto: meta.ID + ' · ' + oficial }); });
         deleteWhere_('Clientes', function (c) { return str_(c.ID) === str_(dup.ID); }); resetCache_();
         meta = find_('Clientes', 'ID', meta.ID);
         res.fusionados++;
