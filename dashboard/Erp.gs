@@ -688,7 +688,26 @@ function tarifasDet_() {
   });
   return out;
 }
-function costoUnidad_(t, u) { return ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null; }
+/** Costo del material por unidad. Si TARIFAS trae el costo de esa unidad se usa tal cual; si no, se DERIVA del que si tenga, para que cualquier material
+ *  se pueda cotizar por m2, metro lineal, lamina o pieza:  lamina = m2 x (ancho x largo de la lamina; sin dato, 1.22 x 2.44 m);
+ *  metro lineal = m2 x ancho del rollo/lamina (sin dato, 1.22 m);  pieza = m2 x (ancho x alto de la pieza cotizada). an/al = medidas de la pieza (m). */
+const LAMINA_ANCHO_DEF = 1.22, LAMINA_LARGO_DEF = 2.44;
+function costoUnidad_(t, u, an, al) {
+  const dir = ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null;
+  if (dir) return dir;
+  const w = t.ancho > 0 ? t.ancho : LAMINA_ANCHO_DEF, lg = t.largo > 0 ? t.largo : LAMINA_LARGO_DEF;
+  let m2 = t.costoM2 || null;
+  if (!m2 && t.costoLamina) m2 = t.costoLamina / (w * lg);
+  if (!m2 && t.costoMtl) m2 = t.costoMtl / w;
+  if (!m2 && t.costoPz && an > 0 && al > 0) m2 = t.costoPz / (an * al);
+  if (!m2) return null;
+  if (u === 'm2') return m2;
+  if (u === 'lamina') return m2 * w * lg;
+  if (u === 'mtl') return m2 * w;
+  if (u === 'pz') return an > 0 && al > 0 ? m2 * an * al : null;
+  return null;
+}
+function costoDirecto_(t, u) { return !!({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]); }
 /** Margen sobre el precio (0.40). Acepta 0.4, 40 o 40%; un valor vacio, 0 o absurdo vuelve a 0.40 para no cotizar nunca a costo. */
 function margenCot_() {
   let m = num_(cfg_('COT_MARGEN', '0.40'));
@@ -760,15 +779,15 @@ function calcPartida_(t, l, cats) {
   });
   const anE = an + ext, alE = al + ext;
   const m2 = num_(l.M2) > 0 ? num_(l.M2) : anE * alE * q;
-  const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 && costoUnidad_(t, t.cobroPor) ? t.cobroPor : (UNIDADES_COT.filter(function (u) { return costoUnidad_(t, u); })[0] || 'm2'));
+  const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 && costoUnidad_(t, t.cobroPor, anE, alE) ? t.cobroPor : (UNIDADES_COT.filter(function (u) { return costoDirecto_(t, u); })[0] || 'm2'));
   const base = uni === 'm2' ? m2 : uni === 'mtl' ? (alE > 0 ? alE * q : q) : q;
   const manual = num_(l.PrecioManual) === 1 || /^(si|sí|1|true)$/i.test(str_(l.PrecioManual));
-  const unidadesOk = {}; UNIDADES_COT.forEach(function (u) { unidadesOk[u] = !!costoUnidad_(t, u); });
+  const unidadesOk = {}; UNIDADES_COT.forEach(function (u) { unidadesOk[u] = !!costoUnidad_(t, u, anE, alE); });
   let cMat = 0, cTin = 0, cAca = 0, importe, precio;
   if (manual && num_(l.PrecioM2) > 0) {
     precio = num_(l.PrecioM2); importe = r2_(base * precio);
   } else {
-    const cu = costoUnidad_(t, uni);
+    const cu = costoUnidad_(t, uni, anE, alE);
     if (!cu) throw new Error('"' + t.material + '" no tiene costo por ' + uni + ' (NA). Elige otra unidad o captura el precio.');
     cMat = base * cu;
     const mult = (blanca && barniz) ? 3 : (blanca || barniz) ? 2 : 1, sobreTotal = str_(cfg_('COT_MULT_SOBRE', 'TINTA')).toUpperCase() === 'TOTAL';
@@ -783,7 +802,7 @@ function calcPartida_(t, l, cats) {
   const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
     return a.nombre + (a.unidad === 'ojillo' ? ' (' + a.par + ' por pieza)' : a.unidad === 'manual' ? ' ($' + a.par + ' por m²)' : '') + (a.inc > 0 ? ' (+' + a.inc + ' cm al ancho y al alto)' : ''); })).join(' · ');
   return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
-           TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det, CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
+           TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det + (!(manual && num_(l.PrecioM2) > 0) && !costoDirecto_(t, uni) ? ' · costo por ' + (uni === 'mtl' ? 'metro lineal' : uni === 'pz' ? 'pieza' : uni === 'lamina' ? 'lámina' : uni) + ' calculado desde el costo registrado del material' : ''), CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
 }
 
 /** Partidas de cotización ya calculadas. MATERIAL = TARIFAS (catalogo unico). */
@@ -821,7 +840,7 @@ function a_cotCalcular(u, p) {
       return o;
     } catch (e) {
       const o = { error: e.message };
-      try { const uo = {}; UNIDADES_COT.forEach(function (x) { uo[x] = !!costoUnidad_(t, x); }); o.unidadesOk = uo; } catch (_) {}
+      try { const uo = {}; UNIDADES_COT.forEach(function (x) { uo[x] = !!costoUnidad_(t, x, num_(l.Ancho), num_(l.Alto)); }); o.unidadesOk = uo; } catch (_) {}
       return o;
     }
   });
