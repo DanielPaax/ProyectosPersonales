@@ -84,9 +84,10 @@ const ROLES_ERP = {
   ADMIN:      ['*'],
   DIRECCION:  ['dash', 'fin', 'reportes', 'crm_ver', 'odp_ver', 'inv_ver', 'cxc_ver', 'cxp_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
   COMERCIAL:  ['dash', 'crm', 'odp_ver', 'cxc_ver', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],
-  PRODUCCION: ['dash', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  PRODUCCION: ['dash', 'crm_ver', 'odp', 'odp_ver', 'consumo', 'inv_ver', 'prod', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],
   CONSULTA:   ['dash', 'crm_ver', 'odp_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
-  ALMACEN:    ['dash', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  ALMACEN:    ['dash', 'crm_ver', 'odp_ver', 'inv', 'inv_ver', 'compras', 'consumo', 'conteo', 'neg_ver', 'act', 'act_ver', 'com_ver'],
+  DISENO:     ['dash', 'crm_ver', 'odp_ver', 'neg', 'neg_ver', 'act', 'act_ver', 'com_ver'],   // pre-prensa: ve cotizaciones y ODP, trabaja las negociaciones (archivos, comentarios, etapas)
   FINANZAS:   ['dash', 'fin', 'reportes', 'compras', 'cxp', 'cxp_ver', 'cxc', 'cxc_ver', 'facturas', 'odp_ver', 'inv_ver', 'crm_ver', 'neg_ver', 'act', 'act_ver', 'com_ver'],
 };
 
@@ -656,9 +657,10 @@ function lineasDe_(hoja, k, folio) {
     .sort(function (a, b) { return num_(a.Linea) - num_(b.Linea); }).map(clean_);
 }
 
-const UNIDADES_COT = ['m2', 'mtl', 'lamina', 'pz'];
-const PRESENTACIONES = ['lamina', 'rollo', 'hoja', 'bobina', 'otro'];
-const COBROS = ['m2', 'mtl', 'lamina', 'pz', 'otro'];
+const UNIDADES_COT = ['m2', 'mtl', 'lamina', 'pz', 'caja', 'bolsa', 'costal'];
+const PRESENTACIONES = ['lamina', 'rollo', 'hoja', 'bobina', 'caja', 'bolsa', 'costal', 'pieza', 'otro'];
+const EMPAQUES = ['caja', 'bolsa', 'costal'];   // se cobran por empaque completo: su costo vive en la columna COSTO_PZ de TARIFAS
+const COBROS = ['m2', 'mtl', 'lamina', 'pz', 'caja', 'bolsa', 'costal', 'otro'];
 const DESCUENTOS_COT = [0, 5, 10, 15, 20, 25];
 
 /** Nombre del catalogo (CATALOGOS del Dashboard) en su forma canonica, o '' si no existe. */
@@ -694,13 +696,13 @@ function tarifasDet_() {
  *  metro lineal = m2 x ancho del rollo/lamina (sin dato, 1.22 m);  pieza = m2 x (ancho x alto de la pieza cotizada). an/al = medidas de la pieza (m). */
 const LAMINA_ANCHO_DEF = 1.22, LAMINA_LARGO_DEF = 2.44;
 function costoUnidad_(t, u, an, al) {
+  if (EMPAQUES.indexOf(u) >= 0) return t.cobroPor === u ? (t.costoPz || null) : null;   // caja / bolsa / costal: solo si el material se cobra asi
   const dir = ({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]) || null;
   if (dir) return dir;
   const w = t.ancho > 0 ? t.ancho : LAMINA_ANCHO_DEF, lg = t.largo > 0 ? t.largo : LAMINA_LARGO_DEF;
   let m2 = t.costoM2 || null;
   if (!m2 && t.costoLamina) m2 = t.costoLamina / (w * lg);
   if (!m2 && t.costoMtl) m2 = t.costoMtl / w;
-  if (!m2 && t.costoPz && an > 0 && al > 0) m2 = t.costoPz / (an * al);
   if (!m2) return null;
   if (u === 'm2') return m2;
   if (u === 'lamina') return m2 * w * lg;
@@ -708,7 +710,7 @@ function costoUnidad_(t, u, an, al) {
   if (u === 'pz') return an > 0 && al > 0 ? m2 * an * al : null;
   return null;
 }
-function costoDirecto_(t, u) { return !!({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]); }
+function costoDirecto_(t, u) { return EMPAQUES.indexOf(u) >= 0 ? (t.cobroPor === u && !!t.costoPz) : !!({ m2: t.costoM2, mtl: t.costoMtl, lamina: t.costoLamina, pz: t.costoPz }[u]); }
 /** Margen sobre el precio (0.40). Acepta 0.4, 40 o 40%; un valor vacio, 0 o absurdo vuelve a 0.40 para no cotizar nunca a costo. */
 function margenCot_() {
   let m = num_(cfg_('COT_MARGEN', '0.40'));
@@ -963,9 +965,9 @@ function a_saveTarifa(u, p) {
     c.m2 = costo / m2pres;
     if (pres === 'rollo' || pres === 'bobina') c.mtl = costo / largo;
     if (pres === 'lamina' || pres === 'hoja') c.lamina = costo;
-    if (cobro === 'pz') c.pz = costo;
-  } else if (cobro !== 'otro') { c[cobro] = costo; }
-  if (cobro !== 'otro' && !c[cobro]) throw new Error('Con esa presentación y medidas no se puede calcular el costo por ' + cobro + '. Revisa presentación, ancho y largo.');
+    if (cobro === 'pz' || EMPAQUES.indexOf(cobro) >= 0 || pres === 'pieza') c.pz = costo;   // pieza / caja / bolsa / costal: el costo es el del empaque completo
+  } else if (cobro !== 'otro') { c[EMPAQUES.indexOf(cobro) >= 0 ? 'pz' : cobro] = costo; }
+  if (cobro !== 'otro' && !c[EMPAQUES.indexOf(cobro) >= 0 ? 'pz' : cobro]) throw new Error('Con esa presentación y medidas no se puede calcular el costo por ' + cobro + '. Revisa presentación, ancho y largo.');
   const v = function (x) { return x ? r4_(x) : 'NA'; };
   const h = tarHoja_(), hoy = hoy_();
   let fila = ex ? ex.fila : 0;
@@ -1649,7 +1651,7 @@ function usuarioDe_(ses) {
 
 // ==================== PRODUCCION (BASE) Y VENTAS (dashboard) ====================
 function a_catalogosProd(u) {
-  needAny_(u, ['prod', 'odp', 'odp_ver', 'crm']);
+  needAny_(u, ['prod', 'odp', 'odp_ver', 'crm', 'crm_ver']);
   const c = _leerCatalogos_(), out = {};
   ['MAQUINA', 'PROCESO', 'MATERIAL', 'UNIDAD', 'ORIGEN', 'MOTIVO_PARO', 'TURNO', 'OPERADOR', 'ACABADO', 'REIMPRESION', 'TIPO_PROYECTO', 'VENDEDOR']
     .forEach(function (k) { out[k] = c[k] || []; });

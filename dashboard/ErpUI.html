@@ -1927,8 +1927,8 @@ function calcTar(p){
     c.m2 = costo / m2p;
     if (pres === 'rollo' || pres === 'bobina') { c.mtl = costo / la; }
     if (pres === 'lamina' || pres === 'hoja') { c.lamina = costo; }
-    if (cobro === 'pz') { c.pz = costo; }
-  } else if (cobro && cobro !== 'otro') { c[cobro] = costo; }
+    if (cobro === 'pz' || cobro === 'caja' || cobro === 'bolsa' || cobro === 'costal' || pres === 'pieza') { c.pz = costo; }
+  } else if (cobro && cobro !== 'otro') { c[(cobro === 'caja' || cobro === 'bolsa' || cobro === 'costal') ? 'pz' : cobro] = costo; }
   return c;
 }
 function vCarga(m){
@@ -1953,15 +1953,15 @@ function tarForm(nombre){
   var w = ventana(nombre ? 'Modificar material' : 'Nuevo material',
     '<datalist id="erpProvs">' + provs.map(function(x){ return '<option value="' + esc(x) + '">'; }).join('') + '</datalist><div class="erp-form">' +
     '<div class="c2"><label>Proveedor</label><input data-k="PROVEEDOR" list="erpProvs" value="' + esc(t.proveedor || '') + '"></div>' + campo('MATERIAL', 'Material', t.material, 'text', { c2: 1 }) +
-    selCampo('PRESENTACION', 'Presentación', ['lamina', 'rollo', 'hoja', 'bobina', 'otro'], t.presentacion || 'otro', false) + selCampo('COBRO_POR', 'Cobro por', ['m2', 'mtl', 'lamina', 'pz', 'otro'], t.cobroPor || 'm2', false) +
+    selCampo('PRESENTACION', 'Presentación', ['lamina', 'rollo', 'hoja', 'bobina', 'caja', 'bolsa', 'costal', 'pieza', 'otro'], t.presentacion || 'otro', false) + selCampo('COBRO_POR', 'Cobro por', [{ v: 'm2', t: 'm²' }, { v: 'mtl', t: 'metro lineal' }, { v: 'lamina', t: 'lámina' }, { v: 'pz', t: 'pieza (pz)' }, { v: 'caja', t: 'caja' }, { v: 'bolsa', t: 'bolsa' }, { v: 'costal', t: 'costal' }, { v: 'otro', t: 'otro' }], t.cobroPor || 'm2', false) +
     campo('ANCHO', 'Ancho (m)', t.ancho || '', 'number', { step: '0.01' }) + campo('LARGO', 'Largo (m)', t.largo || '', 'number', { step: '0.01' }) +
     campo('COSTO', 'Costo', legacy ? t.costoM2 : (t.costo || ''), 'number', { step: '0.0001' }) +
-    '<div class="c2"><p class="erp-sub" style="margin:0">Con ancho y largo, el <b>costo</b> es el de la presentación (rollo, lámina…) y se calculan los costos por unidad. Sin medidas, el costo es el de la unidad de <b>cobro por</b>.' + (legacy ? ' <b>Este material solo tenía costo por m²; el costo se muestra como tal.</b>' : '') + '</p></div>' +
+    '<div class="c2"><p class="erp-sub" style="margin:0">Con ancho y largo, el <b>costo</b> es el de la presentación (rollo, lámina…) y se calculan los costos por unidad. Sin medidas, el costo es el de la unidad de <b>cobro por</b>. En caja, bolsa, costal y pieza el costo es el de <b>un</b> empaque o pieza completa.' + (legacy ? ' <b>Este material solo tenía costo por m²; el costo se muestra como tal.</b>' : '') + '</p></div>' +
     '<div class="c2" id="tarPrev"></div></div>', (nombre ? '<button class="erp-btn rojo" id="tarDel" style="margin-right:auto">Eliminar material</button>' : '') + '<button class="erp-btn" id="tarG">Guardar</button>', true);
   var prev = function(){
     var p = leer(w.el), c = calcTar(p), mg = 1 / (1 - (E.init.cfg.COT_MARGEN != null ? E.init.cfg.COT_MARGEN : 0.4));
     var f = function(v){ return v ? $m(v) + ' → <b>' + $m(v * mg) + '</b>' : '<span style="color:var(--tinta-3)">NA</span>'; };
-    eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo del material → precio (costo ÷ 0.60, sin tinta ni acabados)</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · pz: ' + f(c.pz) + '</div>';
+    eq('tarPrev').innerHTML = '<div class="erp-card" style="margin:0"><h3>Costo del material → precio (costo ÷ 0.60, sin tinta ni acabados)</h3>m²: ' + f(c.m2) + ' · mtl: ' + f(c.mtl) + ' · lámina: ' + f(c.lamina) + ' · ' + (['caja', 'bolsa', 'costal'].indexOf(p.COBRO_POR) >= 0 ? p.COBRO_POR : 'pz') + ': ' + f(c.pz) + '</div>';
   };
   w.el.addEventListener('input', prev); w.el.addEventListener('change', prev); prev();
   var del = w.el.querySelector('#tarDel');
@@ -2008,7 +2008,7 @@ function vUsuarios(m){
       '<div class="erp-bar"><span class="sp"></span><button class="erp-btn nar" type="button" onclick="usrForm()">+ Agregar usuario</button></div>' +
       '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Prefijo cot.</th><th>Comisión</th></tr></thead><tbody>' +
       rows.map(function(u){ return '<tr class="clic" onclick="usrForm(\'' + esc(u.Email) + '\')"><td>' + esc(u.Email) + '</td><td>' + esc(u.Nombre) + '</td><td>' + esc(u.Rol) + '</td><td>' + esc(u.Activo) + '</td><td>' + esc(u.PrefijoCot) + '</td><td>' + esc(CM_TIPO[u.TipoComision] || (u.TipoComision || 'Sin definir')) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
-      '<div class="erp-card" style="margin-top:16px"><h3>Roles</h3><p class="erp-sub" style="margin:0">ADMIN: todo · COMERCIAL: sus clientes, cotizaciones y ODP · PRODUCCION: ODP, producción y consumo · ALMACEN: inventario y compras · FINANZAS: facturas, cobros, compras y costos · DIRECCION: consulta total · CONSULTA: consulta sin costos.</p></div>';
+      '<div class="erp-card" style="margin-top:16px"><h3>Roles</h3><p class="erp-sub" style="margin:0">ADMIN: todo · DISENO: ve cotizaciones y ODP y trabaja las negociaciones (pre-prensa) · COMERCIAL: sus clientes, cotizaciones y ODP · PRODUCCION: ODP, producción y consumo · ALMACEN: inventario y compras · FINANZAS: facturas, cobros, compras y costos · DIRECCION: consulta total · CONSULTA: consulta sin costos.</p></div>';
   }, function(e){ erpError(m, e); });
 }
 function usrForm(email){
