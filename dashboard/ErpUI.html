@@ -805,10 +805,53 @@ function ngDetPinta(){
   lc.scrollTop = lc.scrollHeight;
   eq('ngLA').innerHTML = d.archivos.length ? d.archivos.map(function(a){
     return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + ' · ' +
-      (a.Tipo === 'diseno' ? 'diseño' : a.Tipo === 'complemento' ? 'complemento de pago' : a.Tipo === 'comprobante' ? 'comprobante de pago' : 'comentario') + ' · subido en ' + esc(a.Etapa) + '</small></div><button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button></div>';
+      (a.Tipo === 'diseno' ? 'diseño' : a.Tipo === 'complemento' ? 'complemento de pago' : a.Tipo === 'comprobante' ? 'comprobante de pago' : 'comentario') + ' · subido en ' + esc(a.Etapa) + '</small></div>' + ngBtnsArch(a) + '</div>';
   }).join('') : '<div class="erp-vacio">Sin archivos. Se quedan con la negociación en todas las etapas.</div>';
   eq('ngLH').innerHTML = d.historial.slice().reverse().map(function(x){ return '<div class="ng-com sis">' + esc(x.t) + '<br><small>' + esc(x.n || x.p) + ' · ' + esc(x.f) + '</small></div>'; }).join('') || '<div class="erp-vacio">Sin movimientos.</div>';
   ngPanel();
+}
+/* ---------- archivos de la negociacion: ver, descargar y eliminar ---------- */
+function ngBtnsArch(a){
+  var yo = E.init.user.email, puede = P('neg') && (String(a.Usuario || '').toLowerCase() === yo || (NG.cur && String(NG.cur.CreadoPor || '').toLowerCase() === yo) || E.init.user.rol === 'ADMIN' || E.init.user.adminCom);
+  return '<span style="display:inline-flex;gap:5px;flex-wrap:wrap"><button type="button" class="erp-btn sec chico" onclick="ngVer(\'' + a.ID + '\')">Ver</button>' +
+    '<button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button>' +
+    (puede ? '<button type="button" class="erp-btn chico rojo" title="Eliminar archivo" onclick="ngElimArch(\'' + a.ID + '\')">Eliminar</button>' : '') + '</span>';
+}
+function ngBlobDe(r){
+  var bin = atob(r.b64), arr = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+  return URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/octet-stream' }));
+}
+function ngVer(id){
+  ptToast('Abriendo vista previa…');
+  erp('negArchivo', { ID: id }).then(function(r){
+    if (r.enlace) { window.open(r.enlace, '_blank'); return ptToast('Archivo grande: se abre en Drive.'); }
+    var nom = r.nombre || '', ext = (nom.match(/\.([A-Za-z0-9]+)$/) || [])[1] || '', e = ext.toLowerCase(), mime = r.mime || '';
+    var esImg = /^image\/(jpeg|png|gif|webp|bmp|svg\+xml)$/.test(mime) || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].indexOf(e) >= 0;   // un .psd o .tif trae image/ pero el navegador no lo dibuja
+    var esPdf = /pdf/.test(mime) || e === 'pdf' || e === 'ai';   // un .ai moderno es un PDF por dentro: se intenta mostrar
+    if (esImg && !/^image\/(jpeg|png|gif|webp|bmp|svg\+xml)$/.test(mime)) { r.mime = e === 'svg' ? 'image/svg+xml' : 'image/' + (e === 'jpg' ? 'jpeg' : e); }
+    if (esPdf && !/pdf/.test(mime)) { r.mime = 'application/pdf'; }
+    var url = esImg || esPdf ? ngBlobDe(r) : '';
+    var cuerpo = esImg ? '<div style="text-align:center;background:#F4F7F9;border-radius:10px;padding:10px"><img src="' + url + '" alt="' + esc(nom) + '" style="max-width:100%;max-height:70vh;object-fit:contain"></div>'
+      : esPdf ? '<iframe src="' + url + '" title="' + esc(nom) + '" style="width:100%;height:70vh;border:1px solid var(--linea);border-radius:10px;background:#fff"></iframe>' +
+        '<p class="erp-sub" style="margin:8px 0 0">Si no se ve' + (e === 'ai' ? ' (algunos .ai no traen vista previa)' : '') + ', usa «Abrir en otra pestaña» o «Descargar».</p>'
+      : '<div class="erp-vacio" style="padding:40px 10px">Este tipo de archivo (' + esc(ext ? '.' + ext : 'sin extensión') + ') no tiene vista previa en el navegador.<br>Descárgalo para abrirlo con su programa.</div>';
+    var w = ventana('Vista previa · ' + esc(nom), cuerpo, (url ? '<a class="erp-btn sec" href="' + url + '" target="_blank" rel="noopener" style="text-decoration:none">Abrir en otra pestaña</a>' : '') + '<button type="button" class="erp-btn" id="ngVD">Descargar</button>', true);
+    var cierra = function(){ if (url) { setTimeout(function(){ URL.revokeObjectURL(url); }, 60000); } w.cerrar(); };
+    w.el.querySelector('header button').onclick = cierra;
+    w.el.querySelector('#ngVD').onclick = function(){ ngBaja(id); };
+  }, function(e){ ptToast(e.message); });
+}
+function ngElimArch(id){
+  var a = (NG.det ? NG.det.archivos : []).filter(function(x){ return x.ID === id; })[0];
+  if (!confirm('¿Eliminar el archivo «' + (a ? a.Nombre : id) + '»? Se quita de la negociación y de Drive. Esto no se puede deshacer.')) { return; }
+  erp('negEliminarArchivo', { ID: id }).then(function(r){
+    if (NG.det) { NG.det.archivos = NG.det.archivos.filter(function(x){ return x.ID !== id; }); }
+    if (NG.cur) { NG.cur.archivos = r.archivos; var n = ngBusca(NG.cur.ID); if (n) { n.archivos = r.archivos; } }
+    ngDetPinta(); if (NG.tab === 'p') { ngPagoPinta(); }
+    if (eq('ngTab')) { ngPinta(); }
+    ptToast('Archivo eliminado.');
+  }, function(e){ ptToast(e.message); });
 }
 function ngBaja(id){
   ptToast('Preparando archivo…');
@@ -1018,7 +1061,7 @@ function ngPagoPinta(){
   var n = NG.cur, box = eq('ngPP'); if (!n || !box) { return; }
   var ed = ngPuedePago(), arch = (NG.det && NG.det.archivos) || [], fin = NG.pagoTmp || { f: n.FormaPago || '', e: n.EstatusPago || 'PENDIENTE' };
   NG.pagoTmp = fin;
-  function lista(tipo){ var l = arch.filter(function(a){ return a.Tipo === tipo; }); return l.length ? l.map(function(a){ return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + '</small></div><button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button></div>'; }).join('') : '<div class="erp-vacio" style="padding:6px 0">Sin archivos.</div>'; }
+  function lista(tipo){ var l = arch.filter(function(a){ return a.Tipo === tipo; }); return l.length ? l.map(function(a){ return '<div class="ng-arch"><div class="dt"><b>' + esc(a.Nombre) + '</b><small>' + ngTam(a.Tamano) + ' · ' + esc(a.UsuarioNombre || a.Usuario) + ' · ' + ngFH(a.Fecha, a.Hora) + '</small></div>' + ngBtnsArch(a) + '</div>'; }).join('') : '<div class="erp-vacio" style="padding:6px 0">Sin archivos.</div>'; }
   function subir(tipo, et, ayuda){ return '<h4 style="margin:12px 0 4px;font-size:12.5px;color:var(--azul)">' + et + '</h4>' + (ed ? '<div class="ng-drop" id="ngPg' + tipo + 'D" onclick="eq(\'ngPg' + tipo + 'F\').click()">' + ayuda + '<br><small>JPG, PNG o PDF · máx. 6 MB</small></div><input type="file" id="ngPg' + tipo + 'F" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="ngPagoSube(\'' + tipo + '\',this.files);this.value=\'\'">' : '') + lista(tipo); }
   box.innerHTML = '<div class="erp-form"><div><label>Forma de pago</label><select id="ngPgForma"' + (ed ? '' : ' disabled') + ' onchange="NG.pagoTmp.f=this.value">' + eOpts([{ v: 'efectivo', t: 'Efectivo' }, { v: 'tarjeta', t: 'Tarjeta' }, { v: 'transferencia', t: 'Transferencia' }], fin.f, 'Sin definir') + '</select></div>' +
     '<div><label>Estatus de pago</label><select id="ngPgEst"' + (ed ? '' : ' disabled') + ' onchange="NG.pagoTmp.e=this.value;ngPagoPinta()">' + eOpts(['PENDIENTE', 'ADELANTO', 'LIQUIDADO'], fin.e, false) + '</select></div></div>' +

@@ -181,7 +181,7 @@ const ACTIONS = {
   facturas: a_facturas, facturaDetalle: a_facturaDetalle, saveFactura: a_saveFactura, cancelarFactura: a_cancelarFactura, registrarCobro: a_registrarCobro,
   reporteVentas: a_reporteVentas, catalogosProd: a_catalogosProd, produccionODP: a_produccionODP, registrarProduccion: a_registrarProduccion,
   negociaciones: a_negociaciones, negDetalle: a_negDetalle, saveNeg: a_saveNeg, moveNeg: a_moveNeg, perdidoNeg: a_perdidoNeg, negLigarCot: a_negLigarCot,
-  negComentar: a_negComentar, negSubir: a_negSubir, negSubirInicio: a_negSubirInicio, negSubirParte: a_negSubirParte, negArchivo: a_negArchivo,
+  negComentar: a_negComentar, negSubir: a_negSubir, negSubirInicio: a_negSubirInicio, negSubirParte: a_negSubirParte, negArchivo: a_negArchivo, negEliminarArchivo: a_negEliminarArchivo,
   armadoMateriales: a_armadoMateriales, armadoCosto: a_armadoCosto,
   savePagoNeg: a_savePagoNeg, negSubirPago: a_negSubirPago, comisiones: a_comisiones, comMover: a_comMover, comCliente: a_comCliente,
   actividades: a_actividades, actDetalle: a_actDetalle, saveAct: a_saveAct, moveAct: a_moveAct, actChecklist: a_actChecklist, delAct: a_delAct,
@@ -1630,7 +1630,7 @@ function claseAccion(accion, p) {
     case 'saveTarifa': return existe('MaterialOriginal') ? 3 : 2;
     case 'saveSeg': case 'aprobarCot': case 'consumir': case 'agregarCosto': case 'saveFactura': case 'registrarCobro': case 'saveCompra': case 'registrarPago':
     case 'conteo': case 'registrarProduccion': return 2;
-    case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': case 'negSubirInicio': case 'negSubirParte': return 2;
+    case 'saveNeg': case 'moveNeg': case 'perdidoNeg': case 'negLigarCot': case 'negComentar': case 'negSubir': case 'negSubirInicio': case 'negSubirParte': case 'negEliminarArchivo': return 2;
     case 'notifLeer': return 1;
     case 'savePagoNeg': case 'negSubirPago': case 'comMover': case 'comCliente': case 'saveAct': case 'moveAct': case 'actChecklist': case 'delAct': case 'actComentar': case 'actSubir': return 2;
     default: return 3;   // aprobarCot, devolver, anular*, cancelar*, deleteTarifa, saveUsuario, saveConfig...
@@ -2410,6 +2410,21 @@ function a_negArchivo(u, p) {
   if (num_(a.Tamano) > 8 * 1048576) return { nombre: a.Nombre, enlace: DriveApp.getFileById(a.DriveID).getUrl() };   // grande: se abre en Drive
   const blob = DriveApp.getFileById(a.DriveID).getBlob();
   return { nombre: a.Nombre, mime: str_(a.Mime) || blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+/** Borra un archivo subido por error (diseno, comprobante, complemento o adjunto de comentario). Lo puede quitar quien lo subio, quien creo la negociacion o la administracion. */
+function a_negEliminarArchivo(u, p) {
+  need_(u, 'neg');
+  const a = mustFind_('NegArchivos', 'ID', p.ID, 'Archivo');
+  const n = mustFind_('Negociaciones', 'ID', a.Negociacion, 'Negociación');
+  const puede = str_(a.Usuario).toLowerCase() === u.email || str_(n.CreadoPor).toLowerCase() === u.email || can_(u, '*') || esAdminCom_(u.email);
+  if (!puede) throw new Error('Solo quien subió el archivo (' + (str_(a.UsuarioNombre) || str_(a.Usuario)) + '), quien creó la negociación o la administración pueden eliminarlo.');
+  try { DriveApp.getFileById(a.DriveID).setTrashed(true); } catch (e) { /* ya no estaba en Drive: se limpia igual el registro */ }
+  deleteWhere_('NegArchivos', function (x) { return str_(x.ID) === str_(a.ID); });
+  const quedan = read_('NegArchivos').filter(function (x) { return x.Negociacion === n.ID; }).length;
+  negHist_(n, 'Eliminó el archivo ' + a.Nombre, u); update_('Negociaciones', n);
+  negMsgSistema_(u, n, 'Eliminó el archivo «' + a.Nombre + '».');
+  return { ID: a.ID, archivos: quedan };
 }
 
 // ==================== PAGO DE LA NEGOCIACION (alimenta el pago de comisiones) ====================
