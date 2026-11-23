@@ -784,28 +784,34 @@ function calcPartida_(t, l, cats) {
   const m2 = num_(l.M2) > 0 ? num_(l.M2) : anE * alE * q;
   const uni = str_(l.Unidad) ? inList_(str_(l.Unidad), UNIDADES_COT, 'Unidad') : (UNIDADES_COT.indexOf(t.cobroPor) >= 0 && costoUnidad_(t, t.cobroPor, anE, alE) ? t.cobroPor : (UNIDADES_COT.filter(function (u) { return costoDirecto_(t, u); })[0] || 'm2'));
   const base = uni === 'm2' ? m2 : uni === 'mtl' ? (alE > 0 ? alE * q : q) : q;
-  const manual = num_(l.PrecioManual) === 1 || /^(si|sí|1|true)$/i.test(str_(l.PrecioManual));
+  // precio capturado a mano: 'PZ' = precio por pieza (P. UNIT), 'SI' = precio por la unidad de medida. Las medidas (ancho, alto, m2) NO se tocan.
+  const mm = str_(l.PrecioManual).toUpperCase();
+  const manualPz = mm === 'PZ' && num_(l.PrecioUnit) > 0;
+  const manual = manualPz || ((num_(l.PrecioManual) === 1 || /^(SI|SÍ|1|TRUE)$/.test(mm)) && num_(l.PrecioM2) > 0);
   const unidadesOk = {}; UNIDADES_COT.forEach(function (u) { unidadesOk[u] = !!costoUnidad_(t, u, anE, alE); });
-  let cMat = 0, cTin = 0, cAca = 0, importe, precio;
-  if (manual && num_(l.PrecioM2) > 0) {
-    precio = num_(l.PrecioM2); importe = r2_(base * precio);
-  } else {
-    const cu = costoUnidad_(t, uni, anE, alE);
-    if (!cu) throw new Error('"' + t.material + '" no tiene costo por ' + uni + ' (NA). Elige otra unidad o captura el precio.');
+  let cMat = 0, cTin = 0, cAca = 0, importe, precio, costo = 0;
+  const cu = costoUnidad_(t, uni, anE, alE);
+  if (cu) {   // costo calculado (con margen) o, si el precio es manual, solo de referencia
     cMat = base * cu;
     const mult = (blanca && barniz) ? 3 : (blanca || barniz) ? 2 : 1, sobreTotal = str_(cfg_('COT_MULT_SOBRE', 'TINTA')).toUpperCase() === 'TOTAL';
     cTin = m2 * tintaRate_(imp) * (sobreTotal ? 1 : mult);
     acab.forEach(function (a) {
       cAca += a.unidad === 'manual' ? a.par * m2 : a.unidad === 'ojillo' ? a.costo * a.par * q : a.unidad === 'm2' ? a.costo * m2 : a.unidad === 'ml' ? a.costo * 2 * (anE + alE) * q : a.costo * q;
     });
-    let costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
-    const mg = margenCot_();
-    importe = r2_(costo / (1 - mg)); precio = base ? r4_(importe / base) : 0;
+    costo = cMat + cTin + cAca; if (sobreTotal) costo *= mult;
+  }
+  if (manualPz) {
+    importe = r2_(num_(l.PrecioUnit) * q); precio = base ? r4_(importe / base) : 0;
+  } else if (manual) {
+    precio = num_(l.PrecioM2); importe = r2_(base * precio);
+  } else {
+    if (!cu) throw new Error('"' + t.material + '" no tiene costo por ' + uni + ' (NA). Elige otra unidad o captura el precio.');
+    importe = r2_(costo / (1 - margenCot_())); precio = base ? r4_(importe / base) : 0;
   }
   const det = [imp + (blanca ? ' + tinta blanca' : '') + (barniz ? ' + barniz a registro' : '')].concat(acab.map(function (a) {
     return a.nombre + (a.unidad === 'ojillo' ? ' (' + a.par + ' por pieza)' : a.unidad === 'manual' ? ' ($' + a.par + ' por m²)' : '') + (a.inc > 0 ? ' (+' + a.inc + ' cm al ancho y al alto)' : ''); })).join(' · ');
-  return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: r2_(importe / q), Impresion: imp,
-           TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det + (!(manual && num_(l.PrecioM2) > 0) && !costoDirecto_(t, uni) ? ' · costo por ' + (uni === 'mtl' ? 'metro lineal' : uni === 'pz' ? 'pieza' : uni === 'lamina' ? 'lámina' : uni) + ' calculado desde el costo registrado del material' : ''), CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual };
+  return { margen: margenCot_(), Unidad: uni, unidadesOk: unidadesOk, M2: r4_(m2), Cantidad: q, Precio: precio, Importe: importe, PrecioUnit: manualPz ? r2_(num_(l.PrecioUnit)) : r2_(importe / q), Impresion: imp,
+           TintaBlanca: blanca ? 'SI' : '', Barniz: barniz ? 'SI' : '', acab: acab, Detalle: det + (!manual && !costoDirecto_(t, uni) ? ' · costo por ' + (uni === 'mtl' ? 'metro lineal' : uni === 'pz' ? 'pieza' : uni === 'lamina' ? 'lámina' : uni) + ' calculado desde el costo registrado del material' : ''), CostoMaterial: r2_(cMat), CostoTinta: r2_(cTin), CostoAcabados: r2_(cAca), manual: manual, manualTipo: manualPz ? 'PZ' : manual ? 'SI' : '', costoRef: r2_(costo) };
 }
 
 /** Partidas de cotización ya calculadas. MATERIAL = TARIFAS (catalogo unico). */
@@ -819,7 +825,7 @@ function lineasCot_(arr) {
     const t = tars[desc.toUpperCase()];
     if (!t) throw new Error('El material "' + desc + '" no está en el catálogo (hoja TARIFAS). Elígelo de la lista.');
     const r = calcPartida_(t, l, cats), o = { Descripcion: t.material, Ancho: num_(l.Ancho) || '', Alto: num_(l.Alto) || '', Cantidad: r.Cantidad, M2: r.M2, PrecioM2: r.Precio, PrecioUnit: r.PrecioUnit,
-      Importe: r.Importe, Unidad: r.Unidad, Impresion: r.Impresion, TintaBlanca: r.TintaBlanca, Barniz: r.Barniz, Detalle: r.Detalle, CostoMaterial: r.CostoMaterial, CostoTinta: r.CostoTinta, CostoAcabados: r.CostoAcabados, PrecioManual: r.manual ? 'SI' : '' };
+      Importe: r.Importe, Unidad: r.Unidad, Impresion: r.Impresion, TintaBlanca: r.TintaBlanca, Barniz: r.Barniz, Detalle: r.Detalle, CostoMaterial: r.CostoMaterial, CostoTinta: r.CostoTinta, CostoAcabados: r.CostoAcabados, PrecioManual: r.manualTipo };
     r.acab.forEach(function (a, i) { o['Acabado' + (i + 1)] = a.nombre; o['Param' + (i + 1)] = a.par || ''; });
     out.push(o);
   });
@@ -838,7 +844,7 @@ function a_cotCalcular(u, p) {
     if (!t) return { error: 'El material no está en el catálogo (TARIFAS).' };
     try {
       const r = calcPartida_(t, l, cats); bruto += r.Importe;
-      const o = { margen: r.margen, manual: r.manual, Unidad: r.Unidad, unidadesOk: r.unidadesOk, M2: r.M2, Precio: r.Precio, PrecioUnit: r.PrecioUnit, Importe: r.Importe, Detalle: r.Detalle };
+      const o = { margen: r.margen, manual: r.manual, manualTipo: r.manualTipo, costoRef: r.costoRef, Unidad: r.Unidad, unidadesOk: r.unidadesOk, M2: r.M2, Precio: r.Precio, PrecioUnit: r.PrecioUnit, Importe: r.Importe, Detalle: r.Detalle };
       if (vc) { o.CostoMaterial = r.CostoMaterial; o.CostoTinta = r.CostoTinta; o.CostoAcabados = r.CostoAcabados; }
       return o;
     } catch (e) {

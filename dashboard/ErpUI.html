@@ -177,7 +177,7 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
-var ERPUI_BUILD = 'v2026-11-24.1 · ver y eliminar archivos';
+var ERPUI_BUILD = 'v2026-11-25.1 · precio unitario manual';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
 function erp(accion, payload, intento){
@@ -466,8 +466,8 @@ function partidaHtml(l, bloq){
     '<td><input data-c="M2" type="number" step="0.0001" value="' + esc(l.M2 || '') + '" data-man="' + man + '" title="Se calcula solo (ancho × alto × cantidad, con lo que sumen las bolsas); puedes corregirlo"></td>' +
     '<td><select data-c="Unidad" data-u="' + (l.Unidad ? '1' : '') + '">' + un.map(function(u){ return '<option' + (u === (l.Unidad || 'm2') ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></td>' +
     '<td><input data-c="Cantidad" type="number" step="1" value="' + esc(l.Cantidad || 1) + '"></td>' +
-    '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioManual ? '1' : '') + '" title="Precio por la unidad elegida: (material + tinta + acabados) ÷ 0.60. Si lo cambias a mano se usa tal cual."></td>' +
-    '<td><input data-c="PrecioUnit" type="number" value="' + esc(l.PrecioUnit || '') + '" readonly title="Precio por pieza: importe ÷ cantidad"></td>' +
+    '<td><input data-c="PrecioM2" type="number" step="0.01" value="' + esc(l.PrecioM2 || '') + '" data-man="' + (l.PrecioManual && l.PrecioManual !== 'PZ' ? '1' : '') + '" title="Precio por la unidad elegida: (material + tinta + acabados) ÷ 0.60. Si lo cambias a mano se usa tal cual."></td>' +
+    '<td><input data-c="PrecioUnit" type="number" step="0.01" value="' + esc(l.PrecioUnit || '') + '" data-man="' + (l.PrecioManual === 'PZ' ? '1' : '') + '" title="Precio por pieza (importe ÷ cantidad). Si lo cambias, el importe = precio × cantidad y se ajusta el precio por unidad de medida; el ancho, alto y m² no cambian."></td>' +
     '<td class="n imp">' + $m(l.Importe || 0) + '</td><td>' + (bloq ? '' : '<button type="button" class="erp-btn chico rojo" onclick="this.closest(\'tbody\').remove();cotRecalc()">×</button>') + '</td></tr>' +
     '<tr class="opc"><td colspan="10"><div class="opts"><span><label>Impresión</label><select data-c="Impresion">' + eOpts(imps, imp, false) + '</select></span>' +
     '<span class="uvx" style="' + (uv ? '' : 'display:none') + '"><label><input type="checkbox" data-c="TintaBlanca"' + (l.TintaBlanca ? ' checked' : '') + '> Tinta blanca</label> <label><input type="checkbox" data-c="Barniz"' + (l.Barniz ? ' checked' : '') + '> Barniz a registro</label></span>' +
@@ -479,9 +479,11 @@ function leePartida(tb){
   o.TintaBlanca = g('TintaBlanca').checked ? 'SI' : ''; o.Barniz = g('Barniz').checked ? 'SI' : '';
   if (g('M2').dataset.man) { o.M2 = g('M2').value; }
   if (g('Unidad').dataset.u) { o.Unidad = g('Unidad').value; }
-  if (g('PrecioM2').dataset.man) { o.PrecioM2 = g('PrecioM2').value; o.PrecioManual = 'SI'; }
+  if (g('PrecioUnit').dataset.man) { o.PrecioUnit = g('PrecioUnit').value; o.PrecioManual = 'PZ'; }   // precio por pieza a mano: no mueve medidas
+  else if (g('PrecioM2').dataset.man) { o.PrecioM2 = g('PrecioM2').value; o.PrecioManual = 'SI'; }
   return o;
 }
+function cotQuitaManual(a){ var tb = a.closest('tbody'); tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; tb.querySelector('[data-c=PrecioUnit]').dataset.man = ''; cotRecalc(); }
 var COT_SEQ = 0, COT_T = null;
 function cotRecalc(){
   clearTimeout(COT_T);
@@ -500,8 +502,8 @@ function cotRecalc(){
         if (x.Unidad && !g('Unidad').dataset.u) { g('Unidad').value = x.Unidad; }
         if (x.M2 != null && !g('M2').dataset.man) { g('M2').value = x.M2 || ''; }
         if (x.Precio != null && !g('PrecioM2').dataset.man) { g('PrecioM2').value = x.Precio || ''; }
-        g('PrecioUnit').value = x.PrecioUnit || '';
-        tb.querySelector('.det').textContent = (x.Detalle || '') + (x.manual ? '  ·  precio capturado a mano (sin tinta, acabados ni margen)' : (x.CostoMaterial != null ? '  ·  costo: material ' + $m(x.CostoMaterial) + ' + tinta ' + $m(x.CostoTinta) + ' + acabados ' + $m(x.CostoAcabados) + ' = ' + $m(x.CostoMaterial + x.CostoTinta + x.CostoAcabados) + ' ÷ ' + (1 - x.margen).toFixed(2) + ' = ' + $m(x.Importe) : (x.margen ? '  ·  precio = costo ÷ ' + (1 - x.margen).toFixed(2) : '')));
+        if (!g('PrecioUnit').dataset.man) { g('PrecioUnit').value = x.PrecioUnit || ''; }
+        tb.querySelector('.det').innerHTML = esc(x.Detalle || '') + (x.manual ? '  ·  precio capturado a mano (' + (x.manualTipo === 'PZ' ? 'por pieza' : 'por unidad de medida') + (x.costoRef ? '; costo calculado de referencia ' + $m(x.costoRef) : '') + ')  ·  <a href="#" onclick="cotQuitaManual(this);return false">volver al precio calculado</a>' : (x.CostoMaterial != null ? '  ·  costo: material ' + $m(x.CostoMaterial) + ' + tinta ' + $m(x.CostoTinta) + ' + acabados ' + $m(x.CostoAcabados) + ' = ' + $m(x.CostoMaterial + x.CostoTinta + x.CostoAcabados) + ' ÷ ' + (1 - x.margen).toFixed(2) + ' = ' + $m(x.Importe) : (x.margen ? '  ·  precio = costo ÷ ' + (1 - x.margen).toFixed(2) : '')));
       });
       tot.style.opacity = '1';
       tot.innerHTML = 'Partidas: ' + $m(r.bruto) + ' · m²: ' + $n(r.m2) + (r.descuento ? '<br>Descuento ' + (document.querySelector('[data-k=DescuentoPct]').value) + '%: -' + $m(r.descuento) : '') + '<br>Subtotal: <b>' + $m(r.subtotal) + '</b> · IVA: ' + $m(r.iva) + ' · Total: <b>' + $m(r.total) + '</b>';
@@ -545,13 +547,15 @@ function cotForm(folio, pre, after){
     } else {
       ra.addEventListener('input', function(ev){
         var cc = ev.target.getAttribute('data-c'), tb = ev.target.closest('tbody');
-        if (cc === 'M2' || cc === 'PrecioM2') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
-        if (cc === 'Descripcion') { var u = tb.querySelector('[data-c=Unidad]'); u.dataset.u = ''; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
+        if (cc === 'M2' || cc === 'PrecioM2' || cc === 'PrecioUnit') { ev.target.dataset.man = ev.target.value === '' ? '' : '1'; }
+        if (cc === 'PrecioM2') { tb.querySelector('[data-c=PrecioUnit]').dataset.man = ''; }      // el ultimo precio que tocas manda
+        if (cc === 'PrecioUnit') { tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
+        if (cc === 'Descripcion') { var u = tb.querySelector('[data-c=Unidad]'); u.dataset.u = ''; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; tb.querySelector('[data-c=PrecioUnit]').dataset.man = ''; }
         cotRecalc();
       });
       ra.addEventListener('change', function(ev){
         var cc = ev.target.getAttribute('data-c'), tb = ev.target.closest('tbody');
-        if (cc === 'Unidad') { ev.target.dataset.u = '1'; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; }
+        if (cc === 'Unidad') { ev.target.dataset.u = '1'; tb.querySelector('[data-c=PrecioM2]').dataset.man = ''; tb.querySelector('[data-c=PrecioUnit]').dataset.man = ''; }
         if (cc === 'Impresion') { tb.querySelector('.uvx').style.display = ev.target.value === 'UV' ? '' : 'none'; }
         if (/^Acabado\d$/.test(cc)) {
           var pi = ev.target.parentNode.querySelector('input');
