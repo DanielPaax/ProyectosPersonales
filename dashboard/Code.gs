@@ -2900,6 +2900,7 @@ function onOpen() {
         .addItem('Instalar / reparar hojas del ERP', 'erpInstalar')
         .addItem('Importar datos iniciales (clientes, proveedores, materiales…)', 'erpImportarDatos')
         .addItem('Cargar historial (VENTAS y BASE) al ERP', 'erpImportarHistorico')
+        .addItem('Vaciar caché del ERP (tras editar hojas a mano)', 'erpVaciarCache')
         .addItem('Homologar clientes duplicados (IMJ, LA PERLA, GUADALUPE)', 'erpHomologarClientes')
         .addItem('Actualizar VENTAS desde todas las ODP', 'erpResincronizar')
         .addItem('Autorizar archivos grandes (Negociaciones, 100 MB)', 'erpAutorizarArchivos'))

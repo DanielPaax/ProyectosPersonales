@@ -177,16 +177,49 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
-var ERPUI_BUILD = 'v2026-11-25.1 · precio unitario manual';
+var ERPUI_BUILD = 'v2026-11-27.1 · rapidez';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
+/* ---------- rapidez: tiempos por accion, memoria por vista (se muestra lo ultimo visto al instante y se refresca por detras) ---------- */
+function erpMide(accion, t0, srv){
+  var t = (E.t = E.t || {})[accion] || (E.t[accion] = { n: 0, tot: 0, srv: 0, max: 0 }), ms = Date.now() - t0;
+  t.n++; t.tot += ms; t.srv += srv || 0; if (ms > t.max) { t.max = ms; }
+}
+function erpTiempos(){
+  var f = Object.keys(E.t || {}).map(function(k){ var t = E.t[k]; return { k: k, n: t.n, avg: Math.round(t.tot / t.n), srv: Math.round(t.srv / t.n), max: t.max }; }).sort(function(a, b){ return b.avg - a.avg; });
+  ventana('Tiempos de respuesta (esta sesión)', '<p class="erp-sub">«Total» es lo que espera quien usa la pantalla; «Servidor» es lo que tarda Apps Script en procesarlo. La diferencia es la red y el arranque de Google.</p>' +
+    (f.length ? '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Acción</th><th class="n">Veces</th><th class="n">Total prom. (ms)</th><th class="n">Servidor prom. (ms)</th><th class="n">Máx. (ms)</th></tr></thead><tbody>' +
+      f.map(function(x){ return '<tr><td>' + esc(x.k) + '</td><td class="n">' + x.n + '</td><td class="n">' + x.avg + '</td><td class="n">' + x.srv + '</td><td class="n">' + x.max + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="erp-vacio">Aún no hay mediciones.</div>'), '', true);
+}
+function erpVer(accion, payload, pinta, fallo){
+  var k = accion + '|' + JSON.stringify(payload || {}), v0 = E.vista, c = (E.rc = E.rc || {})[k], visto = false;
+  if (c && Date.now() - c.t < 600000) { try { pinta(c.d); visto = true; } catch (x) { visto = false; } }
+  erp(accion, payload).then(function(d){
+    var s = JSON.stringify(d); E.rc[k] = { t: Date.now(), d: d, s: s };
+    if (E.vista !== v0) { return; }                  // ya cambiaste de ventana: no se pisa la pantalla actual
+    if (visto && c.s === s) { return; }              // nada cambio: sin parpadeo
+    pinta(d);
+  }, function(e){ if (!visto && E.vista === v0) { fallo(e); } });
+}
+function erpPrecarga(){
+  var lista = [['negociaciones', {}, PA(['neg', 'neg_ver'])], ['cotizaciones', {}, PA(['crm', 'crm_ver'])], ['odps', {}, P('odp_ver')], ['clientes', {}, PA(['crm', 'crm_ver', 'facturas', 'cxc'])], ['actividades', {}, PA(['act', 'act_ver'])]];
+  var i = 0;
+  (function sig(){
+    if (i >= lista.length) { return; }
+    var it = lista[i++], k = it[0] + '|' + JSON.stringify(it[1]);
+    if (!it[2] || document.hidden || (E.rc && E.rc[k] && Date.now() - E.rc[k].t < 300000)) { return setTimeout(sig, 100); }
+    erp(it[0], it[1]).then(function(d){ (E.rc = E.rc || {})[k] = { t: Date.now(), d: d, s: JSON.stringify(d) }; }, function(){}).then(function(){ setTimeout(sig, 700); });
+  })();
+}
 function erp(accion, payload, intento){
   intento = intento || 0;
+  var t0 = Date.now();
   return new Promise(function(res, rej){
     google.script.run
       .withSuccessHandler(function(t){
         var r; try { r = JSON.parse(t); } catch (x) { return rej(new Error('Respuesta inválida del servidor.')); }
-        if (r.ok) { return res(r.data); }
+        erpMide(accion, t0, r.ms);
+        if (r.ok) { if (E.lec && !E.lec[accion]) { E.rc = {}; } return res(r.data); }   // una escritura invalida la memoria de vistas
         if (/No se pudo identificar/.test(r.error || '')) { sesionPerdida(); }
         /* candado ocupado: la accion NO se ejecuto, es seguro reintentar */
         if (/candado|lock/i.test(r.error || '') && intento < 2) { return setTimeout(function(){ erp(accion, payload, intento + 1).then(res, rej); }, 2500); }
@@ -300,12 +333,13 @@ function abrirErp(){
   window.scrollTo(0, 0);
   if (E.init) { notifIniciar(); if (E.pendiente) { return erpIrPendiente(); } return erpVista(E.vista || 'inicio'); }
   eq('erpMain').innerHTML = '<div class="erp-vacio">Cargando el ERP…</div>';
-  Promise.all([erp('init'), erp('lookups'), erp('catalogosProd').catch(function(){ return {}; })]).then(function(r){
-    E.init = r[0]; E.lk = r[1]; E.cat = r[2] || {};
+  erp('arranque').then(function(r){   // init + lookups + catalogos en UNA llamada
+    E.init = r.init; E.lk = r.lookups; E.cat = r.cat || {}; E.lec = {}; (r.lecturas || []).forEach(function(a){ E.lec[a] = 1; });
     eq('erpQuien').innerHTML = '<b>' + esc(E.init.user.nombre) + '</b><br>' + esc(E.init.user.rol) + ' · ' + esc(E.init.user.email) + (window.PT && PT.ses && PT.ses.porSesion ? ' · <a href="#" onclick="cerrarSesion();return false" style="color:#FFC9AD;font-weight:700">Cerrar sesión</a>' : '');
     eq('erpBuild').textContent = ERPUI_BUILD;
     var l = eq('erpLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
-    erpNav(); notifIniciar();
+    erpNav(); notifIniciar(); setTimeout(erpPrecarga, 2500);
+    var bd = eq('erpBuild'); if (bd) { bd.style.cursor = 'pointer'; bd.title = 'Clic: tiempos de respuesta'; bd.onclick = erpTiempos; }
     if (E.pendiente) { erpIrPendiente(); } else { erpVista('inicio'); }
   }, function(e){ erpError(eq('erpMain'), e); });
 }
@@ -355,7 +389,7 @@ function recargaLookups(){ return erp('lookups').then(function(l){ E.lk = l; });
 /* ===================== INICIO ===================== */
 function vInicio(m){
   var desde = hoyIso().slice(0, 8) + '01';
-  erp('dashboard', { desde: desde, hasta: hoyIso() }).then(function(d){
+  erpVer('dashboard', { desde: desde, hasta: hoyIso() }, function(d){
     var h = '<h2>Inicio</h2><p class="erp-sub">Resumen del mes (' + fFecha(d.desde) + ' al ' + fFecha(d.hasta) + ')</p>';
     if (d.produccion) {
       var p = d.produccion;
@@ -392,7 +426,7 @@ function kpi(t, v, mal){ return '<div class="erp-kpi' + (mal ? ' mal' : '') + '"
 
 /* ===================== CLIENTES ===================== */
 function vClientes(m){
-  erp('clientes').then(function(rows){
+  erpVer('clientes', {}, function(rows){
     E.cache.clientes = rows;
     m.innerHTML = '<h2>Clientes</h2><p class="erp-sub">Catálogo de clientes. Las cotizaciones y las ODP se ligan a un cliente.</p>' +
       '<div class="erp-bar"><input id="cliQ" placeholder="Buscar nombre, RFC o contacto" oninput="pintaClientes()" style="min-width:260px"><span class="sp"></span>' +
@@ -429,7 +463,7 @@ function clienteForm(id, pre, cb){
 
 /* ===================== COTIZACIONES ===================== */
 function vCotizaciones(m){
-  erp('cotizaciones').then(function(rows){
+  erpVer('cotizaciones', {}, function(rows){
     E.cache.cots = rows;
     m.innerHTML = '<h2>Cotizaciones</h2><p class="erp-sub">Al aprobar una cotización se abre la ODP y la venta aparece en el Dashboard.</p>' +
       '<div class="erp-bar"><input id="cotQ" placeholder="Buscar folio, cliente o proyecto" oninput="pintaCots()" style="min-width:240px"><select id="cotE" onchange="pintaCots()">' +
@@ -588,7 +622,7 @@ function cotForm(folio, pre, after){
 }
 
 /* ===================== NEGOCIACIONES (kanban) ===================== */
-var NG = { d: null, resp: '', q: '', tiempo: '', desde: '', hasta: '', perdidas: false, cur: null, det: null, tab: 'c', pre: '', sel: { cli: '' }, arch: null };
+var NG = { hist: false, d: null, resp: '', q: '', tiempo: '', desde: '', hasta: '', perdidas: false, cur: null, det: null, tab: 'c', pre: '', sel: { cli: '' }, arch: null };
 var NG_COL = ['#8A5CF6', '#2D7FF9', '#1E8E5A', '#14B8A6', '#F0A80C', '#FF6A13', '#0EA5E9', '#16A34A'];
 var NT = { h: null, lista: [] };
 function ngUsuarios(){ return (E.lk && E.lk.usuarios) || []; }
@@ -600,7 +634,7 @@ function ngFH(f, h){ return fFecha(f) + (h ? ' ' + h : ''); }
 
 function vNegociaciones(m){
   var pre = E.lk && E.lk.usuarios ? Promise.resolve() : recargaLookups();
-  pre.then(function(){ return erp('negociaciones'); }).then(function(d){
+  pre.then(function(){ erpVer('negociaciones', NG.hist ? { historicas: 1 } : {}, function(d){
     NG.d = d;
     m.innerHTML = '<h2>Negociaciones</h2><p class="erp-sub">Arrastra cada negociación entre etapas. Al pasar de COTIZACIÓN ENVIADA a APROBADO, la cotización ligada se convierte en ODP.</p>' +
       '<div class="ng-barra"><select id="ngResp" onchange="NG.resp=this.value;ngPinta()"><option value="">Todos los responsables</option><option value="' + esc(d.yo) + '">Mis negociaciones</option>' +
@@ -608,12 +642,13 @@ function vNegociaciones(m){
       '<input id="ngQ" placeholder="Buscar nombre, cliente o folio" oninput="NG.q=this.value;ngPinta()" style="min-width:230px">' +
       '<select id="ngTiempo" onchange="NG.tiempo=this.value;ngTiempoUi();ngPinta()" title="Filtra por fecha de creación">' + eOpts([{ v: '30', t: 'Últimos 30 días' }, { v: '90', t: 'Último trimestre' }, { v: '182', t: 'Último semestre' }, { v: '365', t: 'Último año' }, { v: 'rango', t: 'Rango personalizado…' }], NG.tiempo, 'Todo el tiempo') + '</select>' +
       '<span id="ngRango" style="display:none;gap:6px;align-items:center"><input type="date" id="ngDesde" onchange="NG.desde=this.value;ngPinta()"> a <input type="date" id="ngHasta" onchange="NG.hasta=this.value;ngPinta()"></span>' +
-      '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="ngPer" onchange="NG.perdidas=this.checked;ngPinta()"> Mostrar perdidas</label><span class="sp"></span>' +
+      '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="ngPer" onchange="NG.perdidas=this.checked;ngPinta()"> Mostrar perdidas</label>' +
+      (d.historicas ? '<label style="font-size:13px;display:flex;gap:6px;align-items:center" title="Negociaciones cargadas del historial de VENTAS. Son cientos: se cargan solo si las pides."><input type="checkbox" id="ngHist"' + (NG.hist ? ' checked' : '') + ' onchange="NG.hist=this.checked;vNegociaciones(eq(\'erpMain\'))"> Incluir históricas (' + d.historicas + ')</label>' : '') + '<span class="sp"></span>' +
       (P('neg') ? '<button type="button" class="erp-btn nar" onclick="ngAbre(null)">+ Nueva negociación</button>' : '') + '</div><div id="ngTab" class="ng-tablero"></div>';
     eq('ngResp').value = NG.resp; eq('ngQ').value = NG.q; eq('ngPer').checked = NG.perdidas; eq('ngDesde').value = NG.desde; eq('ngHasta').value = NG.hasta; ngTiempoUi();
     ngPinta();
     if (E.pendiente) { var id = E.pendiente; E.pendiente = ''; ngAbre(id); }
-  }, function(e){ erpError(m, e); });
+  }, function(e){ erpError(m, e); }); });
 }
 function ngTiempoUi(){ eq('ngRango').style.display = NG.tiempo === 'rango' ? 'inline-flex' : 'none'; }
 function ngLimites(){
@@ -697,7 +732,7 @@ function ngMover(id, etapa, despues){
 function ngAbre(id, etapa){
   var n = id ? ngBusca(id) : null;
   if (!n && id) {   // llegamos por enlace o notificacion y el tablero aun no la trae
-    return erp('negociaciones').then(function(d){ NG.d = d; if (ngBusca(id)) { ngAbre(id); } else { ptToast('No encontré la negociación ' + id + '.'); } });
+    return erp('negociaciones', { ID: id }).then(function(d){ NG.d = d; if (ngBusca(id)) { ngAbre(id); } else { ptToast('No encontré la negociación ' + id + '.'); } });
   }
   if (!n && !P('neg')) { return; }
   NG.cur = n; NG.det = null; NG.tab = 'c'; NG.arch = null; NG.pagoTmp = null;
@@ -1104,7 +1139,7 @@ function acBusca(id){ return ACT.d ? ACT.d.rows.filter(function(a){ return a.ID 
 function acPuedeEditar(a){ return !a || a.CreadoPor === E.init.user.email || E.init.user.rol === 'ADMIN' || E.init.user.adminCom; }
 function vActividades(m){
   var pre = E.lk && E.lk.usuarios ? Promise.resolve() : recargaLookups();
-  pre.then(function(){ return erp('actividades'); }).then(function(d){
+  pre.then(function(){ erpVer('actividades', {}, function(d){
     ACT.d = d;
     m.innerHTML = '<h2>Actividades</h2><p class="erp-sub">Tus tareas y las que asignas a otras personas, relacionadas o no con negociaciones, cotizaciones, ODP y clientes. Cada quien ve las actividades donde es creador, responsable o participante.</p>' +
       '<div class="ng-barra"><select id="acQuien" onchange="ACT.quien=this.value;acPinta()"><option value="">Todas las mías y compartidas</option><option value="mias">Asignadas a mí</option><option value="creadas">Creadas por mí</option>' +
@@ -1118,7 +1153,7 @@ function vActividades(m){
     eq('acQuien').value = ACT.quien; eq('acQ').value = ACT.q; eq('acVenc').checked = ACT.vencidas; eq('acVie').checked = ACT.viejas;
     acPinta();
     if (/^AC-/.test(E.pendiente || '')) { var id = E.pendiente; E.pendiente = ''; acAbre(id); }
-  }, function(e){ erpError(m, e); });
+  }, function(e){ erpError(m, e); }); });
 }
 function acFiltradas(){
   var q = ACT.q.trim().toLowerCase(), yo = E.init.user.email, lim = new Date(); lim.setDate(lim.getDate() - 30);
@@ -1380,7 +1415,7 @@ var CM_TIPO = { VENDEDOR: 'Vendedor', ADMINISTRATIVO: 'Administrativo', GERENCIA
 function cmPct(n){ return n === null || n === undefined || n === '' ? '—' : (Math.round(Number(n) * 100) / 100) + '%'; }
 function vComisiones(m){
   var pre = E.lk && E.lk.usuarios ? Promise.resolve() : recargaLookups();
-  pre.then(function(){ return erp('comisiones', { usuario: CM.usuario }); }).then(function(d){
+  pre.then(function(){ erpVer('comisiones', { usuario: CM.usuario }, function(d){
     CM.d = d;
     var r = d.resumen, sinTipo = !d.admin && !d.miTipo;
     m.innerHTML = '<h2>Pago de comisiones</h2><p class="erp-sub">Se pagan el día <b>' + d.diaPago + '</b> de cada mes: la comisión acumulada del mes anterior de las negociaciones que el cliente liquidó al 100% (sin pagos parciales ni adelantos). Próximo pago: <b>' + fFecha(d.siguientePago) + '</b>. Tasas: vendedores ' + cmPct(d.tasas.VENDEDOR) + ', administrativos ' + cmPct(d.tasas.ADMINISTRATIVO) + ', gerencia general ' + cmPct(d.tasas.GERENCIA) + ', sobre el monto antes de impuestos.</p>' +
@@ -1394,7 +1429,7 @@ function vComisiones(m){
       '<div id="cmTab" class="ng-tablero"></div>';
     if (d.admin) { eq('cmUsr').value = CM.usuario; }
     eq('cmQ').value = CM.q; cmPinta();
-  }, function(e){ erpError(m, e); });
+  }, function(e){ erpError(m, e); }); });
 }
 function cmTarjeta(i){
   var adm = CM.d.admin, col = i.col, avisos = '';
@@ -1440,7 +1475,7 @@ function cmSuelta(ev, el){
 }
 function cmAbre(id){
   if (NG.d && ngBusca(id)) { return ngAbre(id); }
-  erp('negociaciones').then(function(d){ NG.d = d; ngAbre(id); }, function(e){ ptToast(e.message); });
+  erp('negociaciones', { ID: id }).then(function(d){ NG.d = d; ngAbre(id); }, function(e){ ptToast(e.message); });
 }
 function cmSinDefinir(){
   var l = CM.d.sinDefinir;
@@ -1796,7 +1831,7 @@ function armPartida(){
 
 /* ===================== SEGUIMIENTO ===================== */
 function vSeguimiento(m){
-  erp('seguimiento').then(function(rows){
+  erpVer('seguimiento', {}, function(rows){
     m.innerHTML = '<h2>Seguimiento comercial</h2><p class="erp-sub">Llamadas, mensajes, correos y visitas a clientes y cotizaciones.</p>' +
       '<div class="erp-bar"><span class="sp"></span>' + (P('crm') ? '<button class="erp-btn nar" type="button" onclick="segForm()">+ Registrar seguimiento</button>' : '') + '</div>' +
       (rows.length ? '<div class="erp-scroll"><table class="erp-tabla"><thead><tr><th>Fecha</th><th>Cliente</th><th>Cotización</th><th>Tipo</th><th>Nota</th><th>Próxima acción</th></tr></thead><tbody>' +
@@ -1813,12 +1848,14 @@ function segForm(){
 }
 
 /* ===================== ODP ===================== */
+var OD = { hist: false };
 function vOdp(m){
-  erp('odps').then(function(rows){
+  erpVer('odps', OD.hist ? { historicas: 1 } : {}, function(rows){
     E.cache.odps = rows;
     var vc = E.init.cfg.VE_COSTOS;
     m.innerHTML = '<h2>Órdenes de producción</h2><p class="erp-sub">Cada ODP mantiene su renglón en VENTAS y su producción en BASE: el Dashboard se nutre de aquí.</p>' +
-      '<div class="erp-bar"><input id="odpQ" placeholder="Buscar ODP, cliente o proyecto" oninput="pintaOdps()" style="min-width:240px"><select id="odpE" onchange="pintaOdps()">' + eOpts(E.init.cat.EST_ODP, '', 'Todos los estatus') + '</select><span class="sp"></span>' +
+      '<div class="erp-bar"><input id="odpQ" placeholder="Buscar ODP, cliente o proyecto" oninput="pintaOdps()" style="min-width:240px"><select id="odpE" onchange="pintaOdps()">' + eOpts(E.init.cat.EST_ODP, '', 'Todos los estatus') + '</select>' +
+      '<label style="font-size:13px;display:flex;gap:6px;align-items:center" title="Las ODP cargadas del historial (VENTAS/BASE). Son cientos: se cargan solo si las pides."><input type="checkbox" id="odpH"' + (OD.hist ? ' checked' : '') + ' onchange="OD.hist=this.checked;vOdp(eq(\'erpMain\'))"> Incluir históricas</label><span class="sp"></span>' +
       (PA(['odp', 'crm']) ? '<button class="erp-btn nar" type="button" onclick="odpForm()">+ Nueva ODP</button>' : '') + '</div><div id="odpTabla"></div>';
     pintaOdps();
   }, function(e){ erpError(m, e); });
@@ -1875,8 +1912,8 @@ function odpForm(folio, det){
   if (!folio) { go(null); } else if (det) { go(det); } else { erp('odpDetalle', { Folio: folio }).then(go, function(e){ ptToast(e.message); }); }
 }
 function vOdpDet(m, folio){
-  Promise.all([erp('odpDetalle', { Folio: folio }), erp('produccionODP', { Folio: folio }).catch(function(){ return null; })]).then(function(r){
-    var d = r[0], pr = r[1], o = d.odp, vc = E.init.cfg.VE_COSTOS, vp = E.init.cfg.VE_PRECIO;
+  erp('odpDetalle', { Folio: folio }).then(function(r){
+    var d = r, pr = r.produccion, o = d.odp, vc = E.init.cfg.VE_COSTOS, vp = E.init.cfg.VE_PRECIO;
     E.cache.det = d;
     var h = '<div class="erp-bar"><button class="erp-btn sec chico" type="button" onclick="erpVista(\'odp\')">‹ Órdenes de producción</button></div>' +
       '<h2>ODP ' + esc(o.Folio) + ' ' + ePill(o.Estatus) + '</h2><p class="erp-sub">' + esc(o.Cliente) + ' · ' + esc(o.Proyecto || o.Descripcion) + (o.Cotizacion ? ' · Cotización ' + esc(o.Cotizacion) : '') + ' · Entrega ' + (fFecha(o.FechaEntrega) || '—') + '</p>';
@@ -2049,7 +2086,7 @@ function tarEliminar(r){
 
 /* ===================== USUARIOS DEL ERP ===================== */
 function vUsuarios(m){
-  erp('usuarios').then(function(rows){
+  erpVer('usuarios', {}, function(rows){
     E.cache.users = rows;
     m.innerHTML = '<h2>Usuarios del ERP</h2><p class="erp-sub">Quién entra al ERP y con qué rol. El rol decide qué módulos ve y qué puede hacer; los socios entran como Dirección (solo lectura).</p>' +
       '<div class="erp-bar"><span class="sp"></span><button class="erp-btn nar" type="button" onclick="usrForm()">+ Agregar usuario</button></div>' +

@@ -41,6 +41,7 @@ var ERP = (function () {
 const SCHEMA = {
   Config:        ['Clave', 'Valor', 'Descripcion'],
   Acabados:      ['Nombre', 'Unidad', 'Costo', 'Incremento', 'Activo'],
+  CorreosPend:   ['ID', 'Para', 'Asunto', 'Html', 'Texto', 'Creado'],
   Usuarios:      ['Email', 'Nombre', 'Rol', 'Activo', 'PrefijoCot', 'TipoComision'],
   Clientes:      ['ID', 'Nombre', 'RFC', 'Contacto', 'Telefono', 'Email', 'Comercial', 'DiasCredito', 'FechaAlta', 'Notas',
                   'RazonSocial', 'Domicilio', 'Colonia', 'Ciudad', 'CP', 'Estado', 'Comisiona', 'Origen'],
@@ -133,7 +134,7 @@ const CONFIG_DEFAULTS = [
   ['COM_DIA_PAGO', '15', 'Día del mes en que se pagan las comisiones liquidadas el mes anterior'],
   ['NEG_DISENADORES', 'mario.nepomuceno@bfprint.com.mx,andrea.lozano@bfprint.com.mx', 'Correos (separados por coma) que reciben aviso cuando se sube un archivo de diseño a una negociación'],
 ];
-const SCHEMA_VER = '13';
+const SCHEMA_VER = '14';
 
 
 
@@ -161,6 +162,7 @@ function fixSheets_(ss) {
     s.getRange(1, 1, 1, n).setFontWeight('bold').setBackground('#1e293b').setFontColor('#ffffff');
     s.setFrozenRows(1);
   });
+  cacheBump_();   // el esquema pudo cambiar columnas: todas las hojas se vuelven a leer
 }
 
 
@@ -168,6 +170,11 @@ function fixSheets_(ss) {
 // ==================== API ====================
 const ACTIONS = {
   version: function () { return { hash: _hashUi_(), url: _urlPublica_() }; },
+  arranque: function (u) {   // lo que la pantalla pedia en 3 llamadas (init, lookups, catalogos) llega en UNA
+    const out = { init: a_init(u), lookups: a_lookups(u), lecturas: Object.keys(LECTURAS) };
+    try { out.cat = a_catalogosProd(u); } catch (e) { out.cat = {}; }
+    return out;
+  },
   init: a_init, lookups: a_lookups, dashboard: a_dashboard,
   clientes: a_clientes, saveCliente: a_saveCliente,
   proveedores: a_proveedores, saveProveedor: a_saveProveedor,
@@ -213,7 +220,7 @@ function inRange_(d, a, b) { return !!d && d >= a && d <= b; }
 
 // ==================== CAPA DE DATOS ====================
 let _C = {}, _H = {};
-function resetCache_() { _C = {}; _H = {}; }
+function resetCache_() { _C = {}; _H = {}; _V = null; }
 // (db_ / sh_ / hdr_ ahora usan las hojas ERP_* del archivo base)
 
 
@@ -221,8 +228,56 @@ function hdr_(n) {
   if (!_H[n]) { const s = sh_(n), lc = s.getLastColumn(); _H[n] = lc ? s.getRange(1, 1, 1, lc).getValues()[0].map(str_) : []; }
   return _H[n];
 }
+// ---- cache compartida de hojas (CacheService): cada hoja tiene una version; toda escritura la cambia, asi que nadie lee datos viejos de lo que
+//      se escribe desde el ERP. Si alguien edita la hoja a mano, se ve en maximo CACHE_ERP_TTL segundos (o con el menu "Vaciar cache del ERP").
+const CACHE_ERP_TTL = 150, CACHE_ERP_CHUNK = 24000, CACHE_ERP_MAXCH = 40;
+let _V = null;
+function verHojas_() {
+  if (_V) return _V;
+  const v = {};
+  try {
+    const nombres = Object.keys(SCHEMA), got = CacheService.getScriptCache().getAll(nombres.map(function (n) { return 'erpv_' + n; }));
+    nombres.forEach(function (n) { v[n] = got['erpv_' + n] || '0'; });
+  } catch (e) { /* sin cache: se lee directo de la hoja */ }
+  _V = v; return v;
+}
+function cacheLee_(n) {
+  try {
+    const v = verHojas_()[n]; if (v === undefined) return null;
+    const c = CacheService.getScriptCache(), base = 'erpc_' + n + '_' + v, meta = c.get(base + '_n');
+    if (!meta) return null;
+    const cnt = Number(meta), ks = []; for (let i = 0; i < cnt; i++) ks.push(base + '_' + i);
+    const got = c.getAll(ks); let txt = '';
+    for (let i = 0; i < cnt; i++) { if (got[ks[i]] == null) return null; txt += got[ks[i]]; }
+    return JSON.parse(txt);
+  } catch (e) { return null; }
+}
+function cacheEscribe_(n, rows) {
+  try {
+    const v = verHojas_()[n]; if (v === undefined) return;
+    const txt = JSON.stringify(rows), base = 'erpc_' + n + '_' + v, o = {}; let i = 0, pos = 0;
+    while (pos < txt.length) {
+      let fin = Math.min(pos + CACHE_ERP_CHUNK, txt.length);
+      if (fin < txt.length) { const cc = txt.charCodeAt(fin - 1); if (cc >= 0xD800 && cc <= 0xDBFF) fin++; }   // no partir un par sustituto (emoji)
+      o[base + '_' + i++] = txt.substring(pos, fin); pos = fin;
+      if (i > CACHE_ERP_MAXCH) return;   // hoja demasiado grande para la cache: se lee directo
+    }
+    o[base + '_n'] = String(i);
+    CacheService.getScriptCache().putAll(o, CACHE_ERP_TTL);
+  } catch (e) { /* nada */ }
+}
+/** Cambia la version de una hoja (o de todas): la siguiente lectura va a la hoja. Se llama DESPUES de cada escritura. */
+function cacheBump_(n) {
+  try {
+    const o = {}, nv = String(Date.now()) + String(Math.floor(Math.random() * 1000));
+    (n ? [n] : Object.keys(SCHEMA)).forEach(function (x) { o['erpv_' + x] = nv; if (_V) _V[x] = nv; });
+    CacheService.getScriptCache().putAll(o, 21600);
+  } catch (e) { /* nada */ }
+}
 function read_(n) {
   if (_C[n]) return _C[n];
+  const hit = cacheLee_(n);
+  if (hit) { _C[n] = hit; return hit; }
   const s = sh_(n), h = hdr_(n), lr = s.getLastRow(), out = [];
   if (lr > 1 && h.length) {
     const vals = s.getRange(2, 1, lr - 1, h.length).getValues();
@@ -234,6 +289,7 @@ function read_(n) {
     });
   }
   _C[n] = out;
+  cacheEscribe_(n, out);
   return out;
 }
 function cell_(v) {
@@ -246,20 +302,20 @@ function cell_(v) {
   return v;
 }
 function rowArr_(n, o) { return hdr_(n).map(function (k) { return k ? cell_(o[k]) : ''; }); }
-function insert_(n, o) { const s = sh_(n); s.appendRow(rowArr_(n, o)); o._row = s.getLastRow(); if (_C[n]) _C[n].push(o); return o; }
-function update_(n, o, ch) { Object.assign(o, ch || {}); sh_(n).getRange(o._row, 1, 1, hdr_(n).length).setValues([rowArr_(n, o)]); return o; }
+function insert_(n, o) { const s = sh_(n); s.appendRow(rowArr_(n, o)); o._row = s.getLastRow(); if (_C[n]) _C[n].push(o); cacheBump_(n); return o; }
+function update_(n, o, ch) { Object.assign(o, ch || {}); sh_(n).getRange(o._row, 1, 1, hdr_(n).length).setValues([rowArr_(n, o)]); cacheBump_(n); return o; }
 function find_(n, k, v) { const s = str_(v).toLowerCase(); return read_(n).find(function (r) { return str_(r[k]).toLowerCase() === s; }); }
 function insertMany_(n, arr) {
   if (!arr.length) return;
   const s = sh_(n), rows = arr.map(function (o) { return rowArr_(n, o); });
   s.getRange(s.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  delete _C[n];
+  delete _C[n]; cacheBump_(n);
 }
 function deleteWhere_(n, pred) {
   const rows = read_(n).filter(pred).map(function (r) { return r._row; }).sort(function (a, b) { return b - a; });
   const s = sh_(n);
   rows.forEach(function (r) { s.deleteRow(r); });
-  delete _C[n];
+  delete _C[n]; if (rows.length) cacheBump_(n);
 }
 function clean_(o) { if (!o) return o; const c = Object.assign({}, o); delete c._row; return c; }
 function mustFind_(n, k, v, label) { const r = find_(n, k, v); if (!r) throw new Error(label + ' no encontrado: ' + v); return r; }
@@ -299,7 +355,7 @@ function a_init(u) {
 }
 
 function a_lookups(u) {
-  const st = stockMap_();
+  const st = ['inv', 'inv_ver', 'consumo', 'conteo', 'compras', 'odp', 'prod'].some(function (p) { return can_(u, p); }) ? stockMap_() : {};   // el stock solo lo usan inventario y produccion
   const verProv = can_(u, 'compras') || can_(u, 'cxp') || can_(u, 'cxp_ver');
   return {
     clientes: read_('Clientes').map(function (c) { return { ID: c.ID, Nombre: c.Nombre, Comercial: c.Comercial, DiasCredito: c.DiasCredito, RazonSocial: c.RazonSocial || '', Contacto: str_(c.Contacto), Telefono: str_(c.Telefono), Email: str_(c.Email) }; })
@@ -881,7 +937,7 @@ function cambiaCampo_(hoja, campo, viejo, nuevo) {
   const rg = h.getRange(2, i + 1, n, 1), v = rg.getValues();
   let k = 0;
   v.forEach(function (r) { if (MISMO_(r[0], viejo)) { r[0] = nuevo; k++; } });
-  if (k) { rg.setValues(v); delete _C[hoja]; }
+  if (k) { rg.setValues(v); delete _C[hoja]; cacheBump_(hoja); }
   return k;
 }
 
@@ -1168,7 +1224,7 @@ function odpOut_(u, o) {
   return c;
 }
 
-function a_odps(u) { need_(u, 'odp_ver'); return scope_(u, read_('ODP')).map(function (o) { return odpOut_(u, o); }).reverse(); }
+function a_odps(u, p) { need_(u, 'odp_ver'); const conHist = !!(p && p.historicas); return scope_(u, read_('ODP')).filter(function (o) { return conHist || !esHistorica_(o); }).map(function (o) { return odpOut_(u, o); }).reverse(); }
 
 function a_odpDetalle(u, p) {
   need_(u, 'odp_ver');
@@ -1183,7 +1239,8 @@ function a_odpDetalle(u, p) {
     const c = clean_(k); if (!vc) { delete c.CostoUnit; delete c.Importe; } return c;
   });
   const facturas = vePrecio_(u) ? read_('Facturas').filter(function (f) { return str_(f.ODP) === str_(o.Folio); }).map(clean_) : [];
-  return { odp: odpOut_(u, o), lineas: lineasDe_('ODPDetalle', 'ODP', o.Folio), consumos: consumos, costos: costos, facturas: facturas };
+  let produccion = null; try { produccion = a_produccionODP(u, { Folio: o.Folio }); } catch (e) { produccion = null; }   // un solo viaje en lugar de dos
+  return { odp: odpOut_(u, o), lineas: lineasDe_('ODPDetalle', 'ODP', o.Folio), consumos: consumos, costos: costos, facturas: facturas, produccion: produccion };
 }
 
 function a_saveODP(u, p) {
@@ -1578,7 +1635,7 @@ function unirUsuarios_() {
     ['Rol', 'PrefijoCot', 'TipoComision'].forEach(function (c) { if (!str_(keep[c])) { const o = g.slice(1).filter(function (x) { return str_(x[c]); })[0]; if (o) ch[c] = o[c]; } });
     if (Object.keys(ch).length) update_('Usuarios', keep, ch);
     g.slice(1).map(function (x) { return x._row; }).sort(function (a, b) { return b - a; }).forEach(function (r) { sh_('Usuarios').deleteRow(r); n++; });
-    resetCache_();
+    cacheBump_('Usuarios'); resetCache_();
   });
   return n;
 }
@@ -1859,7 +1916,7 @@ function impCol_(name, keyCol, col, map) {
     const k = str_(keys[i][0]);
     if (Object.prototype.hasOwnProperty.call(map, k)) { const nv = cell_(map[k]); if (String(vals[i][0]) !== String(nv)) { vals[i][0] = nv; n++; } }
   }
-  if (n) rg.setValues(vals);
+  if (n) { rg.setValues(vals); cacheBump_(name); }
   delete _C[name];
   return n;
 }
@@ -2046,7 +2103,7 @@ function importarHistorico(opts) {
 }
 
 // ==================== EJECUCION ====================
-const LECTURAS = { version: 1, acabados: 1, usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
+const LECTURAS = { arranque: 1, version: 1, acabados: 1, usoTarifa: 1, cotCalcular: 1, tarifas: 1, init: 1, lookups: 1, dashboard: 1, clientes: 1, proveedores: 1, materiales: 1, kardex: 1, conteos: 1, compras: 1, compraDetalle: 1,
   cotizaciones: 1, cotDetalle: 1, seguimiento: 1, odps: 1, odpDetalle: 1, facturas: 1, facturaDetalle: 1, reporteVentas: 1, usuarios: 1, config: 1,
   pdfCot: 1, pdfODP: 1, catalogosProd: 1, produccionODP: 1, negociaciones: 1, negDetalle: 1, negArchivo: 1, notifs: 1, armadoMateriales: 1, armadoCosto: 1, comisiones: 1, actividades: 1, actDetalle: 1, actArchivo: 1 };
 const SIN_CANDADO = { registrarProduccion: 1 };
@@ -2093,22 +2150,50 @@ function negIdx_(etapa) { return NEG_ETAPAS.indexOf(str_(etapa)); }
 function negRef_(id) { id = str_(id); return /^AC-/.test(id) ? 'act:' + id : /^NG-/.test(id) ? 'neg:' + id : /^CL-/.test(id) ? 'cli:' + id : id ? 'neg:' + id : ''; }
 function negLink_(id) { const url = _urlPublica_(); return url + (url.indexOf('?') < 0 ? '?' : '&') + 'neg=' + encodeURIComponent(id); }
 
+/** Arma y manda (o encola) el correo de una negociacion/actividad. Guardar ya no espera al correo: se pone en cola y lo envia la siguiente consulta de avisos. */
+function negCorreoArma_(asunto, titulo, cuerpo, negId) {
+  const link = negLink_(negId), act = /^AC-/.test(negId);
+  return { subject: asunto,
+    body: titulo + '\n' + String(cuerpo).replace(/<[^>]+>/g, '') + '\nAbrir: ' + link,
+    htmlBody: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#1c2540"><h2 style="margin:0 0 8px;color:#16327a">' + esc_(titulo) + '</h2>' + cuerpo +
+      '<p style="margin:16px 0"><a href="' + esc_(link) + '" style="background:#ff6a13;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold">' + (act ? 'Abrir la actividad' : 'Abrir la negociación') + '</a></p>' +
+      '<p style="color:#7b869f;font-size:12px">También la encuentras en la intranet: ERP → ' + (act ? 'Actividades' : 'Negociaciones') + '.</p></div>' };
+}
 function negCorreo_(para, asunto, titulo, cuerpo, negId) {
+  const m = negCorreoArma_(asunto, titulo, cuerpo, negId);
+  try {   // en cola: un solo renglon por destinatario
+    insertMany_('CorreosPend', para.map(function (to) { return { ID: seq_('SEQ_MAIL', 'ML-', 6), Para: to, Asunto: m.subject, Html: m.htmlBody, Texto: m.body, Creado: hoy_() + ' ' + negHora_() }; }));
+    return para.length;
+  } catch (e) { /* sin cola: se manda en el momento */ }
   let enviados = 0, cuota = 0;
-  try { cuota = MailApp.getRemainingDailyQuota(); } catch (e) { cuota = 0; }
-  const link = negLink_(negId);
+  try { cuota = MailApp.getRemainingDailyQuota(); } catch (e2) { cuota = 0; }
   para.forEach(function (to) {
     if (cuota - enviados < 1) return;
-    try {
-      MailApp.sendEmail({ to: to, subject: asunto, name: 'BIG FOOT print · ERP',
-        body: titulo + '\n' + String(cuerpo).replace(/<[^>]+>/g, '') + '\nAbrir: ' + link,
-        htmlBody: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#1c2540"><h2 style="margin:0 0 8px;color:#16327a">' + esc_(titulo) + '</h2>' + cuerpo +
-          '<p style="margin:16px 0"><a href="' + esc_(link) + '" style="background:#ff6a13;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold">' + (/^AC-/.test(negId) ? 'Abrir la actividad' : 'Abrir la negociación') + '</a></p>' +
-          '<p style="color:#7b869f;font-size:12px">También la encuentras en la intranet: ERP → ' + (/^AC-/.test(negId) ? 'Actividades' : 'Negociaciones') + '.</p></div>' });
-      enviados++;
-    } catch (e) { /* un correo fallido no tumba la operacion */ }
+    try { MailApp.sendEmail({ to: to, subject: m.subject, name: 'BIG FOOT print · ERP', body: m.body, htmlBody: m.htmlBody }); enviados++; } catch (e3) { /* un correo fallido no tumba la operacion */ }
   });
   return enviados;
+}
+/** Envia los correos en cola (los toma bajo candado y los manda ya sin candado, para no frenar a quien esta guardando). Lo llama la consulta de avisos. */
+function correosEnviar_(max) {
+  let lote = [];
+  const l = LockService.getScriptLock();
+  try {
+    if (!l.tryLock(500)) return 0;
+    try {
+      resetCache_();
+      if (!ss_().getSheetByName(PREF + 'CorreosPend')) return 0;
+      const cola = read_('CorreosPend'); if (!cola.length) return 0;
+      lote = cola.slice(0, max || 8);
+      const ids = {}; lote.forEach(function (x) { ids[x.ID] = 1; });
+      deleteWhere_('CorreosPend', function (x) { return ids[x.ID]; });
+    } finally { try { l.releaseLock(); } catch (_) {} }
+  } catch (e) { return 0; }
+  let cuota = 0, env = 0; try { cuota = MailApp.getRemainingDailyQuota(); } catch (e2) { cuota = 0; }
+  lote.forEach(function (x) {
+    if (cuota - env < 1) return;
+    try { MailApp.sendEmail({ to: str_(x.Para), subject: str_(x.Asunto), name: 'BIG FOOT print · ERP', body: str_(x.Texto), htmlBody: str_(x.Html) }); env++; } catch (e3) { /* un correo fallido no tumba nada */ }
+  });
+  return env;
 }
 function esc_(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
@@ -2154,11 +2239,13 @@ function negOut_(n, nc, na) {
 }
 function negCuenta_(rows) { const c = {}; rows.forEach(function (r) { c[r.Negociacion] = (c[r.Negociacion] || 0) + 1; }); return c; }
 
-function a_negociaciones(u) {
+function a_negociaciones(u, p) {
   needAny_(u, ['neg', 'neg_ver']);
+  const conHist = !!(p && (p.historicas || p.ID));   // las ~cientos de historicas (de VENTAS) solo si se piden: el tablero carga mucho mas rapido
   const cc = negCuenta_(read_('NegComentarios').filter(function (c) { return c.Tipo !== 'sistema'; })), ca = negCuenta_(read_('NegArchivos'));
   return { etapas: NEG_ETAPAS, motivos: NEG_MOTIVOS, perdido: NEG_PERDIDO, yo: u.email,
-           rows: read_('Negociaciones').map(function (n) { return negOut_(n, cc[n.ID], ca[n.ID]); }) };
+           historicas: read_('Negociaciones').filter(esHistorica_).length, incluyeHistoricas: conHist,
+           rows: read_('Negociaciones').filter(function (n) { return conHist || !esHistorica_(n); }).map(function (n) { return negOut_(n, cc[n.ID], ca[n.ID]); }) };
 }
 
 function a_negDetalle(u, p) {
@@ -2777,6 +2864,7 @@ function a_armadoCosto(u, p) {
 }
 
 function a_notifs(u) {
+  try { correosEnviar_(8); } catch (e) { /* los correos pendientes salen en la siguiente consulta */ }
   const mias = read_('Notificaciones').filter(function (x) { return str_(x.Email).toLowerCase() === u.email; }).reverse();
   return { sinLeer: mias.filter(function (x) { return !str_(x.Leida); }).length, rows: mias.slice(0, 40).map(clean_) };
 }
@@ -2864,12 +2952,13 @@ function clienteDeProspecto(ses, p) {
   return { ID: c.ID, Nombre: c.Nombre, nuevo: true };
 }
 
-return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, importarHistorico: importarHistorico, homologarClientes: homologarClientes, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
+return { nivel: nivel, claseAccion: claseAccion, estadoComercial: estadoComercial, clienteDeProspecto: clienteDeProspecto, resumenNegociaciones: resumenNegociaciones, run: run, instalar: instalar, importar: importar, vaciarCache: function () { cacheBump_(); }, importarHistorico: importarHistorico, homologarClientes: homologarClientes, rolDe: rolDe, correoRegistrado: correoRegistrado, resincronizar: resincronizar, esLectura: function (a) { return !!LECTURAS[a]; } };
 })();
 
 // ==================== PUNTOS DE ENTRADA (fuera de ERP) ====================
 /* Desde la intranet. `clave` = sesion por codigo. Devuelve JSON {ok,data|error}. */
 function erpApi(accion, payloadJson, clave) {
+  var t0 = Date.now();
   try {
     var ses = _ses_(clave, !ERP.esLectura(String(accion)));
     if (!ERP.rolDe(ses)) { _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion); throw new Error('Sin autorizacion para esta accion.'); }
@@ -2879,7 +2968,9 @@ function erpApi(accion, payloadJson, clave) {
       _bitacora_(ses.correo, 'ACCESO_NEGADO', 'erp ' + accion + ' nivel ' + ERP.nivel(ses) + ' < ' + pide);
       throw new Error(pide >= 3 ? 'Tu permiso en el ERP no incluye editar ni eliminar.' : 'Tu permiso en el ERP es solo de consulta.');
     }
-    return JSON.stringify({ ok: true, data: ERP.run(String(accion), p || {}, ses) });
+    var data = ERP.run(String(accion), p || {}, ses), ms = Date.now() - t0;
+    if (ms > 6000) { try { _bitacora_(ses.correo, 'ERP_LENTO', String(accion) + ' ' + ms + ' ms'); } catch (_) { /* nada */ } }   // acciones lentas quedan en la bitacora
+    return JSON.stringify({ ok: true, data: data, ms: ms });
   } catch (e) {
     return JSON.stringify({ ok: false, error: (e && e.message) || String(e) });
   }
@@ -2904,6 +2995,10 @@ function erpImportarDatos() {
   var msg = ERP.importar();
   try { SpreadsheetApp.getUi().alert('Importación del ERP\n\n' + msg); } catch (e) { /* sin interfaz */ }
   return msg;
+}
+function erpVaciarCache() {
+  ERP.vaciarCache();
+  try { SpreadsheetApp.getUi().alert('Caché del ERP vaciada', 'La próxima consulta lee directo de las hojas. Úsalo después de editar a mano las hojas ERP_*.', SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { /* sin interfaz */ }
 }
 function erpHomologarClientes() {
   var r = ERP.homologarClientes();
