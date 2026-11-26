@@ -219,7 +219,7 @@ function erp(accion, payload, intento){
       .withSuccessHandler(function(t){
         var r; try { r = JSON.parse(t); } catch (x) { return rej(new Error('Respuesta inválida del servidor.')); }
         erpMide(accion, t0, r.ms);
-        if (r.ok) { if (E.lec && !E.lec[accion]) { E.rc = {}; } return res(r.data); }   // una escritura invalida la memoria de vistas
+        if (r.ok) { if (E.lecN && !E.lec[accion]) { E.rc = {}; } return res(r.data); }   // una escritura invalida la memoria de vistas
         if (/No se pudo identificar/.test(r.error || '')) { sesionPerdida(); }
         /* candado ocupado: la accion NO se ejecuto, es seguro reintentar */
         if (/candado|lock/i.test(r.error || '') && intento < 2) { return setTimeout(function(){ erp(accion, payload, intento + 1).then(res, rej); }, 2500); }
@@ -333,8 +333,12 @@ function abrirErp(){
   window.scrollTo(0, 0);
   if (E.init) { notifIniciar(); if (E.pendiente) { return erpIrPendiente(); } return erpVista(E.vista || 'inicio'); }
   eq('erpMain').innerHTML = '<div class="erp-vacio">Cargando el ERP…</div>';
-  erp('arranque').then(function(r){   // init + lookups + catalogos en UNA llamada
-    E.init = r.init; E.lk = r.lookups; E.cat = r.cat || {}; E.lec = {}; (r.lecturas || []).forEach(function(a){ E.lec[a] = 1; });
+  /* init + lookups + catalogos en UNA llamada; si el servidor aun no la tiene (Erp.gs sin actualizar) se piden por separado como antes */
+  erp('arranque').catch(function(e){
+    if (!/desconocida/i.test(e && e.message || '')) { throw e; }
+    return Promise.all([erp('init'), erp('lookups'), erp('catalogosProd').catch(function(){ return {}; })]).then(function(x){ return { init: x[0], lookups: x[1], cat: x[2], lecturas: [] }; });
+  }).then(function(r){
+    E.init = r.init; E.lk = r.lookups; E.cat = r.cat || {}; E.lec = {}; (r.lecturas || []).forEach(function(a){ E.lec[a] = 1; }); E.lecN = (r.lecturas || []).length > 0;
     eq('erpQuien').innerHTML = '<b>' + esc(E.init.user.nombre) + '</b><br>' + esc(E.init.user.rol) + ' · ' + esc(E.init.user.email) + (window.PT && PT.ses && PT.ses.porSesion ? ' · <a href="#" onclick="cerrarSesion();return false" style="color:#FFC9AD;font-weight:700">Cerrar sesión</a>' : '');
     eq('erpBuild').textContent = ERPUI_BUILD;
     var l = eq('erpLogo'); if (LOGO_BLANCO) { l.src = LOGO_BLANCO; } else { l.style.display = 'none'; }
