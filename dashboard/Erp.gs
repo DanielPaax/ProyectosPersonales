@@ -111,6 +111,7 @@ const CONFIG_DEFAULTS = [
   ['PREFIJO_COT', 'COT-', 'Prefijo de cotizaciones'],
   ['CONSEC_COT', '1', 'Siguiente número de cotización'],
   ['MERMA_ALERTA', '0.10', 'Merma a partir de la cual se marca en rojo (0.10 = 10%)'],
+  ['NEG_SUPERVISORES', 'maria.portillo@bfprint.com.mx', 'Correos (separados por coma) que ven, editan y mueven TODAS las negociaciones, incluidas las históricas'],
   ['COT_MARGEN', '0.40', 'Margen sobre el PRECIO de cotización: precio = costo ÷ (1 − margen); 0.40 = costo ÷ 0.60'],
   ['COT_TINTA_GF', '3.25', 'Costo de tinta por m² en Gran Formato'],
   ['COT_TINTA_HD', '15.35', 'Costo de tinta por m² en HD'],
@@ -329,7 +330,15 @@ function seq_(key, prefix, pad) {
 }
 
 
-function can_(u, p) { const l = ROLES_ERP[u.rol] || []; return l.indexOf('*') >= 0 || l.indexOf(p) >= 0; }
+/** Supervisores de negociaciones (config NEG_SUPERVISORES): ven, editan y mueven TODAS, historicas incluidas, sin importar quien las creo. */
+function esSupNeg_(email) {
+  try { return cfg_('NEG_SUPERVISORES', '').toLowerCase().split(/[,;\s]+/).indexOf(String(email || '').toLowerCase()) >= 0 && !!email; } catch (e) { return false; }
+}
+function can_(u, p) {
+  const l = ROLES_ERP[u.rol] || [];
+  if (l.indexOf('*') >= 0 || l.indexOf(p) >= 0) return true;
+  return (p === 'neg' || p === 'neg_ver') && esSupNeg_(u.email);
+}
 function need_(u, p) { if (!can_(u, p)) throw new Error('Tu rol (' + u.rol + ') no tiene permiso para esta acción.'); }
 function needAny_(u, ps) { if (!ps.some(function (p) { return can_(u, p); })) throw new Error('Tu rol (' + u.rol + ') no tiene permiso para esta acción.'); }
 function esComercial_(u) { return u.rol === 'COMERCIAL'; }
@@ -343,7 +352,7 @@ function vePrecio_(u) { return veCostos_(u) || can_(u, 'crm') || can_(u, 'crm_ve
 // ==================== INICIO ====================
 function a_init(u) {
   return {
-    user: u, perms: ROLES_ERP[u.rol], hoy: hoy_(),
+    user: u, perms: (u.supNeg ? (ROLES_ERP[u.rol] || []).concat(['neg', 'neg_ver']) : ROLES_ERP[u.rol]), hoy: hoy_(),
     cfg: {
       EMPRESA: cfg_('EMPRESA', 'ERP'), IVA: ivaRate_(),
       COT_MARGEN: margenCot_(), MERMA_ALERTA: num_(cfg_('MERMA_ALERTA', '0.10')), MARGEN_MINIMO: num_(cfg_('MARGEN_MINIMO', '0.30')),
@@ -1709,7 +1718,7 @@ function usuarioDe_(ses) {
     if (x && str_(x.Nombre)) nombre = str_(x.Nombre);
   }
   const em = String(ses.correo).toLowerCase();
-  return { email: em, nombre: nombre, rol: rol, nivel: nivel(ses), adminCom: ss_().getSheetByName(PREF + 'Config') ? esAdminCom_(em) : false };
+  return { email: em, nombre: nombre, rol: rol, nivel: nivel(ses), adminCom: ss_().getSheetByName(PREF + 'Config') ? esAdminCom_(em) : false, supNeg: ss_().getSheetByName(PREF + 'Config') ? esSupNeg_(em) : false };
 }
 
 // ==================== PRODUCCION (BASE) Y VENTAS (dashboard) ====================
@@ -2278,7 +2287,8 @@ function a_saveNeg(u, p) {
   let n;
   if (str_(p.ID)) {
     n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
-    if (str_(n.CreadoPor).toLowerCase() !== u.email) throw new Error('Solo quien creó la negociación (' + negNombreDe_(n.CreadoPor) + ') puede modificar estos datos. Tú puedes comentar, subir archivos y mover la etapa.');
+    if (esHistorica_(n) && !esSupNeg_(u.email)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
+    if (str_(n.CreadoPor).toLowerCase() !== u.email && !esSupNeg_(u.email)) throw new Error('Solo quien creó la negociación (' + negNombreDe_(n.CreadoPor) + ') puede modificar estos datos. Tú puedes comentar, subir archivos y mover la etapa.');
     Object.assign(n, d, { ActualizadoEn: hoy_() });
     negHist_(n, 'Modificó la negociación', u);
     update_('Negociaciones', n);
@@ -2298,7 +2308,7 @@ function a_saveNeg(u, p) {
 function a_moveNeg(u, p) {
   need_(u, 'neg');
   const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
-  if (esHistorica_(n)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
+  if (esHistorica_(n) && !esSupNeg_(u.email)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
   const etapa = str_(p.Etapa), desde = n.Etapa, a = negIdx_(etapa), de = negIdx_(desde);
   if (a < 0) throw new Error(etapa === NEG_PERDIDO ? 'Para marcarla como perdida usa el botón PERDIDO (pide el motivo).' : 'Etapa inválida.');
   if (etapa === desde) return negOut_(n);
@@ -2331,7 +2341,7 @@ function a_moveNeg(u, p) {
 function a_perdidoNeg(u, p) {
   need_(u, 'neg');
   const n = mustFind_('Negociaciones', 'ID', p.ID, 'Negociación');
-  if (esHistorica_(n)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
+  if (esHistorica_(n) && !esSupNeg_(u.email)) throw new Error('Esta negociación es histórica (cargada de VENTAS): solo consulta.');
   if (n.Etapa === NEG_PERDIDO) throw new Error('La negociación ya está marcada como PERDIDA.');
   if (str_(n.ODP)) throw new Error('La negociación ya tiene la ' + n.ODP + ' (aprobada): para cancelarla usa la ODP.');
   const motivo = inList_(str_(p.Motivo).toUpperCase(), NEG_MOTIVOS, 'Motivo');
@@ -2510,7 +2520,7 @@ function a_negEliminarArchivo(u, p) {
   need_(u, 'neg');
   const a = mustFind_('NegArchivos', 'ID', p.ID, 'Archivo');
   const n = mustFind_('Negociaciones', 'ID', a.Negociacion, 'Negociación');
-  const puede = str_(a.Usuario).toLowerCase() === u.email || str_(n.CreadoPor).toLowerCase() === u.email || can_(u, '*') || esAdminCom_(u.email);
+  const puede = str_(a.Usuario).toLowerCase() === u.email || str_(n.CreadoPor).toLowerCase() === u.email || can_(u, '*') || esAdminCom_(u.email) || esSupNeg_(u.email);
   if (!puede) throw new Error('Solo quien subió el archivo (' + (str_(a.UsuarioNombre) || str_(a.Usuario)) + '), quien creó la negociación o la administración pueden eliminarlo.');
   try { DriveApp.getFileById(a.DriveID).setTrashed(true); } catch (e) { /* ya no estaba en Drive: se limpia igual el registro */ }
   deleteWhere_('NegArchivos', function (x) { return str_(x.ID) === str_(a.ID); });
@@ -2525,7 +2535,7 @@ const PAGO_FORMAS = ['efectivo', 'tarjeta', 'transferencia'];
 const PAGO_ESTATUS = ['PENDIENTE', 'ADELANTO', 'LIQUIDADO'];
 const PAGO_EXT = ['jpg', 'jpeg', 'png', 'pdf'];
 const PAGO_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', pdf: 'application/pdf' };
-function puedePago_(u, n) { return str_(n.CreadoPor).toLowerCase() === u.email || esAdminCom_(u.email) || u.rol === 'FINANZAS'; }
+function puedePago_(u, n) { return str_(n.CreadoPor).toLowerCase() === u.email || esAdminCom_(u.email) || esSupNeg_(u.email) || u.rol === 'FINANZAS'; }
 function negMsgSistema_(u, n, texto) {
   insert_('NegComentarios', { ID: seq_('SEQ_NCOM', 'NC-', 6), Negociacion: n.ID, Autor: u.email, AutorNombre: u.nombre, Fecha: hoy_(), Hora: negHora_(), Tipo: 'sistema', Texto: texto, Menciones: '' });
 }

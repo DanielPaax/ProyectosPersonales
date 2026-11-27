@@ -177,7 +177,7 @@
 
 <script>
 /* ===================== ERP: utilidades ===================== */
-var ERPUI_BUILD = 'v2026-11-27.1 · rapidez';
+var ERPUI_BUILD = 'v2026-11-28.1 · supervisor de negociaciones';
 var E = { init: null, lk: null, cat: {}, vista: '', cache: {}, filtro: {} };
 
 /* ---------- rapidez: tiempos por accion, memoria por vista (se muestra lo ultimo visto al instante y se refresca por detras) ---------- */
@@ -672,7 +672,7 @@ function ngFiltradas(){
 }
 function ngBusca(id){ return NG.d.rows.filter(function(n){ return n.ID === id; })[0]; }
 function ngTarjeta(n, i){
-  var hist = n.Origen === 'IMPORTADA', puede = P('neg') && !hist;
+  var hist = n.Origen === 'IMPORTADA', puede = P('neg') && (!hist || E.init.user.supNeg);
   var perd = n.Etapa === NG.d.perdido;
   var fl = '';
   if (puede && !perd) {
@@ -742,7 +742,7 @@ function ngAbre(id, etapa){
   NG.cur = n; NG.det = null; NG.tab = 'c'; NG.arch = null; NG.pagoTmp = null;
   var puede = P('neg'), perd = n && n.Etapa === NG.d.perdido;
   var yo = E.init.user.email, resp = n ? n.ResponsableEmail : yo;
-  var dueno = !n || String(n.CreadoPor || '').toLowerCase() === yo;   /* los campos principales solo los modifica quien creó la negociación */
+  var dueno = !n || ((String(n.CreadoPor || '').toLowerCase() === yo || E.init.user.supNeg) && (n.Origen !== 'IMPORTADA' || E.init.user.supNeg));   /* los campos principales solo los modifica quien creó la negociación */
   NG.pre = {}; NG.auto = {}; NG.cliPrev = n ? n.ClienteID : '';
   var etapas = NG.d.etapas.map(function(e){ return { v: e, t: e }; });
   var w = ventana(n ? 'Negociación ' + esc(n.ID) + ' · ' + esc(n.Etapa) : 'Nueva negociación',
@@ -855,7 +855,7 @@ function ngDetPinta(){
 }
 /* ---------- archivos de la negociacion: ver, descargar y eliminar ---------- */
 function ngBtnsArch(a){
-  var yo = E.init.user.email, puede = P('neg') && (String(a.Usuario || '').toLowerCase() === yo || (NG.cur && String(NG.cur.CreadoPor || '').toLowerCase() === yo) || E.init.user.rol === 'ADMIN' || E.init.user.adminCom);
+  var yo = E.init.user.email, puede = P('neg') && (String(a.Usuario || '').toLowerCase() === yo || (NG.cur && String(NG.cur.CreadoPor || '').toLowerCase() === yo) || E.init.user.rol === 'ADMIN' || E.init.user.adminCom || E.init.user.supNeg);
   return '<span style="display:inline-flex;gap:5px;flex-wrap:wrap"><button type="button" class="erp-btn sec chico" onclick="ngVer(\'' + a.ID + '\')">Ver</button>' +
     '<button type="button" class="erp-btn sec chico" onclick="ngBaja(\'' + a.ID + '\')">Descargar</button>' +
     (puede ? '<button type="button" class="erp-btn chico rojo" title="Eliminar archivo" onclick="ngElimArch(\'' + a.ID + '\')">Eliminar</button>' : '') + '</span>';
@@ -1099,7 +1099,7 @@ function ngSube(files){
 
 
 /* ---------- pago de la negociacion (forma, estatus, complemento y comprobante) ---------- */
-function ngPuedePago(){ var n = NG.cur; return !!n && (String(n.CreadoPor || '').toLowerCase() === E.init.user.email || E.init.user.adminCom || E.init.user.rol === 'FINANZAS'); }
+function ngPuedePago(){ var n = NG.cur; return !!n && (String(n.CreadoPor || '').toLowerCase() === E.init.user.email || E.init.user.adminCom || E.init.user.supNeg || E.init.user.rol === 'FINANZAS'); }
 function ngPagoPinta(){
   var n = NG.cur, box = eq('ngPP'); if (!n || !box) { return; }
   var ed = ngPuedePago(), arch = (NG.det && NG.det.archivos) || [], fin = NG.pagoTmp || { f: n.FormaPago || '', e: n.EstatusPago || 'PENDIENTE' };
